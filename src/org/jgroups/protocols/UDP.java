@@ -1,18 +1,17 @@
-// $Id: UDP.java,v 1.57 2005/01/28 15:43:07 belaban Exp $
+// $Id: UDP.java,v 1.18.2.1 2005/03/25 21:03:14 belaban Exp $
 
 package org.jgroups.protocols;
 
 
-import org.jgroups.*;
-import org.jgroups.stack.IpAddress;
-import org.jgroups.stack.Protocol;
-import org.jgroups.util.List;
-import org.jgroups.util.*;
-import org.jgroups.util.Queue;
-
 import java.io.*;
 import java.net.*;
 import java.util.*;
+
+import org.jgroups.*;
+import org.jgroups.util.*;
+import org.jgroups.util.List;
+import org.jgroups.stack.*;
+import org.jgroups.log.Trace;
 
 
 
@@ -23,8 +22,8 @@ import java.util.*;
  * (msg.dest != null) will be unicast to a single member. Uses a multicast and
  * a unicast socket.<p>
  * The following properties are being read by the UDP protocol<p>
- * param mcast_addr - the multicast address to use default is 228.8.8.8<br>
- * param mcast_port - (int) the port that the multicast is sent on default is 7600<br>
+ * param mcast_addr - the multicast address to use default is 224.0.0.200<br>
+ * param mcast_port - (int) the port that the multicast is sent on default is 7500<br>
  * param ip_mcast - (boolean) flag whether to use IP multicast - default is true<br>
  * param ip_ttl - Set the default time-to-live for multicast packets sent out on this
  * socket. default is 32<br>
@@ -40,26 +39,15 @@ public class UDP extends Protocol implements Runnable {
 
     /** Socket used for
      * <ol>
-     * <li>sending unicast packets and
+     * <li>sending unicast packets
+     * <li>sending multicast packets and
      * <li>receiving unicast packets
      * </ol>
      * The address of this socket will be our local address (<tt>local_addr</tt>) */
     DatagramSocket  sock=null;
 
-    /**
-     * BoundedList<Integer> of the last 100 ports used. This is to avoid reusing a port for DatagramSocket
-     */
-    private static BoundedList last_ports_used=null;
-
-    /** Maintain a list of local ports opened by DatagramSocket. If this is 0, this option is turned off.
-     * If bind_port is null, then this options will be ignored */
-    int num_last_ports=100;
-
     /** IP multicast socket for <em>receiving</em> multicast packets */
-    MulticastSocket mcast_recv_sock=null;
-
-    /** IP multicast socket for <em>sending</em> multicast packets */
-    MulticastSocket mcast_send_sock=null;
+    MulticastSocket mcast_sock=null;
 
     /** The address (host and port) of this member */
     IpAddress       local_addr=null;
@@ -98,10 +86,14 @@ public class UDP extends Protocol implements Runnable {
     int             ip_ttl=64;
 
     /** The members of this group (updated when a member joins or leaves) */
-    final Vector    members=new Vector(11);
+    Vector          members=new Vector();
 
     /** Pre-allocated byte stream. Used for serializing datagram packets. Will grow as needed */
-    final ExposedByteArrayOutputStream out_stream=new ExposedByteArrayOutputStream(512);
+    ByteArrayOutputStream out_stream=new ByteArrayOutputStream(65535);
+
+    /** Header to be added to all messages sent via this protocol. It is
+     * preallocated for efficiency */
+    UdpHeader       udp_hdr=null;
 
     /** Send buffer size of the multicast datagram socket */
     int             mcast_send_buf_size=32000;
@@ -120,11 +112,6 @@ public class UDP extends Protocol implements Runnable {
      * when the real copy arrives - it will be discarded. Useful for Window
      * media (non)sense */
     boolean         loopback=true;
-
-
-    /** Discard packets with a different version. Usually minor version differences are okay. Setting this property
-     * to true means that we expect the exact same version on all incoming packets */
-    boolean discard_incompatible_packets=false;
 
     /** Sometimes receivers are overloaded (they have to handle de-serialization etc).
      * Packet handler is a separate thread taking care of de-serialization, receiver
@@ -154,7 +141,7 @@ public class UDP extends Protocol implements Runnable {
 
     /** Maximum number of bytes for messages to be queued until they are sent. This value needs to be smaller
         than the largest UDP datagram packet size */
-    int max_bundle_size=AUTOCONF.senseMaxFragSizeStatic();
+    int max_bundle_size=AUTOCONF.senseMaxFragSize();
 
     /** Max number of milliseconds until queued messages are sent. Messages are sent when max_bundle_size or
      * max_bundle_timeout has been exceeded (whichever occurs faster)
@@ -167,20 +154,17 @@ public class UDP extends Protocol implements Runnable {
     /** Used by BundlingOutgoingPacketHandler */
     TimeScheduler timer=null;
 
-    /** HashMap<Address, Address>. Keys=senders, values=destinations. For each incoming message M with sender S, adds
-     * an entry with key=S and value= sender's IP address and port.
-     */
-    HashMap addr_translation_table=new HashMap();
-
-    boolean use_addr_translation=false;
 
     /** The name of this protocol */
-    static final String    name="UDP";
-
-    static final String IGNORE_BIND_ADDRESS_PROPERTY="ignore.bind.address";
+    final String    name="UDP";
 
 
     final int VERSION_LENGTH=Version.getLength();
+
+
+
+    //todo: remove
+    long start, stop, num_msgs=0;
 
 
 
@@ -197,15 +181,11 @@ public class UDP extends Protocol implements Runnable {
      * debug only
      */
     public String toString() {
-        return "Protocol UDP(local address: " + local_addr + ')';
+        return "Protocol UDP(local address: " + local_addr + ")";
     }
 
 
-    BoundedList getLastPortsUsed() {
-        if(last_ports_used == null)
-            last_ports_used=new BoundedList(num_last_ports);
-        return last_ports_used;
-    }
+
 
     /* ----------------------- Receiving of MCAST UDP packets ------------------------ */
 
@@ -214,106 +194,90 @@ public class UDP extends Protocol implements Runnable {
         byte            receive_buf[]=new byte[65535];
         int             len;
         byte[]          tmp, data;
-        InetAddress     sender_addr;
-        int             sender_port;
 
         // moved out of loop to avoid excessive object creations (bela March 8 2001)
         packet=new DatagramPacket(receive_buf, receive_buf.length);
 
-        while(mcast_receiver != null && mcast_recv_sock != null) {
+        while(mcast_receiver != null && mcast_sock != null) {
             try {
                 packet.setData(receive_buf, 0, receive_buf.length);
-                mcast_recv_sock.receive(packet);
-                sender_addr=packet.getAddress();
-                sender_port=packet.getPort();
+                mcast_sock.receive(packet);
                 len=packet.getLength();
                 data=packet.getData();
                 if(len == 1 && data[0] == 0) {
-                    if(log.isTraceEnabled()) log.trace("received dummy packet");
+                    if(Trace.debug) Trace.info("UDP.run()", "received dummy packet");
                     continue;
                 }
 
                 if(len == 4) {  // received a diagnostics probe
                     if(data[0] == 'd' && data[1] == 'i' && data[2] == 'a' && data[3] == 'g') {
-                        handleDiagnosticProbe(sender_addr, sender_port);
+                        handleDiagnosticProbe(packet.getAddress(), packet.getPort());
                         continue;
                     }
                 }
 
-                if(log.isTraceEnabled())
-                    log.trace("received (mcast) " + packet.getLength() + " bytes from " +
-                              sender_addr + ':' + sender_port + " (size=" + len + " bytes)");
+                if(Trace.debug)
+                    Trace.info("UDP.receive()", "received (mcast) " + packet.getLength() + " bytes from " +
+                                                packet.getAddress() + ":" + packet.getPort() + " (size=" + len + " bytes)");
                 if(len > receive_buf.length) {
-                    if(log.isErrorEnabled()) log.error("size of the received packet (" + len + ") is bigger than " +
+                    Trace.error("UDP.run()", "size of the received packet (" + len + ") is bigger than " +
                                              "allocated buffer (" + receive_buf.length + "): will not be able to handle packet. " +
                                              "Use the FRAG protocol and make its frag_size lower than " + receive_buf.length);
                 }
 
                 if(Version.compareTo(data) == false) {
-                    if(log.isWarnEnabled()) {
-                        StringBuffer sb=new StringBuffer();
-                        sb.append("packet from ").append(sender_addr).append(':').append(sender_port);
-                        sb.append(" has different version (").append(Version.printVersionId(data, Version.version_id.length));
-                        sb.append(") from ours (").append(Version.printVersionId(Version.version_id)).append("). ");
-                        if(discard_incompatible_packets)
-                            sb.append("Packet is discarded");
-                        else
-                            sb.append("This may cause problems");
-                        log.warn(sb.toString());
-                    }
-                    if(discard_incompatible_packets)
-                        continue;
+                    Trace.warn("UDP.run()",
+                               "packet from " + packet.getAddress() + ":" + packet.getPort() +
+                               " has different version (" +
+                               Version.printVersionId(data, Version.version_id.length) +
+                               ") from ours (" + Version.printVersionId(Version.version_id) +
+                               "). This may cause problems");
                 }
 
                 if(use_incoming_packet_handler) {
                     tmp=new byte[len];
                     System.arraycopy(data, 0, tmp, 0, len);
-                    incoming_queue.add(new IncomingQueueEntry(mcast_addr, sender_addr, sender_port, tmp));
+                    incoming_queue.add(tmp);
                 }
                 else
-                    handleIncomingUdpPacket(mcast_addr, sender_addr, sender_port, data);
+                    handleIncomingUdpPacket(data);
             }
             catch(SocketException sock_ex) {
-                 if(log.isDebugEnabled()) log.debug("multicast socket is closed, exception=" + sock_ex);
+                if(Trace.trace) Trace.info("UDP.run()", "multicast socket is closed, exception=" + sock_ex);
                 break;
             }
             catch(InterruptedIOException io_ex) { // thread was interrupted
                 ; // go back to top of loop, where we will terminate loop
             }
             catch(Throwable ex) {
-                if(log.isErrorEnabled()) log.error("exception=" + ex + ", stack trace=" + Util.printStackTrace(ex));
-                Util.sleep(100); // so we don't get into 100% cpu spinning (should NEVER happen !)
+                Trace.error("UDP.run()", "exception=" + ex + ", stack trace=" + Util.printStackTrace(ex));
+                Util.sleep(300); // so we don't get into 100% cpu spinning (should NEVER happen !)
             }
         }
-        if(log.isDebugEnabled()) log.debug("multicast thread terminated");
+        if(Trace.trace) Trace.info("UDP.run()", "multicast thread terminated");
     }
-
-//    private void printPacket(DatagramPacket packet) {
-//        StringBuffer sb=new StringBuffer();
-//        sb.append(packet.getAddress()).append(":").append(packet.getPort());
-//        System.out.println("packet: " + sb.toString());
-//    }
 
     void handleDiagnosticProbe(InetAddress sender, int port) {
         try {
-            byte[] diag_rsp=getDiagResponse().getBytes();
+            byte[]      diag_rsp=getDiagResponse().getBytes();
             DatagramPacket rsp=new DatagramPacket(diag_rsp, 0, diag_rsp.length, sender, port);
-            if(log.isDebugEnabled()) log.debug("sending diag response to " + sender + ':' + port);
+            if(Trace.trace)
+                Trace.info("UDP.handleDiagnosticProbe()", "sending diag response to " + sender + ":" + port);
             sock.send(rsp);
         }
         catch(Throwable t) {
-            if(log.isErrorEnabled()) log.error("failed sending diag rsp to " + sender + ':' + port +
+            Trace.error("UDP.handleDiagnosticProbe()", "failed sending diag rsp to " + sender + ":" + port +
                                                        ", exception=" + t);
         }
     }
 
     String getDiagResponse() {
         StringBuffer sb=new StringBuffer();
-        sb.append(local_addr).append(" (").append(group_addr).append(')');
-        sb.append(" [").append(mcast_addr_name).append(':').append(mcast_port).append("]\n");
+        sb.append(local_addr).append(" (").append(group_addr).append(")");
+        sb.append(" [").append(mcast_addr_name).append(":").append(mcast_port).append("]\n");
         sb.append("Version=").append(Version.version).append(", cvs=\"").append(Version.cvs).append("\"\n");
-        sb.append("bound to ").append(bind_addr).append(':').append(bind_port).append('\n');
-        sb.append("members: ").append(members).append('\n');
+        sb.append("bound to ").append(bind_addr).append(":").append(bind_port).append("\n");
+        sb.append("members: ").append(members).append("\n");
 
         return sb.toString();
     }
@@ -352,7 +316,7 @@ public class UDP extends Protocol implements Runnable {
      * Creates the unicast and multicast sockets and starts the unicast and multicast receiver threads
      */
     public void start() throws Exception {
-        if(log.isDebugEnabled()) log.debug("creating sockets and starting threads");
+        if(Trace.trace) Trace.info("UDP.start()", "creating sockets and starting threads");
         createSockets();
         passUp(new Event(Event.SET_LOCAL_ADDRESS, local_addr));
         startThreads();
@@ -360,18 +324,17 @@ public class UDP extends Protocol implements Runnable {
 
 
     public void stop() {
-        if(log.isDebugEnabled()) log.debug("closing sockets and stopping threads");
+        if(Trace.trace) Trace.info("UDP.stop()", "closing sockets and stopping threads");
         stopThreads();  // will close sockets, closeSockets() is not really needed anymore, but...
         closeSockets(); // ... we'll leave it in there for now (doesn't do anything if already closed)
     }
 
 
-
     /**
      * Setup the Protocol instance acording to the configuration string
      * The following properties are being read by the UDP protocol
-     * param mcast_addr - the multicast address to use default is 228.8.8.8
-     * param mcast_port - (int) the port that the multicast is sent on default is 7600
+     * param mcast_addr - the multicast address to use default is 224.0.0.200
+     * param mcast_port - (int) the port that the multicast is sent on default is 7500
      * param ip_mcast - (boolean) flag whether to use IP multicast - default is true
      * param ip_ttl - Set the default time-to-live for multicast packets sent out on this socket. default is 32
      * @return true if no other properties are left.
@@ -380,21 +343,9 @@ public class UDP extends Protocol implements Runnable {
      *
      */
     public boolean setProperties(Properties props) {
-        String str;
-        String tmp = null;
+        String str, tmp;
 
-        super.setProperties(props);
-        
-        // PropertyPermission not granted if running in an untrusted environment with JNLP.
-        try {
-            tmp=System.getProperty("bind.address");
-            if(Boolean.getBoolean(IGNORE_BIND_ADDRESS_PROPERTY)) {
-                tmp=null;
-            }
-        }
-        catch (SecurityException ex){
-        }
-        
+        tmp=System.getProperty("UDP.bind_addr");
         if(tmp != null)
             str=tmp;
         else
@@ -404,7 +355,7 @@ public class UDP extends Protocol implements Runnable {
                 bind_addr=InetAddress.getByName(str);
             }
             catch(UnknownHostException unknown) {
-                if(log.isFatalEnabled()) log.fatal("(bind_addr): host " + str + " not known");
+                Trace.fatal("UDP.setProperties()", "(bind_addr): host " + str + " not known");
                 return false;
             }
             props.remove("bind_addr");
@@ -412,49 +363,43 @@ public class UDP extends Protocol implements Runnable {
 
         str=props.getProperty("bind_port");
         if(str != null) {
-            bind_port=Integer.parseInt(str);
+            bind_port=new Integer(str).intValue();
             props.remove("bind_port");
-        }
-
-        str=props.getProperty("num_last_ports");
-        if(str != null) {
-            num_last_ports=Integer.parseInt(str);
-            props.remove("num_last_ports");
         }
 
 		str=props.getProperty("start_port");
         if(str != null) {
-            bind_port=Integer.parseInt(str);
+            bind_port=new Integer(str).intValue();
             props.remove("start_port");
         }
 
 		str=props.getProperty("port_range");
         if(str != null) {
-            port_range=Integer.parseInt(str);
+            port_range=new Integer(str).intValue();
             props.remove("port_range");
         }
 
         str=props.getProperty("mcast_addr");
         if(str != null) {
-            mcast_addr_name=str;
+            mcast_addr_name=new String(str);
             props.remove("mcast_addr");
         }
 
         str=props.getProperty("mcast_port");
         if(str != null) {
-            mcast_port=Integer.parseInt(str);
+            mcast_port=new Integer(str).intValue();
             props.remove("mcast_port");
         }
 
         str=props.getProperty("ip_mcast");
         if(str != null) {
-            ip_mcast=Boolean.valueOf(str).booleanValue();
+            ip_mcast=new Boolean(str).booleanValue();
             props.remove("ip_mcast");
         }
 
         str=props.getProperty("ip_ttl");
         if(str != null) {
-            ip_ttl=Integer.parseInt(str);
+            ip_ttl=new Integer(str).intValue();
             props.remove("ip_ttl");
         }
 
@@ -484,33 +429,28 @@ public class UDP extends Protocol implements Runnable {
 
         str=props.getProperty("loopback");
         if(str != null) {
-            loopback=Boolean.valueOf(str).booleanValue();
+            loopback=new Boolean(str).booleanValue();
             props.remove("loopback");
-        }
-
-        str=props.getProperty("discard_incompatibe_packets");
-        if(str != null) {
-            discard_incompatible_packets=Boolean.valueOf(str).booleanValue();
-            props.remove("discard_incompatibe_packets");
         }
 
         // this is deprecated, just left for compatibility (use use_incoming_packet_handler)
         str=props.getProperty("use_packet_handler");
         if(str != null) {
-            use_incoming_packet_handler=Boolean.valueOf(str).booleanValue();
+            use_incoming_packet_handler=new Boolean(str).booleanValue();
             props.remove("use_packet_handler");
-            if(log.isWarnEnabled()) log.warn("'use_packet_handler' is deprecated; use 'use_incoming_packet_handler' instead");
+            Trace.warn("UDP.setProperties()",
+                    "'use_packet_handler' is deprecated; use 'use_incoming_packet_handler' instead");
         }
 
         str=props.getProperty("use_incoming_packet_handler");
         if(str != null) {
-            use_incoming_packet_handler=Boolean.valueOf(str).booleanValue();
+            use_incoming_packet_handler=new Boolean(str).booleanValue();
             props.remove("use_incoming_packet_handler");
         }
 
         str=props.getProperty("use_outgoing_packet_handler");
         if(str != null) {
-            use_outgoing_packet_handler=Boolean.valueOf(str).booleanValue();
+            use_outgoing_packet_handler=new Boolean(str).booleanValue();
             props.remove("use_outgoing_packet_handler");
         }
 
@@ -518,12 +458,12 @@ public class UDP extends Protocol implements Runnable {
         if(str != null) {
             int bundle_size=Integer.parseInt(str);
             if(bundle_size > max_bundle_size) {
-                if(log.isErrorEnabled()) log.error("max_bundle_size (" + bundle_size +
-                        ") is greater than largest UDP fragmentation size (" + max_bundle_size + ')');
+                Trace.error("UDP.setProperties()", "max_bundle_size (" + bundle_size +
+                        ") is greater than largest UDP fragmentation size (" + max_bundle_size + ")");
                 return false;
             }
             if(bundle_size <= 0) {
-                if(log.isErrorEnabled()) log.error("max_bundle_size (" + bundle_size + ") is <= 0");
+                Trace.error("UDP.setProperties()", "max_bundle_size (" + bundle_size + ") is <= 0");
                 return false;
             }
             max_bundle_size=bundle_size;
@@ -534,7 +474,7 @@ public class UDP extends Protocol implements Runnable {
         if(str != null) {
             max_bundle_timeout=Long.parseLong(str);
             if(max_bundle_timeout <= 0) {
-                if(log.isErrorEnabled()) log.error("max_bundle_timeout of " + max_bundle_timeout + " is invalid");
+                Trace.error("UDP.setProperties()", "max_bundle_timeout of " + max_bundle_timeout + " is invalid");
                 return false;
             }
             props.remove("max_bundle_timeout");
@@ -542,14 +482,8 @@ public class UDP extends Protocol implements Runnable {
 
         str=props.getProperty("enable_bundling");
         if(str != null) {
-            enable_bundling=Boolean.valueOf(str).booleanValue();
+            enable_bundling=new Boolean(str).booleanValue();
             props.remove("enable_bundling");
-        }
-
-        str=props.getProperty("use_addr_translation");
-        if(str != null) {
-            use_addr_translation=Boolean.valueOf(str).booleanValue();
-            props.remove("use_addr_translation");
         }
 
         if(props.size() > 0) {
@@ -560,7 +494,7 @@ public class UDP extends Protocol implements Runnable {
 
         if(enable_bundling) {
             if(use_outgoing_packet_handler == false)
-                if(log.isWarnEnabled()) log.warn("enable_bundling is true; setting use_outgoing_packet_handler=true");
+                Trace.warn("UDP.setProperties()", "enable_bundling is true; setting use_outgoing_packet_handler=true");
             use_outgoing_packet_handler=true;
         }
 
@@ -582,12 +516,13 @@ public class UDP extends Protocol implements Runnable {
      * @param evt - the event being send from the stack
      */
     public void up(Event evt) {
+        passUp(evt);
 
         switch(evt.getType()) {
 
             case Event.CONFIG:
                 passUp(evt);
-                 if(log.isDebugEnabled()) log.debug("received CONFIG event: " + evt.getArg());
+                if(Trace.trace) Trace.info("UDP.up()", "received CONFIG event: " + evt.getArg());
                 handleConfigEvent((HashMap)evt.getArg());
                 return;
         }
@@ -610,11 +545,36 @@ public class UDP extends Protocol implements Runnable {
             return;
         }
 
+
+
+
+        // ****************** profiling ******************
+        /*if(num_msgs == 0) {
+            start=System.currentTimeMillis();
+            num_msgs++;
+        }
+        else if(num_msgs >= 1000) {
+            stop=System.currentTimeMillis();
+
+            long total_time=stop-start;
+            double msgs_per_msec=num_msgs / (double)total_time;
+
+            if(Trace.trace)
+                Trace.info("UDP.down.profile()",
+                        "total_time=" + total_time + ", msgs/ms=" + msgs_per_msec);
+            num_msgs=0;
+        }
+        else {
+            num_msgs++;
+        }*/
+        // ****************** profiling ******************
+
+
         msg=(Message)evt.getArg();
 
-        if(group_addr != null) {
+        if(udp_hdr != null && udp_hdr.group_addr != null) {
             // added patch by Roland Kurmann (March 20 2003)
-            msg.putHeader(name, new UdpHeader(group_addr));
+            msg.putHeader(name, udp_hdr);
         }
 
         dest_addr=msg.getDest();
@@ -627,12 +587,12 @@ public class UDP extends Protocol implements Runnable {
         if(dest_addr == null) { // 'null' means send to all group members
             if(ip_mcast) {
                 if(mcast_addr == null) {
-                    if(log.isErrorEnabled()) log.error("dest address of message is null, and " +
+                    Trace.error("UDP.down()", "dest address of message is null, and " +
                                               "sending to default address fails as mcast_addr is null, too !" +
                                               " Discarding message " + Util.printEvent(evt));
                     return;
                 }
-                // if we want to use IP multicast, then set the destination of the message
+                //if we want to use IP multicast, then set the destination of the message
                 msg.setDest(mcast_addr);
             }
             else {
@@ -646,7 +606,7 @@ public class UDP extends Protocol implements Runnable {
             sendUdpMessage(msg);
         }
         catch(Exception e) {
-            if(log.isErrorEnabled()) log.error("exception=" + e + ", msg=" + msg + ", mcast_addr=" + mcast_addr);
+            Trace.error("UDP.down()", "exception=" + e + ", msg=" + msg + ", mcast_addr=" + mcast_addr);
         }
     }
 
@@ -664,7 +624,7 @@ public class UDP extends Protocol implements Runnable {
 
     /**
      * If the sender is null, set our own address. We cannot just go ahead and set the address
-     * anyway, as we might be sending a message on behalf of someone else ! E.gin case of
+     * anyway, as we might be sending a message on behalf of someone else ! E.g. in case of
      * retransmission, when the original sender has crashed, or in a FLUSH protocol when we
      * have to return all unstable messages with the FLUSH_OK response.
      */
@@ -680,147 +640,128 @@ public class UDP extends Protocol implements Runnable {
      * Processes a packet read from either the multicast or unicast socket. Needs to be synchronized because
      * mcast or unicast socket reads can be concurrent
      */
-    void handleIncomingUdpPacket(IpAddress dest, InetAddress sender, int port, byte[] data) {
-        ByteArrayInputStream inp_stream=null;
-        DataInputStream      inp=null;
+    void handleIncomingUdpPacket(byte[] data) {
+        ByteArrayInputStream inp_stream;
+        ObjectInputStream    inp;
         Message              msg=null;
         List                 l;  // used if bundling is enabled
 
         try {
             // skip the first n bytes (default: 4), this is the version info
             inp_stream=new ByteArrayInputStream(data, VERSION_LENGTH, data.length - VERSION_LENGTH);
-            inp=new DataInputStream(inp_stream);
-            // inp=new ObjectInputStream(new BufferedInputStream(inp_stream));
-            // BufferedInputStream above makes no diff
-
-            // inp=new ObjectInputStream(inp_stream);
-            // inp=new MagicObjectInputStream(inp_stream);
+            inp=new ObjectInputStream(inp_stream);
             if(enable_bundling) {
-                // l=new List();
-                // l.readExternal(inp);
-                l=bufferToList(inp, dest, sender, port);
+                l=new List();
+                l.readExternal(inp);
                 for(Enumeration en=l.elements(); en.hasMoreElements();) {
                     msg=(Message)en.nextElement();
                     try {
                         handleMessage(msg);
                     }
                     catch(Throwable t) {
-                        if(log.isErrorEnabled()) log.error("failure: " + t.toString());
+                        Trace.error("UDP.handleIncomingUdpPacket()", "failure: " + t.toString());
                     }
                 }
             }
             else {
-                // msg=new Message();
-                // msg.readExternal(inp);
-                msg=bufferToMessage(inp, dest, sender, port);
+                msg=new Message();
+                msg.readExternal(inp);
                 handleMessage(msg);
             }
         }
         catch(Throwable e) {
-            if(log.isErrorEnabled()) log.error("exception in processing incoming packet", e);
+            Trace.error("UDP.handleIncomingUdpPacket()", "exception=" + Trace.getStackTrace(e));
         }
-        finally {
-            closeInputStream(inp);
-            closeInputStream(inp_stream);
-        }
-    }
-
-    void closeInputStream(InputStream inp) {
-        if(inp != null)
-            try {inp.close();} catch(IOException e) {}
     }
 
 
     void handleMessage(Message msg) {
         Event evt;
         UdpHeader hdr;
-        Address dst=msg.getDest();
-
-        if(dst == null)
-            dst=mcast_addr;
 
         // discard my own multicast loopback copy
         if(loopback) {
+            Address dst=msg.getDest();
             Address src=msg.getSrc();
-            if((dst == null || (dst != null && dst.isMulticastAddress())) && src != null && local_addr.equals(src)) {
-                if(log.isTraceEnabled())
-                    log.trace("discarded own loopback multicast packet");
+
+            if(dst != null && dst.isMulticastAddress() && src != null && local_addr.equals(src)) {
+                if(Trace.debug)
+                    Trace.info("UDP.handleMessage()", "discarded own loopback multicast packet");
                 return;
             }
         }
 
         evt=new Event(Event.MSG, msg);
-        if(log.isTraceEnabled())
-            log.trace("message is " + msg + ", headers are " + msg.getHeaders());
+        if(Trace.debug)
+            Trace.info("UDP.handleMessage()", "message is " + msg + ", headers are " + msg.getHeaders());
 
         /* Because Protocol.up() is never called by this bottommost layer, we call up() directly in the observer.
         * This allows e.g. PerfObserver to get the time of reception of a message */
         if(observer != null)
             observer.up(evt, up_queue.size());
 
-        hdr=(UdpHeader)msg.getHeader(name); // replaced removeHeader() with getHeader()
+        hdr=(UdpHeader)msg.removeHeader(name);
         if(hdr != null) {
 
             /* Discard all messages destined for a channel with a different name */
-            String ch_name=hdr.group_addr;
+            String ch_name=null;
+
+            if(hdr.group_addr != null)
+                ch_name=hdr.group_addr;
 
             // Discard if message's group name is not the same as our group name unless the
             // message is a diagnosis message (special group name DIAG_GROUP)
             if(ch_name != null && group_addr != null && !group_addr.equals(ch_name) &&
                     !ch_name.equals(Util.DIAG_GROUP)) {
-                if(log.isWarnEnabled()) log.warn("discarded message from different group (" +
-                        ch_name + "). Sender was " + msg.getSrc());
+                if(Trace.trace)
+                    Trace.warn("UDP.handleMessage()", "discarded message from different group (" +
+                            ch_name + "). Sender was " + msg.getSrc());
                 return;
             }
         }
         else {
-            if(log.isErrorEnabled()) log.error("message does not have a UDP header");
+            Trace.error("UDP.handleMessage()", "message does not have a UDP header");
         }
         passUp(evt);
     }
 
 
-    void sendUdpMessage(Message msg) throws Exception {
-        sendUdpMessage(msg, false);
-    }
-
     /** Send a message to the address specified in dest */
-    void sendUdpMessage(Message msg, boolean copyForOutgoingQueue) throws Exception {
+    void sendUdpMessage(Message msg) throws Exception {
         IpAddress           dest;
         Message             copy;
         Event               evt;
 
-        dest=(IpAddress)msg.getDest();  // guaranteed to be non-null
+        dest=(IpAddress)msg.getDest();  // guaranteed not to be null
         setSourceAddress(msg);
 
-        if(log.isTraceEnabled())
-            log.trace("sending msg to " + msg.getDest() + " (src=" + msg.getSrc() + "), headers are " + msg.getHeaders());
+        if(Trace.debug)
+            Trace.debug("UDP.sendUdpMessage()",
+                        "sending message to " + msg.getDest() +
+                        " (src=" + msg.getSrc() + "), headers are " + msg.getHeaders());
 
         // Don't send if destination is local address. Instead, switch dst and src and put in up_queue.
         // If multicast message, loopback a copy directly to us (but still multicast). Once we receive this,
         // we will discard our own multicast message
         if(loopback && (dest.equals(local_addr) || dest.isMulticastAddress())) {
             copy=msg.copy();
-            // copy.removeHeader(name); // we don't remove the header
+            copy.removeHeader(name);
             copy.setSrc(local_addr);
-            // copy.setDest(dest);
+            copy.setDest(dest);
             evt=new Event(Event.MSG, copy);
 
             /* Because Protocol.up() is never called by this bottommost layer, we call up() directly in the observer.
                This allows e.g. PerfObserver to get the time of reception of a message */
             if(observer != null)
                 observer.up(evt, up_queue.size());
-            if(log.isTraceEnabled()) log.trace("looped back local message " + copy);
+            if(Trace.debug) Trace.info("UDP.sendUdpMessage()", "looped back local message " + copy);
             passUp(evt);
-            if(dest != null && !dest.isMulticastAddress())
+            if(!dest.isMulticastAddress())
                 return;
         }
 
         if(use_outgoing_packet_handler) {
-            if(copyForOutgoingQueue)
-                outgoing_queue.add(msg.copy());
-            else
-                outgoing_queue.add(msg);
+            outgoing_queue.add(msg);
             return;
         }
 
@@ -830,27 +771,26 @@ public class UDP extends Protocol implements Runnable {
 
     /** Internal method to serialize and send a message. This method is not reentrant */
     void send(Message msg) throws Exception {
-        Buffer     buf;
-        IpAddress  dest=(IpAddress)msg.getDest(); // guaranteed to be non-null
-        IpAddress  src=(IpAddress)msg.getSrc();
-        buf=messageToBuffer(msg, dest, src);
+        IpAddress  dest=(IpAddress)msg.getDest();
+        byte[]     buf=messageToBuffer(msg);
         doSend(buf, dest.getIpAddress(), dest.getPort());
     }
 
+    void doSend(byte[] data, InetAddress dest, int port) throws IOException {
+       DatagramPacket       packet;
+       packet=new DatagramPacket(data, data.length, dest, port);
 
-
-    void doSend(Buffer buf, InetAddress dest, int port) throws IOException {
-        DatagramPacket       packet;
-
-        // packet=new DatagramPacket(data, data.length, dest, port);
-        packet=new DatagramPacket(buf.getBuf(), buf.getOffset(), buf.getLength(), dest, port);
-        if(dest.isMulticastAddress() && mcast_send_sock != null) { // mcast_recv_sock might be null if ip_mcast is false
-            mcast_send_sock.send(packet);
-        }
-        else {
-            if(sock != null)
-                sock.send(packet);
-        }
+       // change for SalesForce case #3452 (Bloomberg)
+       if(dest == null || dest.isMulticastAddress()) {
+          // multicast dest: use mcast_sock
+          if(mcast_sock != null)
+             mcast_sock.send(packet);
+       }
+       else {
+          // unicast dest: use sock
+          if(sock != null)
+             sock.send(packet);
+       }
     }
 
 
@@ -863,136 +803,29 @@ public class UDP extends Protocol implements Runnable {
             msg.setDest(dest);
 
             try {
-                sendUdpMessage(msg,
-                               true); // copy for outgoing queue if outgoing queue handler is enabled
+                sendUdpMessage(msg);
             }
             catch(Exception e) {
-                if(log.isDebugEnabled()) log.debug("exception=" + e);
+                Trace.debug("UDP.sendMultipleUdpMessages()", "exception=" + e);
             }
         }
     }
 
 
-    Buffer messageToBuffer(Message msg, IpAddress dest, IpAddress src) throws IOException {
-        Buffer retval=null;
+    byte[] messageToBuffer(Message msg) throws Exception {
+        ObjectOutputStream   out;
+        // BufferedOutputStream bos;
+
         out_stream.reset();
+        //bos=new BufferedOutputStream(out_stream);
         out_stream.write(Version.version_id, 0, Version.version_id.length); // write the version
-        DataOutputStream out=new DataOutputStream(out_stream);
-
-        nullAddresses(msg, dest, src);
-        msg.writeTo(out);
-        revertAddresses(msg, dest, src);
-
-        out.close(); // flushes contents to out_stream
-        retval=new Buffer(out_stream.getRawBuffer(), 0, out_stream.size());
-        return retval;
+        // bos.write(Version.version_id, 0, Version.version_id.length); // write the version
+        out=new ObjectOutputStream(out_stream);
+        // out=new ObjectOutputStream(bos);
+        msg.writeExternal(out);
+        out.flush(); // needed if out buffers its output to out_stream
+        return out_stream.toByteArray();
     }
-
-
-    void nullAddresses(Message msg, IpAddress dest, IpAddress src) {
-        if(!dest.isMulticastAddress()) { // unicast
-            msg.setDest(null);
-            msg.setSrc(null);
-        }
-        else {  // multicast
-            msg.setDest(null);
-            if(src != null)
-                msg.setSrc(new IpAddress(src.getPort(), false));
-        }
-    }
-
-    void revertAddresses(Message msg, IpAddress dest, IpAddress src) {
-        msg.setDest(dest);
-        msg.setSrc(src);
-    }
-
-
-
-
-    Message bufferToMessage(DataInputStream instream, IpAddress dest, InetAddress sender, int port)
-            throws IOException, IllegalAccessException, InstantiationException {
-        Message msg=new Message();
-        msg.readFrom(instream);
-        setAddresses(msg, dest, sender, port);
-        return msg;
-    }
-
-
-    void setAddresses(Message msg, IpAddress dest, InetAddress sender, int port) {
-        // set the source address if not set
-        IpAddress src_addr=(IpAddress)msg.getSrc();
-        if(src_addr == null) {
-            try {msg.setSrc(new IpAddress(sender, port));} catch(Throwable t) {}
-        }
-        else {
-            if(src_addr.getIpAddress() == null) {
-                try {msg.setSrc(new IpAddress(sender, src_addr.getPort()));} catch(Throwable t) {}
-            }
-        }
-
-        // set the destination address
-        if(msg.getDest() == null && dest != null)
-            msg.setDest(dest);
-
-    }
-
-    Buffer listToBuffer(List l, IpAddress dest) throws IOException {
-        Buffer retval=null;
-        IpAddress src;
-        Message msg;
-        int len=l != null? l.size() : 0;
-        DataOutputStream out=null;
-        out_stream.reset();
-        out_stream.write(Version.version_id, 0, Version.version_id.length); // write the version
-        out=new DataOutputStream(out_stream);
-        out.writeInt(len);
-        for(Enumeration en=l.elements(); en.hasMoreElements();) {
-            msg=(Message)en.nextElement();
-            src=(IpAddress)msg.getSrc();
-            nullAddresses(msg, dest, src);
-            msg.writeTo(out);
-            revertAddresses(msg, dest, src);
-        }
-        out.close(); // flush contents to outstream
-        retval=new Buffer(out_stream.getRawBuffer(), 0, out_stream.size());
-        return retval;
-    }
-
-
-    List bufferToList(DataInputStream instream, IpAddress dest, InetAddress sender, int port)
-            throws IOException, IllegalAccessException, InstantiationException {
-        List l=new List();
-        DataInputStream dis=null;
-        int len;
-        Message msg;
-
-        try {
-            len=instream.readInt();
-            for(int i=0; i < len; i++) {
-                msg=new Message();
-                msg.readFrom(instream);
-                setAddresses(msg, dest, sender, port);
-                l.add(msg);
-            }
-            return l;
-        }
-        finally {
-            if(dis != null)
-                dis.close();
-        }
-    }
-
-//    Buffer objectToBuffer(Externalizable obj) throws IOException {
-//        ObjectOutputStream   out;
-//
-//        out_stream.reset();
-//        out_stream.write(Version.version_id, 0, Version.version_id.length); // write the version
-//        // out=new ObjectOutputStream(new BufferedOutputStream(out_stream));
-//        out=new MagicObjectOutputStream(out_stream);
-//        obj.writeExternal(out);
-//        out.close(); // needed to flush if out buffers its output to out_stream
-//        return new Buffer(out_stream.getRawBuffer(), 0, out_stream.size());
-//    }
 
     /**
      * Create UDP sender and receiver sockets. Currently there are 2 sockets
@@ -1017,19 +850,36 @@ public class UDP extends Protocol implements Runnable {
         if(bind_addr == null)
             bind_addr=InetAddress.getLocalHost();
 
-        if(bind_addr != null)
-            if(log.isInfoEnabled()) log.info("sockets will use interface " + bind_addr.getHostAddress());
+        if(bind_addr != null && Trace.trace)
+            Trace.info("UDP.createSockets()", "unicast sockets will use interface " +
+                                              bind_addr.getHostAddress());
 
 
         // 2. Create socket for receiving unicast UDP packets. The address and port
         //    of this socket will be our local address (local_addr)
-        if(bind_port > 0) {
-            sock=createDatagramSocketWithBindPort();
-        }
-        else {
-            sock=createEphemeralDatagramSocket();
-        }
 
+		// 27-6-2003 bgooren, find available port in range (start_port, start_port+port_range)
+        int rcv_port=bind_port, max_port=bind_port + port_range;
+        while(rcv_port <= max_port) {
+
+            try {
+                sock=new DatagramSocket(rcv_port, bind_addr);
+                break;
+            }
+            catch(SocketException bind_ex) {	// Cannot listen on this port
+                rcv_port++;
+            }
+            catch(SecurityException sec_ex) { // Not allowed to list on this port
+                rcv_port++;
+            }
+
+            // Cannot listen at all, throw an Exception
+            if(rcv_port == max_port + 1) { // +1 due to the increment above
+                throw new Exception("UDP.createSockets(): cannot list on any port in range " +
+                        bind_port + "-" + (bind_port + port_range));
+            }
+        }
+		//ucast_recv_sock=new DatagramSocket(bind_port, bind_addr);
         if(sock == null)
             throw new Exception("UDP.createSocket(): sock is null");
 
@@ -1040,85 +890,19 @@ public class UDP extends Protocol implements Runnable {
 
         // 3. Create socket for receiving IP multicast packets
         if(ip_mcast) {
-            // 3a. Create mcast receiver socket
-            mcast_recv_sock=new MulticastSocket(mcast_port);
-            mcast_recv_sock.setTimeToLive(ip_ttl);
+            mcast_sock=new MulticastSocket(mcast_port);
+            mcast_sock.setTimeToLive(ip_ttl);
             if(bind_addr != null)
-                mcast_recv_sock.setInterface(bind_addr);
+                mcast_sock.setInterface(bind_addr);
             tmp_addr=InetAddress.getByName(mcast_addr_name);
             mcast_addr=new IpAddress(tmp_addr, mcast_port);
-            mcast_recv_sock.joinGroup(tmp_addr);
-
-            // 3b. Create mcast sender socket
-            mcast_send_sock=new MulticastSocket();
-            mcast_send_sock.setTimeToLive(ip_ttl);
-            if(bind_addr != null)
-                mcast_send_sock.setInterface(bind_addr);
-            // mcast_send_sock.setTrafficClass(0x08); // high throughput; should investigate when baseline is JDK 1.4
+            mcast_sock.joinGroup(tmp_addr);
         }
 
         setBufferSizes();
-        if(log.isInfoEnabled()) log.info("socket information:\n" + dumpSocketInfo());
-    }
 
-
-    /** Creates a DatagramSocket with a random port. Because in certain operating systems, ports are reused,
-     * we keep a list of the n last used ports, and avoid port reuse */
-    DatagramSocket createEphemeralDatagramSocket() throws SocketException {
-        DatagramSocket tmp=null;
-        int localPort=0;
-        while(true) {
-            tmp=new DatagramSocket(localPort, bind_addr); // first time localPort is 0
-            if(num_last_ports <= 0)
-                break;
-            localPort=tmp.getLocalPort();
-            if(getLastPortsUsed().contains(new Integer(localPort))) {
-                if(log.isDebugEnabled())
-                    log.debug("local port " + localPort + " already seen in this session; will try to get other port");
-                try {tmp.close();} catch(Throwable e) {}
-                localPort++;
-                continue;
-            }
-            else {
-                getLastPortsUsed().add(new Integer(localPort));
-                break;
-            }
-        }
-        return tmp;
-    }
-
-
-
-
-    /**
-     * Creates a DatagramSocket when bind_port > 0. Attempts to allocate the socket with port == bind_port, and
-     * increments until it finds a valid port, or until port_range has been exceeded
-     * @return DatagramSocket The newly created socket
-     * @throws Exception
-     */
-    DatagramSocket createDatagramSocketWithBindPort() throws Exception {
-        DatagramSocket tmp=null;
-        // 27-6-2003 bgooren, find available port in range (start_port, start_port+port_range)
-        int rcv_port=bind_port, max_port=bind_port + port_range;
-        while(rcv_port <= max_port) {
-            try {
-                tmp=new DatagramSocket(rcv_port, bind_addr);
-                break;
-            }
-            catch(SocketException bind_ex) {	// Cannot listen on this port
-                rcv_port++;
-            }
-            catch(SecurityException sec_ex) { // Not allowed to listen on this port
-                rcv_port++;
-            }
-
-            // Cannot listen at all, throw an Exception
-            if(rcv_port >= max_port + 1) { // +1 due to the increment above
-                throw new Exception("UDP.createSockets(): cannot list on any port in range " +
-                        bind_port + '-' + (bind_port + port_range));
-            }
-        }
-        return tmp;
+        if(Trace.trace)
+            Trace.info("UDP.createSockets()", "socket information:\n" + dumpSocketInfo());
     }
 
 
@@ -1130,24 +914,17 @@ public class UDP extends Protocol implements Runnable {
         sb.append(", ttl=").append(ip_ttl);
 
         if(sock != null) {
-            sb.append("\nsock: bound to ");
-            sb.append(sock.getLocalAddress().getHostAddress()).append(':').append(sock.getLocalPort());
+            sb.append("\nsocket: bound to ");
+            sb.append(sock.getLocalAddress().getHostAddress()).append(":").append(sock.getLocalPort());
             sb.append(", receive buffer size=").append(sock.getReceiveBufferSize());
             sb.append(", send buffer size=").append(sock.getSendBufferSize());
         }
 
-        if(mcast_recv_sock != null) {
-            sb.append("\nmcast_recv_sock: bound to ");
-            sb.append(mcast_recv_sock.getInterface().getHostAddress()).append(':').append(mcast_recv_sock.getLocalPort());
-            sb.append(", send buffer size=").append(mcast_recv_sock.getSendBufferSize());
-            sb.append(", receive buffer size=").append(mcast_recv_sock.getReceiveBufferSize());
-        }
-
-         if(mcast_send_sock != null) {
-            sb.append("\nmcast_send_sock: bound to ");
-            sb.append(mcast_send_sock.getInterface().getHostAddress()).append(':').append(mcast_send_sock.getLocalPort());
-            sb.append(", send buffer size=").append(mcast_send_sock.getSendBufferSize());
-            sb.append(", receive buffer size=").append(mcast_send_sock.getReceiveBufferSize());
+        if(mcast_sock != null) {
+            sb.append("\nmulticast socket: bound to ");
+            sb.append(mcast_sock.getInterface().getHostAddress()).append(":").append(mcast_sock.getLocalPort());
+            sb.append(", send buffer size=").append(mcast_sock.getSendBufferSize());
+            sb.append(", receive buffer size=").append(mcast_sock.getReceiveBufferSize());
         }
         return sb.toString();
     }
@@ -1159,48 +936,32 @@ public class UDP extends Protocol implements Runnable {
                 sock.setSendBufferSize(ucast_send_buf_size);
             }
             catch(Throwable ex) {
-                if(log.isWarnEnabled()) log.warn("failed setting ucast_send_buf_size in sock: " + ex);
+                Trace.warn("UDP.setBufferSizes()", "failed setting ucast_send_buf_size in sock: " + ex);
             }
             try {
                 sock.setReceiveBufferSize(ucast_recv_buf_size);
             }
             catch(Throwable ex) {
-                if(log.isWarnEnabled()) log.warn("failed setting ucast_recv_buf_size in sock: " + ex);
+                Trace.warn("UDP.setBufferSizes()", "failed setting ucast_recv_buf_size in sock: " + ex);
             }
+
         }
 
-        if(mcast_recv_sock != null) {
+        if(mcast_sock != null) {
             try {
-                mcast_recv_sock.setSendBufferSize(mcast_send_buf_size);
+                mcast_sock.setSendBufferSize(mcast_send_buf_size);
             }
             catch(Throwable ex) {
-                if(log.isWarnEnabled()) log.warn("failed setting mcast_send_buf_size in mcast_recv_sock: " + ex);
+                Trace.warn("UDP.setBufferSizes()", "failed setting mcast_send_buf_size in mcast_sock: " + ex);
             }
 
             try {
-                mcast_recv_sock.setReceiveBufferSize(mcast_recv_buf_size);
+                mcast_sock.setReceiveBufferSize(mcast_recv_buf_size);
             }
             catch(Throwable ex) {
-                if(log.isWarnEnabled()) log.warn("failed setting mcast_recv_buf_size in mcast_recv_sock: " + ex);
+                Trace.warn("UDP.setBufferSizes()", "failed setting mcast_recv_buf_size in mcast_sock: " + ex);
             }
         }
-
-        if(mcast_send_sock != null) {
-            try {
-                mcast_send_sock.setSendBufferSize(mcast_send_buf_size);
-            }
-            catch(Throwable ex) {
-                if(log.isWarnEnabled()) log.warn("failed setting mcast_send_buf_size in mcast_send_sock: " + ex);
-            }
-
-            try {
-                mcast_send_sock.setReceiveBufferSize(mcast_recv_buf_size);
-            }
-            catch(Throwable ex) {
-                if(log.isWarnEnabled()) log.warn("failed setting mcast_recv_buf_size in mcast_send_sock: " + ex);
-            }
-        }
-
     }
 
 
@@ -1217,27 +978,21 @@ public class UDP extends Protocol implements Runnable {
 
 
     void closeMulticastSocket() {
-        if(mcast_recv_sock != null) {
+        if(mcast_sock != null) {
             try {
                 if(mcast_addr != null) {
                     // by sending a dummy packet the thread will be awakened
                     sendDummyPacket(mcast_addr.getIpAddress(), mcast_addr.getPort());
                     Util.sleep(300);
-                    mcast_recv_sock.leaveGroup(mcast_addr.getIpAddress());
+                    mcast_sock.leaveGroup(mcast_addr.getIpAddress());
                 }
-                mcast_recv_sock.close(); // this will cause the mcast receiver thread to break out of its loop
-                mcast_recv_sock=null;
-                 if(log.isDebugEnabled()) log.debug("multicast receive socket closed");
+                mcast_sock.close(); // this will cause the mcast receiver thread to break out of its loop
+                mcast_sock=null;
+                if(Trace.trace) Trace.info("UDP.closeMulticastSocket()", "multicast socket closed");
             }
             catch(IOException ex) {
             }
             mcast_addr=null;
-        }
-
-        if(mcast_send_sock != null) {
-            mcast_send_sock.close(); // this will cause the mcast receiver thread to break out of its loop
-            mcast_send_sock=null;
-            if(log.isDebugEnabled()) log.debug("multicast send socket closed");
         }
     }
 
@@ -1249,7 +1004,7 @@ public class UDP extends Protocol implements Runnable {
 
             sock.close();
             sock=null;
-             if(log.isDebugEnabled()) log.debug("socket closed");
+            if(Trace.trace) Trace.info("UDP.closeSocket()", "socket closed");
         }
     }
 
@@ -1275,10 +1030,10 @@ public class UDP extends Protocol implements Runnable {
             }
         }
 
-        if(log.isTraceEnabled()) log.trace("sending packet to " + dest + ':' + port);
+        if(Trace.debug) Trace.info("UDP.sendDummyPacket()", "sending packet to " + dest + ":" + port);
 
         if(sock == null || dest == null) {
-            if(log.isWarnEnabled()) log.warn("sock was null or dest was null, cannot send dummy packet");
+            Trace.warn("UDP.sendDummyPacket()", "sock was null or dest was null, cannot send dummy packet");
             return;
         }
         packet=new DatagramPacket(buf, buf.length, dest, port);
@@ -1286,7 +1041,7 @@ public class UDP extends Protocol implements Runnable {
             sock.send(packet);
         }
         catch(Throwable e) {
-            if(log.isErrorEnabled()) log.error("exception sending dummy packet to " + dest + ':' + port + ": " + e);
+            Trace.error("UDP.sendDummyPacket()", "exception sending dummy packet to " + dest + ":" + port + ": " + e);
         }
     }
 
@@ -1299,14 +1054,15 @@ public class UDP extends Protocol implements Runnable {
             //start the listener thread of the ucast_recv_sock
             ucast_receiver=new UcastReceiver();
             ucast_receiver.start();
-             if(log.isDebugEnabled()) log.debug("created unicast receiver thread");
+            if(Trace.trace) Trace.info("UDP.startThreads()", "created unicast receiver thread");
         }
 
         if(ip_mcast) {
             if(mcast_receiver != null) {
                 if(mcast_receiver.isAlive()) {
-
-                        if(log.isDebugEnabled()) log.debug("did not create new multicastreceiver thread as existing " +
+                    if(Trace.trace)
+                        Trace.info("UDP.createThreads()",
+                                   "did not create new multicastreceiver thread as existing " +
                                    "multicast receiver thread is still running");
                 }
                 else
@@ -1381,6 +1137,7 @@ public class UDP extends Protocol implements Runnable {
 
             case Event.CONNECT:
                 group_addr=(String)evt.getArg();
+                udp_hdr=new UdpHeader(group_addr);
 
                 // removed March 18 2003 (bela), not needed (handled by GMS)
                 // changed July 2 2003 (bela): we discard CONNECT_OK at the GMS level anyway, this might
@@ -1393,7 +1150,7 @@ public class UDP extends Protocol implements Runnable {
                 break;
 
             case Event.CONFIG:
-                 if(log.isDebugEnabled()) log.debug("received CONFIG event: " + evt.getArg());
+                if(Trace.trace) Trace.info("UDP.down()", "received CONFIG event: " + evt.getArg());
                 handleConfigEvent((HashMap)evt.getArg());
                 break;
         }
@@ -1416,31 +1173,9 @@ public class UDP extends Protocol implements Runnable {
     }
 
 
-
     /* ----------------------------- End of Private Methods ---------------------------------------- */
 
     /* ----------------------------- Inner Classes ---------------------------------------- */
-
-    class IncomingQueueEntry {
-        IpAddress   dest=null;
-        InetAddress sender=null;
-        int         port=-1;
-        byte[]      buf;
-
-        public IncomingQueueEntry(IpAddress dest, InetAddress sender, int port, byte[] buf) {
-            this.dest=dest;
-            this.sender=sender;
-            this.port=port;
-            this.buf=buf;
-        }
-
-        public IncomingQueueEntry(byte[] buf) {
-            this.buf=buf;
-        }
-    }
-
-
-
     public class UcastReceiver implements Runnable {
         boolean running=true;
         Thread thread=null;
@@ -1475,8 +1210,6 @@ public class UDP extends Protocol implements Runnable {
             byte            receive_buf[]=new byte[65535];
             int             len;
             byte[]          data, tmp;
-            InetAddress     sender_addr;
-            int             sender_port;
 
             // moved out of loop to avoid excessive object creations (bela March 8 2001)
             packet=new DatagramPacket(receive_buf, receive_buf.length);
@@ -1485,61 +1218,54 @@ public class UDP extends Protocol implements Runnable {
                 try {
                     packet.setData(receive_buf, 0, receive_buf.length);
                     sock.receive(packet);
-                    sender_addr=packet.getAddress();
-                    sender_port=packet.getPort();
                     len=packet.getLength();
                     data=packet.getData();
                     if(len == 1 && data[0] == 0) {
-                        if(log.isTraceEnabled()) log.trace("received dummy packet");
+                        if(Trace.debug) Trace.info("UDP.UcastReceiver.run()", "received dummy packet");
                         continue;
                     }
-                    if(log.isTraceEnabled())
-                        log.trace("received (ucast) " + len + " bytes from " + sender_addr + ':' + sender_port);
+                    if(Trace.debug)
+                        Trace.info("UDP.UcastReceiver.run()", "received (ucast) " + len + " bytes from " +
+                                packet.getAddress() + ":" + packet.getPort());
                     if(len > receive_buf.length) {
-                        if(log.isErrorEnabled())
-                            log.error("size of the received packet (" + len + ") is bigger than allocated buffer (" +
-                                      receive_buf.length + "): will not be able to handle packet. " +
-                                      "Use the FRAG protocol and make its frag_size lower than " + receive_buf.length);
+                        Trace.error("UDP.UcastReceiver.run()", "size of the received packet (" + len + ") is bigger than " +
+                                                               "allocated buffer (" + receive_buf.length + "): will not be able to handle packet. " +
+                                                               "Use the FRAG protocol and make its frag_size lower than " + receive_buf.length);
                     }
 
                     if(Version.compareTo(data) == false) {
-                        if(log.isWarnEnabled()) {
-                            StringBuffer sb=new StringBuffer();
-                            sb.append("packet from ").append(sender_addr).append(':').append(sender_port);
-                            sb.append(" has different version (").append(Version.printVersionId(data, Version.version_id.length));
-                            sb.append(") from ours (").append(Version.printVersionId(Version.version_id)).append("). ");
-                            if(discard_incompatible_packets)
-                                sb.append("Packet is discarded");
-                            else
-                                sb.append("This may cause problems");
-                            log.warn(sb.toString());
-                        }
-                        if(discard_incompatible_packets)
-                            continue;
+                        Trace.warn("UDP.UcastReceiver.run()",
+                                   "packet from " + packet.getAddress() + ":" + packet.getPort() +
+                                   " has different version (" +
+                                   Version.printVersionId(data, Version.version_id.length) +
+                                   ") from ours (" + Version.printVersionId(Version.version_id) +
+                                   "). This may cause problems");
                     }
 
                     if(use_incoming_packet_handler) {
                         tmp=new byte[len];
                         System.arraycopy(data, 0, tmp, 0, len);
-                        incoming_queue.add(new IncomingQueueEntry(local_addr, sender_addr, sender_port, tmp));
+                        incoming_queue.add(tmp);
                     }
                     else
-                        handleIncomingUdpPacket(local_addr, sender_addr, sender_port, data);
+                        handleIncomingUdpPacket(data);
                 }
                 catch(SocketException sock_ex) {
-                    if(log.isDebugEnabled()) log.debug("unicast receiver socket is closed, exception=" + sock_ex);
+                    if(Trace.trace)
+                        Trace.info("UDP.UcastReceiver.run()",
+                                   "unicast receiver socket is closed, exception=" + sock_ex);
                     break;
                 }
                 catch(InterruptedIOException io_ex) { // thread was interrupted
                     ; // go back to top of loop, where we will terminate loop
                 }
                 catch(Throwable ex) {
-                    if(log.isErrorEnabled())
-                        log.error("[" + local_addr + "] failed receiving unicast packet", ex);
-                    Util.sleep(100); // so we don't get into 100% cpu spinning (should NEVER happen !)
+                    Trace.error("UDP.UcastReceiver.run()", "[" + local_addr + "] exception=" + ex +
+                                                           ", stack trace=" + Util.printStackTrace(ex));
+                    Util.sleep(300); // so we don't get into 100% cpu spinning (should NEVER happen !)
                 }
             }
-            if(log.isDebugEnabled()) log.debug("unicast receiver thread terminated");
+            if(Trace.trace) Trace.info("UDP.UcastReceiver.run()", "unicast receiver thread terminated");
         }
     }
 
@@ -1553,18 +1279,15 @@ public class UDP extends Protocol implements Runnable {
 
         public void run() {
             byte[] data;
-            IncomingQueueEntry entry;
-
             while(incoming_queue != null && incoming_packet_handler != null) {
                 try {
-                    entry=(IncomingQueueEntry)incoming_queue.remove();
-                    data=entry.buf;
+                    data=(byte[])incoming_queue.remove();
                 }
                 catch(QueueClosedException closed_ex) {
-                    if(log.isDebugEnabled()) log.debug("packet_handler thread terminating");
+                    if(Trace.trace) Trace.info("UDP.IncomingPacketHandler.run()", "packet_handler thread terminating");
                     break;
                 }
-                handleIncomingUdpPacket(entry.dest, entry.sender, entry.port, data);
+                handleIncomingUdpPacket(data);
                 data=null; // let's give the poor garbage collector a hand...
             }
         }
@@ -1592,6 +1315,7 @@ public class UDP extends Protocol implements Runnable {
      */
     class OutgoingPacketHandler implements Runnable {
         Thread             t=null;
+        ObjectOutputStream out;
         byte[]             buf;
         DatagramPacket     packet;
         IpAddress          dest;
@@ -1605,11 +1329,11 @@ public class UDP extends Protocol implements Runnable {
                     handleMessage(msg);
                 }
                 catch(QueueClosedException closed_ex) {
-                     if(log.isDebugEnabled()) log.debug("packet_handler thread terminating");
+                    if(Trace.trace) Trace.info("UDP.OutgoingPacketHandler.run()", "packet_handler thread terminating");
                     break;
                 }
-                catch(Throwable th) {
-                    if(log.isErrorEnabled()) log.error("exception sending packet: " + Util.printStackTrace(th));
+                catch(Throwable t) {
+                    Trace.error("UDP.OutgoingPacketHandler.run()", "exception sending packet: " + Util.printStackTrace(t));
                 }
                 msg=null; // let's give the poor garbage collector a hand...
             }
@@ -1646,22 +1370,19 @@ public class UDP extends Protocol implements Runnable {
      * are unbundled at the receiver.
      */
     class BundlingOutgoingPacketHandler extends OutgoingPacketHandler {
-        long                total_bytes=0;
-        /** HashMap<Address, List<Message>>. Keys are destinations, values are lists of Messages */
-        final HashMap       msgs=new HashMap(11);
-        MyTask              task=null;
-        final Object        task_mutex=new Object();
+        long          total_bytes=0;
+        boolean       timer_running=false;
+
+        /** HashMap<Address, List>. Keys are destinations, values are lists of Messages */
+        HashMap       msgs=new HashMap();
+
+        MyTask        task=new MyTask();
 
 
         class MyTask implements TimeScheduler.Task {
-            boolean  running=true;
 
             public boolean cancelled() {
-                return !running;
-            }
-
-            public void cancel() {
-                running=false;
+                return !timer_running;
             }
 
             public long nextInterval() {
@@ -1669,33 +1390,22 @@ public class UDP extends Protocol implements Runnable {
             }
 
             public void run() {
-                if(running)
+                if(timer_running) {
                     bundleAndSend();
-                cancel(); // only run once
+                }
             }
         }
 
 
         void startTimer() {
-            synchronized(task_mutex) {
-                if(task == null || task.cancelled()) {
-                    task=new MyTask();
-                    timer.add(task);
-                    if(log.isTraceEnabled())
-                        log.trace("started bundling task");
-                }
+            if(!timer_running) {
+                timer_running=true;
+                timer.add(task);
             }
         }
 
         void stopTimer() {
-            synchronized(task_mutex) {
-                if(task != null) {
-                    task.cancel();
-                    task=null;
-                    if(log.isTraceEnabled())
-                        log.trace("stopped bundling task");
-                }
-            }
+            timer_running=false;
         }
 
 
@@ -1705,7 +1415,7 @@ public class UDP extends Protocol implements Runnable {
         }
 
         protected void handleMessage(Message msg) throws Exception {
-            Address        dst=msg.getDest();
+            Address        dest=msg.getDest();
             long           len;
             List           tmp;
 
@@ -1715,54 +1425,68 @@ public class UDP extends Protocol implements Runnable {
                         "message size (" + len + ") is greater than UDP fragmentation size. " +
                         "Set the fragmentation/bundle size in FRAG and UDP correctly");
 
-            if(log.isTraceEnabled())
-                log.trace("accumulated bytes: " + total_bytes);
             if(total_bytes + len >= max_bundle_size) {
-                if(log.isTraceEnabled()) log.trace("sending " + total_bytes + " bytes");
+                if(Trace.trace) {
+                    Trace.info("UDP.BundlingOutgoingPacketHandler.handleMessage()", "sending " + total_bytes + " bytes");
+                }
                 bundleAndSend(); // send all pending message and clear table
                 total_bytes=0;
-                stopTimer(); // this is more of a reset than a stop
             }
 
             synchronized(msgs) {
-                tmp=(List)msgs.get(dst);
+                tmp=(List)msgs.get(dest);
                 if(tmp == null) {
                     tmp=new List();
-                    msgs.put(dst, tmp);
+                    msgs.put(dest, tmp);
                 }
                 tmp.add(msg);
                 total_bytes+=len;
             }
-            startTimer(); // doesn't start if already running
+
+            if(!timer_running) // first message to be bundled
+                startTimer();
         }
 
 
         void bundleAndSend() {
-            Map.Entry      entry;
-            IpAddress      dst;
-            Buffer         buffer;
-            InetAddress    addr;
-            int            port;
-            List           l;
+            Map.Entry            entry;
+            IpAddress            dest;
+            ObjectOutputStream   out;
+            InetAddress          addr;
+            int                  port;
+            byte[]               data;
+            List                 l;
 
-            if(log.isTraceEnabled()) log.trace("sending msgs: " + dumpMessages(msgs));
+            if(Trace.trace)
+                Trace.info("UDP.BundlingOutgoingPacketHandler.bundleAndSend()", "\nsending msgs:\n" + dumpMessages(msgs));
+
             synchronized(msgs) {
-                // stopTimer();
+                stopTimer();
+
                 if(msgs.size() == 0)
                     return;
 
                 for(Iterator it=msgs.entrySet().iterator(); it.hasNext();) {
                     entry=(Map.Entry)it.next();
-                    dst=(IpAddress)entry.getKey();
-                    addr=dst.getIpAddress();
-                    port=dst.getPort();
+                    dest=(IpAddress)entry.getKey();
+                    addr=dest.getIpAddress();
+                    port=dest.getPort();
                     l=(List)entry.getValue();
                     try {
-                        buffer=listToBuffer(l, dst);
-                        doSend(buffer, addr, port);
+                        out_stream.reset();
+                        // BufferedOutputStream bos=new BufferedOutputStream(out_stream);
+                        out_stream.write(Version.version_id, 0, Version.version_id.length); // write the version
+                        //bos.write(Version.version_id, 0, Version.version_id.length); // write the version
+                        out=new ObjectOutputStream(out_stream);
+                        // out=new ObjectOutputStream(bos);
+                        l.writeExternal(out);
+                        out.close(); // needed if out buffers its output to out_stream
+                        data=out_stream.toByteArray();
+                        doSend(data, addr, port);
                     }
                     catch(IOException e) {
-                        if(log.isErrorEnabled()) log.error("exception sending msg (to dest=" + dst + "): " + e);
+                        Trace.error("UDP.BundlingOutgoingPacketHandle.bundleAndSend()",
+                                "exception sending msg (to dest=" + dest + "): " + e);
                     }
                 }
                 msgs.clear();
