@@ -1,4 +1,4 @@
-// $Id: MERGE2.java,v 1.14 2005/03/23 14:51:54 belaban Exp $
+// $Id: MERGE2.java,v 1.6.2.1 2005/03/23 15:29:29 belaban Exp $
 
 package org.jgroups.protocols;
 
@@ -47,10 +47,7 @@ public class MERGE2 extends Protocol {
     long min_interval=5000;     // minimum time between executions of the FindSubgroups task
     long max_interval=20000;    // maximum time between executions of the FindSubgroups task
     boolean is_coord=false;
-    final Promise find_promise=new Promise(); // to synchronize FindSubgroups.findInitialMembers() on
-
-    /** Use a new thread to send the MERGE event up the stack */
-    boolean use_separate_thread=false;
+    Promise find_promise=new Promise(); // to synchronize FindSubgroups.findInitialMembers() on
 
 
     public String getName() {
@@ -81,12 +78,6 @@ public class MERGE2 extends Protocol {
         if(max_interval <= min_interval) {
             if(log.isErrorEnabled()) log.error("max_interval has to be greater than min_interval");
             return false;
-        }
-
-        str=props.getProperty("use_separate_thread");
-        if(str != null) {
-            use_separate_thread=Boolean.valueOf(str).booleanValue();
-            props.remove("use_separate_thread");
         }
 
         if(props.size() > 0) {
@@ -211,7 +202,7 @@ public class MERGE2 extends Protocol {
 
 
         public void start() {
-            if(thread == null || !thread.isAlive()) {
+            if(thread == null) {
                 thread=new Thread(this, "MERGE2.FindSubgroups thread");
                 thread.setDaemon(true);
                 thread.start();
@@ -220,7 +211,7 @@ public class MERGE2 extends Protocol {
 
 
         public void stop() {
-            if(thread != null) {
+            if(thread != null && thread.isAlive()) {
                 Thread tmp=thread;
                 thread=null;
                 tmp.interrupt(); // wakes up sleeping thread
@@ -233,6 +224,7 @@ public class MERGE2 extends Protocol {
         public void run() {
             long interval;
             Vector coords=null;
+            Event evt;
             Vector initial_mbrs;
 
             if(log.isDebugEnabled()) log.debug("merge task started");
@@ -247,27 +239,14 @@ public class MERGE2 extends Protocol {
                 if(coords != null && coords.size() > 1) {
                     if(log.isDebugEnabled())
                         log.debug("found multiple coordinators: " + coords + "; sending up MERGE event");
-                    final Event evt=new Event(Event.MERGE, coords);
-                    if(use_separate_thread) {
-                        Thread merge_notifier=new Thread() {
-                            public void run() {
-                                passUp(evt);
-                            }
-                        };
-                        merge_notifier.setDaemon(true);
-                        merge_notifier.setName("merge notifier thread");
-                    }
-                    else {
-                        passUp(evt);
-                    }
+                    evt=new Event(Event.MERGE, coords);
+                    passUp(evt);
                 }
                 else {
-                    if(log.isTraceEnabled())
-                        log.trace("didn't find multiple coordinators in " + initial_mbrs + ", skipping merge");
+                   if(log.isTraceEnabled())
+                      log.trace("didn't find multiple coordinators in " + initial_mbrs + ", skipping merge");
                 }
             }
-            if(log.isTraceEnabled())
-                log.trace("MERGE2.FindSubgroups thread terminated");
         }
 
 
@@ -284,13 +263,13 @@ public class MERGE2 extends Protocol {
          * Returns a list of PingRsp pairs.
          */
         Vector findInitialMembers() {
-            PingRsp tmp=new PingRsp(local_addr, local_addr, true);
-            find_promise.reset();
-            passDown(new Event(Event.FIND_INITIAL_MBRS));
-            Vector retval=(Vector)find_promise.getResult(0); // wait indefinitely until response is received
-            if(retval != null && is_coord && local_addr != null && !retval.contains(tmp))
-                retval.add(tmp);
-            return retval;
+           PingRsp tmp=new PingRsp(local_addr, local_addr);
+           find_promise.reset();
+           passDown(new Event(Event.FIND_INITIAL_MBRS));
+           Vector retval=(Vector)find_promise.getResult(0); // wait indefinitely until response is received
+           if(retval != null && is_coord && local_addr != null && !retval.contains(tmp))
+              retval.add(tmp);
+           return retval;
         }
 
 
@@ -308,8 +287,6 @@ public class MERGE2 extends Protocol {
             if(initial_mbrs == null) return null;
             for(int i=0; i < initial_mbrs.size(); i++) {
                 rsp=(PingRsp)initial_mbrs.elementAt(i);
-                if(!rsp.is_server)
-                    continue;
                 coord=rsp.getCoordAddress();
                 if(!ret.contains(coord))
                     ret.addElement(coord);
