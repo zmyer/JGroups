@@ -1,4 +1,4 @@
-// $Id: VERIFY_SUSPECT.java,v 1.10 2004/10/08 13:26:37 belaban Exp $
+// $Id: VERIFY_SUSPECT.java,v 1.7.2.1 2005/04/22 15:58:35 belaban Exp $
 
 package org.jgroups.protocols;
 
@@ -8,9 +8,10 @@ import org.jgroups.Header;
 import org.jgroups.Message;
 import org.jgroups.stack.Protocol;
 import org.jgroups.util.Util;
-import org.jgroups.util.Streamable;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
 import java.util.Enumeration;
 import java.util.Hashtable;
 import java.util.Properties;
@@ -26,8 +27,8 @@ public class VERIFY_SUSPECT extends Protocol implements Runnable {
     Address local_addr=null;
     long timeout=2000;   // number of millisecs to wait for an are-you-dead msg
     int num_msgs=1;     // number of are-you-alive msgs and i-am-not-dead responses (for redundancy)
-    final Vector members=null;
-    final Hashtable suspects=new Hashtable();  // keys=Addresses, vals=time in mcses since added
+    Vector members=null;
+    Hashtable suspects=new Hashtable();  // keys=Addresses, vals=time in mcses since added
     Thread timer=null;
 
 
@@ -96,16 +97,17 @@ public class VERIFY_SUSPECT extends Protocol implements Runnable {
                 hdr=(VerifyHeader)msg.removeHeader(getName());
                 switch(hdr.type) {
                     case VerifyHeader.ARE_YOU_DEAD:
-                        if(hdr.from == null)
-                            if(log.isErrorEnabled()) log.error("ARE_YOU_DEAD: hdr.from is null");
-                        else {
-                            for(int i=0; i < num_msgs; i++) {
-                                rsp=new Message(hdr.from, null, null);
-                                rsp.putHeader(getName(), new VerifyHeader(VerifyHeader.I_AM_NOT_DEAD, local_addr));
-                                passDown(new Event(Event.MSG, rsp));
-                            }
-                        }
-                        return;
+                      if(hdr.from == null) {
+                         if(log.isErrorEnabled()) log.error("ARE_YOU_DEAD: hdr.from is null");
+                      }
+                      else {
+                         for(int i=0; i < num_msgs; i++) {
+                            rsp=new Message(hdr.from, null, null);
+                            rsp.putHeader(getName(), new VerifyHeader(VerifyHeader.I_AM_NOT_DEAD, local_addr));
+                            passDown(new Event(Event.MSG, rsp));
+                         }
+                      }
+                      return;
                     case VerifyHeader.I_AM_NOT_DEAD:
                         if(hdr.from == null) {
                             if(log.isErrorEnabled()) log.error("I_AM_NOT_DEAD: hdr.from is null");
@@ -221,22 +223,22 @@ public class VERIFY_SUSPECT extends Protocol implements Runnable {
 
 
 
-    public static class VerifyHeader extends Header implements Streamable {
-        static final short ARE_YOU_DEAD=1;  // 'from' is sender of verify msg
-        static final short I_AM_NOT_DEAD=2;  // 'from' is suspected member
+    public static class VerifyHeader extends Header {
+        static final int ARE_YOU_DEAD=1;  // 'from' is sender of verify msg
+        static final int I_AM_NOT_DEAD=2;  // 'from' is suspected member
 
-        short type=ARE_YOU_DEAD;
+        int type=ARE_YOU_DEAD;
         Address from=null;     // member who wants to verify that suspected_mbr is dead
 
 
         public VerifyHeader() {
         } // used for externalization
 
-        VerifyHeader(short type) {
+        VerifyHeader(int type) {
             this.type=type;
         }
 
-        VerifyHeader(short type, Address from) {
+        VerifyHeader(int type, Address from) {
             this(type);
             this.from=from;
         }
@@ -254,24 +256,14 @@ public class VERIFY_SUSPECT extends Protocol implements Runnable {
         }
 
         public void writeExternal(ObjectOutput out) throws IOException {
-            out.writeShort(type);
+            out.writeInt(type);
             out.writeObject(from);
         }
 
 
         public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
-            type=in.readShort();
+            type=in.readInt();
             from=(Address)in.readObject();
-        }
-
-        public void writeTo(DataOutputStream out) throws IOException {
-            out.writeShort(type);
-            Util.writeAddress(from, out);
-        }
-
-        public void readFrom(DataInputStream in) throws IOException, IllegalAccessException, InstantiationException {
-            type=in.readShort();
-            from=Util.readAddress(in);
         }
 
     }
