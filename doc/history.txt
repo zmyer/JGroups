@@ -3,7 +3,7 @@
 			     History List
 			     ============
 
-Revision: $Id: history.txt,v 1.158.2.1 2005/04/29 08:32:36 belaban Exp $
+Revision: $Id: history.txt,v 1.158.2.2 2005/05/19 06:21:29 belaban Exp $
 
 [For current version, see file Version.java (or invoke 'java org.jgroups.Version')]
 
@@ -27,6 +27,9 @@ yaronr		= Yaron Rosenbaum (yaronr@mercury.co.il)
 
 Version 2.2.8
 -------------
+
+- Fixed problem with PingWaiter/PingSender in applets (http://jira.jboss.com/jira/browse/JGRP-86)
+  (bela Ma 19 2005)
 
 - Created branch JGROUPS_2_2_8
   (bela April 29 2005)
