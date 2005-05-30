@@ -1,4 +1,4 @@
-// $Id: ConnectionTableUnitTest.java,v 1.3 2004/03/30 06:47:31 belaban Exp $
+// $Id: ConnectionTableUnitTest.java,v 1.3.4.1 2005/05/30 09:42:53 belaban Exp $
 
 package org.jgroups.tests;
 
@@ -25,6 +25,7 @@ public class ConnectionTableUnitTest extends TestCase {
     }
 
     protected void setUp() throws Exception {
+        super.setUp();
         ct1=new ConnectionTable(port1);
         log("address of ct1: " + ct1.getLocalAddress());
         ct2=new ConnectionTable(port2);
@@ -32,6 +33,7 @@ public class ConnectionTableUnitTest extends TestCase {
     }
 
     public void tearDown() throws Exception {
+        super.tearDown();
         if(ct1 != null) {
             ct1.stop();
             ct1=null;
