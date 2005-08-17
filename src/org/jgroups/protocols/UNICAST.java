@@ -1,4 +1,4 @@
-// $Id: UNICAST.java,v 1.20.2.1 2005/08/17 14:21:37 belaban Exp $
+// $Id: UNICAST.java,v 1.20.2.2 2005/08/17 14:22:23 belaban Exp $
 
 package org.jgroups.protocols;
 
@@ -162,8 +162,8 @@ public class UNICAST extends Protocol implements AckSenderWindow.RetransmitComma
             src=msg.getSrc();
             switch(hdr.type) {
             case UnicastHeader.DATA:      // received regular message
-                sendAck(src, hdr.seqno);
-                handleDataReceived(src, hdr.seqno, hdr.first, msg);
+                if(handleDataReceived(src, hdr.seqno, hdr.first, msg))
+                    sendAck(src, hdr.seqno);
                 break;
             case UnicastHeader.DATA_ACK:  // received ACK for previously sent message
                 handleAckReceived(src, hdr.seqno);
