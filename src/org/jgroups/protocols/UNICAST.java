@@ -1,4 +1,4 @@
-// $Id: UNICAST.java,v 1.20 2005/04/20 13:56:02 belaban Exp $
+// $Id: UNICAST.java,v 1.20.2.1 2005/08/17 14:21:37 belaban Exp $
 
 package org.jgroups.protocols;
 
@@ -336,7 +336,7 @@ public class UNICAST extends Protocol implements AckSenderWindow.RetransmitComma
      * but we don't yet have hashtable.received_msgs, then just discard the message. If first is true, but
      * hashtable.received_msgs already exists, also discard the message (redundant message).
      */
-    void handleDataReceived(Object sender, long seqno, boolean first, Message msg) {
+    boolean handleDataReceived(Object sender, long seqno, boolean first, Message msg) {
         Entry    entry;
         Message  m;
 
@@ -362,18 +362,18 @@ public class UNICAST extends Protocol implements AckSenderWindow.RetransmitComma
                                 "; however, the table for received messages from " + sender +
                                 " is still null ! We probably haven't received the first message from "
                                 + sender + " ! Discarding message (operational=" + operational + ')');
-                    return;
+
                 }
+                return false;
             }
         }
 
-        if(entry.received_msgs != null) {
-            entry.received_msgs.add(seqno, msg);
+        entry.received_msgs.add(seqno, msg);
         
-            // Try to remove (from the AckReceiverWindow) as many messages as possible as pass them up
-            while((m=entry.received_msgs.remove()) != null)
-                passUp(new Event(Event.MSG, m));
-        }
+        // Try to remove (from the AckReceiverWindow) as many messages as possible as pass them up
+        while((m=entry.received_msgs.remove()) != null)
+            passUp(new Event(Event.MSG, m));
+        return true;
     }
 
 
