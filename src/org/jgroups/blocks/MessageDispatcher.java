@@ -1,4 +1,4 @@
-// $Id: MessageDispatcher.java,v 1.51 2006/05/12 08:55:16 belaban Exp $
+// $Id: MessageDispatcher.java,v 1.44.4.1 2006/05/21 09:37:00 mimbert Exp $
 
 package org.jgroups.blocks;
 
@@ -6,7 +6,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.jgroups.*;
 import org.jgroups.stack.Protocol;
-import org.jgroups.stack.StateTransferInfo;
 import org.jgroups.util.*;
 
 import java.io.Serializable;
@@ -46,7 +45,6 @@ public class MessageDispatcher implements RequestHandler {
     protected Address local_addr=null;
     protected boolean deadlock_detection=false;
     protected PullPushAdapter adapter=null;
-    protected PullPushHandler handler=null;
     protected Serializable id=null;
     protected final Log log=LogFactory.getLog(getClass());
 
@@ -65,6 +63,7 @@ public class MessageDispatcher implements RequestHandler {
         prot_adapter=new ProtocolAdapter();
         if(channel != null) {
             local_addr=channel.getLocalAddress();
+            channel.setOpt(Channel.GET_STATE_EVENTS, Boolean.TRUE);
         }
         setMessageListener(l);
         setMembershipListener(l2);
@@ -81,6 +80,7 @@ public class MessageDispatcher implements RequestHandler {
         prot_adapter=new ProtocolAdapter();
         if(channel != null) {
             local_addr=channel.getLocalAddress();
+            channel.setOpt(Channel.GET_STATE_EVENTS, Boolean.TRUE);
         }
         setMessageListener(l);
         setMembershipListener(l2);
@@ -98,6 +98,7 @@ public class MessageDispatcher implements RequestHandler {
         prot_adapter=new ProtocolAdapter();
         if(channel != null) {
             local_addr=channel.getLocalAddress();
+            channel.setOpt(Channel.GET_STATE_EVENTS, Boolean.TRUE);
         }
         setMessageListener(l);
         setMembershipListener(l2);
@@ -116,13 +117,16 @@ public class MessageDispatcher implements RequestHandler {
 
     public MessageDispatcher(Channel channel, MessageListener l, MembershipListener l2, RequestHandler req_handler,
                              boolean deadlock_detection) {
-        this(channel, l, l2, deadlock_detection, false);
+        this(channel, l, l2);
+        this.deadlock_detection=deadlock_detection;
         setRequestHandler(req_handler);
     }
 
     public MessageDispatcher(Channel channel, MessageListener l, MembershipListener l2, RequestHandler req_handler,
                              boolean deadlock_detection, boolean concurrent_processing) {
-        this(channel, l, l2, deadlock_detection, concurrent_processing);
+        this(channel, l, l2);
+        this.deadlock_detection=deadlock_detection;
+        this.concurrent_processing=concurrent_processing;
         setRequestHandler(req_handler);
     }
 
@@ -144,18 +148,21 @@ public class MessageDispatcher implements RequestHandler {
         setMembers(((Channel) adapter.getTransport()).getView().getMembers());
         setMessageListener(l);
         setMembershipListener(l2);
-        handler=new PullPushHandler();
+        PullPushHandler handler=new PullPushHandler();
+        Transport tp;
+
         transport_adapter=new TransportAdapter();
-        adapter.addMembershipListener(handler); // remove in stop()
-        if(id == null) { // no other building block around, let's become the main consumer of this PullPushAdapter
+        adapter.addMembershipListener(handler);
+        if(id == null) // no other building block around, let's become the main consumer of this PullPushAdapter
+        {
             adapter.setListener(handler);
         }
         else {
             adapter.registerListener(id, handler);
         }
 
-        Transport tp;
         if((tp=adapter.getTransport()) instanceof Channel) {
+            ((Channel) tp).setOpt(Channel.GET_STATE_EVENTS, Boolean.TRUE);
             local_addr=((Channel) tp).getLocalAddress();
         }
         start();
@@ -182,18 +189,21 @@ public class MessageDispatcher implements RequestHandler {
         setRequestHandler(req_handler);
         setMessageListener(l);
         setMembershipListener(l2);
-        handler=new PullPushHandler();
+        PullPushHandler handler=new PullPushHandler();
+        Transport tp;
+
         transport_adapter=new TransportAdapter();
         adapter.addMembershipListener(handler);
-        if(id == null) { // no other building block around, let's become the main consumer of this PullPushAdapter
+        if(id == null) // no other building block around, let's become the main consumer of this PullPushAdapter
+        {
             adapter.setListener(handler);
         }
         else {
             adapter.registerListener(id, handler);
         }
 
-        Transport tp;
         if((tp=adapter.getTransport()) instanceof Channel) {
+            ((Channel) tp).setOpt(Channel.GET_STATE_EVENTS, Boolean.TRUE);
             local_addr=((Channel) tp).getLocalAddress(); // fixed bug #800774
         }
 
@@ -211,18 +221,21 @@ public class MessageDispatcher implements RequestHandler {
         setRequestHandler(req_handler);
         setMessageListener(l);
         setMembershipListener(l2);
-        handler=new PullPushHandler();
+        PullPushHandler handler=new PullPushHandler();
+        Transport tp;
+
         transport_adapter=new TransportAdapter();
         adapter.addMembershipListener(handler);
-        if(id == null) { // no other building block around, let's become the main consumer of this PullPushAdapter
+        if(id == null) // no other building block around, let's become the main consumer of this PullPushAdapter
+        {
             adapter.setListener(handler);
         }
         else {
             adapter.registerListener(id, handler);
         }
 
-        Transport tp;
         if((tp=adapter.getTransport()) instanceof Channel) {
+            ((Channel) tp).setOpt(Channel.GET_STATE_EVENTS, Boolean.TRUE);
             local_addr=((Channel) tp).getLocalAddress(); // fixed bug #800774
         }
 
@@ -254,7 +267,7 @@ public class MessageDispatcher implements RequestHandler {
     }
 
 
-    public final void start() {
+    public void start() {
         if(corr == null) {
             if(transport_adapter != null) {
                 corr=new RequestCorrelator("MessageDispatcher", transport_adapter,
@@ -277,15 +290,10 @@ public class MessageDispatcher implements RequestHandler {
         if(corr != null) {
             corr.stop();
         }
-
-        // fixes leaks of MembershipListeners (http://jira.jboss.com/jira/browse/JGRP-160)
-        if(adapter != null && handler != null) {
-            adapter.removeMembershipListener(handler);
-        }
     }
 
 
-    public final void setMessageListener(MessageListener l) {
+    public void setMessageListener(MessageListener l) {
         msg_listener=l;
     }
 
@@ -297,11 +305,11 @@ public class MessageDispatcher implements RequestHandler {
         return msg_listener;
     }
 
-    public final void setMembershipListener(MembershipListener l) {
+    public void setMembershipListener(MembershipListener l) {
         membership_listener=l;
     }
 
-    public final void setRequestHandler(RequestHandler rh) {
+    public void setRequestHandler(RequestHandler rh) {
         req_handler=rh;
     }
 
@@ -405,12 +413,7 @@ public class MessageDispatcher implements RequestHandler {
 
         _req=new GroupRequest(msg, corr, real_dests, mode, timeout, 0);
         _req.setCaller(this.local_addr);
-        try {
-            _req.execute();
-        }
-        catch(Exception ex) {
-            throw new RuntimeException("failed executing request " + _req, ex);
-        }
+        _req.execute();
 
         return _req.getResults();
     }
@@ -481,12 +484,7 @@ public class MessageDispatcher implements RequestHandler {
             return;
         }
 
-        try {
-            corr.sendRequest(req_id, real_dests, msg, coll);
-        }
-        catch(Exception e) {
-            throw new RuntimeException("failure sending request " + req_id + " to " + real_dests, e);
-        }
+        corr.sendRequest(req_id, real_dests, msg, coll);
     }
 
 
@@ -517,12 +515,7 @@ public class MessageDispatcher implements RequestHandler {
 
         _req=new GroupRequest(msg, corr, mbrs, mode, timeout, 0);
         _req.setCaller(local_addr);
-        try {
-            _req.execute();
-        }
-        catch(Exception t) {
-            throw new RuntimeException("failed executing request " + _req, t);
-        }
+        _req.execute();
 
         if(mode == GroupRequest.GET_NONE) {
             return null;
@@ -631,6 +624,7 @@ public class MessageDispatcher implements RequestHandler {
          * listener's corresponding methods
          */
         public void passUp(Event evt) {
+            byte[] tmp_state=null;
             switch(evt.getType()) {
                 case Event.MSG:
                     if(msg_listener != null) {
@@ -639,36 +633,21 @@ public class MessageDispatcher implements RequestHandler {
                     break;
 
                 case Event.GET_APPLSTATE: // reply with GET_APPLSTATE_OK
-                    StateTransferInfo info=(StateTransferInfo)evt.getArg();
-                    String state_id=info.state_id;
-                    byte[] tmp_state=null;
                     if(msg_listener != null) {
                         try {
-                            if(msg_listener instanceof ExtendedMessageListener) {
-                                tmp_state=((ExtendedMessageListener)msg_listener).getState(state_id);
-                            }
-                            else {
-                                tmp_state=msg_listener.getState();
-                            }
+                            tmp_state=msg_listener.getState();
                         }
                         catch(Throwable t) {
                             this.log.error("failed getting state from message listener (" + msg_listener + ')', t);
                         }
                     }
-                    channel.returnState(tmp_state, state_id);
+                    channel.returnState(tmp_state);
                     break;
 
                 case Event.GET_STATE_OK:
                     if(msg_listener != null) {
                         try {
-                            info=(StateTransferInfo)evt.getArg();
-                            if(msg_listener instanceof ExtendedMessageListener) {
-                                String id=info.state_id;
-                                ((ExtendedMessageListener)msg_listener).setState(id, info.state);
-                            }
-                            else {
-                                msg_listener.setState(info.state);
-                            }
+                            msg_listener.setState((byte[]) evt.getArg());
                         }
                         catch(ClassCastException cast_ex) {
                             if(this.log.isErrorEnabled())
@@ -688,8 +667,8 @@ public class MessageDispatcher implements RequestHandler {
                     break;
 
                 case Event.SET_LOCAL_ADDRESS:
-                    if(log.isTraceEnabled())
-                        log.trace("setting local_addr (" + local_addr + ") to " + evt.getArg());
+                    if(this.log.isTraceEnabled())
+                        this.log.trace("setting local_addr (" + local_addr + ") to " + evt.getArg());
                     local_addr=(Address)evt.getArg();
                     break;
 
@@ -722,8 +701,8 @@ public class MessageDispatcher implements RequestHandler {
                 corr.receive(evt); // calls passUp()
             }
             else {
-                if(log.isErrorEnabled()) { //Something is seriously wrong, correlator should not be null since latch is not locked!
-                    log.error("correlator is null, event will be ignored (evt=" + evt + ")");
+                if(this.log.isErrorEnabled()) { //Something is seriously wrong, correlator should not be null since latch is not locked!
+                    this.log.error("correlator is null, event will be ignored (evt=" + evt + ")");
                 }
             }
         }
@@ -774,12 +753,13 @@ public class MessageDispatcher implements RequestHandler {
         }
 
         public Object receive(long timeout) throws Exception {
+            // @todo: implement
             return null;
         }
     }
 
 
-    class PullPushHandler implements ExtendedMessageListener, MembershipListener {
+    class PullPushHandler implements MessageListener, MembershipListener {
 
 
         /* ------------------------- MessageListener interface ---------------------- */
@@ -800,30 +780,9 @@ public class MessageDispatcher implements RequestHandler {
             return msg_listener != null ? msg_listener.getState() : null;
         }
 
-        public byte[] getState(String state_id) {
-            if(msg_listener == null) return null;
-            if(msg_listener instanceof ExtendedMessageListener) {
-                return ((ExtendedMessageListener)msg_listener).getState(state_id);
-            }
-            else {
-                return msg_listener.getState();
-            }
-        }
-
         public void setState(byte[] state) {
             if(msg_listener != null) {
                 msg_listener.setState(state);
-            }
-        }
-
-        public void setState(String state_id, byte[] state) {
-            if(msg_listener != null) {
-                if(msg_listener instanceof ExtendedMessageListener) {
-                    ((ExtendedMessageListener)msg_listener).setState(state_id, state);
-                }
-                else {
-                    msg_listener.setState(state);
-                }
             }
         }
         /* --------------------- End of MessageListener interface ------------------- */

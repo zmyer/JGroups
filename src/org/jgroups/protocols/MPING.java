@@ -10,7 +10,6 @@ import java.io.*;
 import java.net.*;
 import java.util.Enumeration;
 import java.util.Properties;
-import java.util.Map;
 
 /**
  * Uses its own IP multicast socket to send and receive discovery requests/responses. Can be used in
@@ -20,13 +19,13 @@ import java.util.Map;
  * back via the regular transport (e.g. TCP) to the sender (discovery request contained sender's regular address,
  * e.g. 192.168.0.2:7800).
  * @author Bela Ban
- * @version $Id: MPING.java,v 1.14 2006/01/19 09:53:37 belaban Exp $
+ * @version $Id: MPING.java,v 1.12.4.1 2006/05/21 09:37:09 mimbert Exp $
  */
 public class MPING extends PING implements Runnable {
     MulticastSocket     mcast_sock=null;
     Thread              receiver=null;
     InetAddress         bind_addr=null;
-    boolean             bind_to_all_interfaces=false;
+    boolean             bind_to_all_interfaces=true;
     int                 ip_ttl=16;
     InetAddress         mcast_addr=null;
     int                 mcast_port=7555;
@@ -153,77 +152,39 @@ public class MPING extends PING implements Runnable {
     }
 
 
-    public void up(Event evt) {
-        if(evt.getType() == Event.CONFIG) {
-            if(bind_addr == null) {
-                Map config=(Map)evt.getArg();
-                bind_addr=(InetAddress)config.get("bind_addr");
-            }
-            passUp(evt);
-            return;
-        }
-        super.up(evt);
-    }
-
-
-
     public void start() throws Exception {
         mcast_sock=new MulticastSocket(mcast_port);
         mcast_sock.setTimeToLive(ip_ttl);
 
         if(bind_to_all_interfaces) {
-            bindToAllInterfaces();
-            // interface for outgoing packets
-            if(bind_addr != null)
-                mcast_sock.setNetworkInterface(NetworkInterface.getByInetAddress(bind_addr));
+            log.warn("bind_to_all_interfaces property unsupported in j2me/cdc 1.0 version");
         }
-        else {
-            if(bind_addr == null) {
-                InetAddress[] interfaces=InetAddress.getAllByName(InetAddress.getLocalHost().getHostAddress());
-                if(interfaces != null && interfaces.length > 0)
-                    bind_addr=interfaces[0];
-            }
-            if(bind_addr == null)
-                bind_addr=InetAddress.getLocalHost();
-
-            if(bind_addr != null)
-                if(log.isInfoEnabled()) log.info("sockets will use interface " + bind_addr.getHostAddress());
-
-
-            if(bind_addr != null) {
-                mcast_sock.setInterface(bind_addr);
-                // mcast_sock.setNetworkInterface(NetworkInterface.getByInetAddress(bind_addr)); // JDK 1.4 specific
-            }
-            mcast_sock.joinGroup(mcast_addr);
+        
+        if(bind_addr == null) {
+            InetAddress[] interfaces=InetAddress.getAllByName(InetAddress.getLocalHost().getHostAddress());
+            if(interfaces != null && interfaces.length > 0)
+                bind_addr=interfaces[0];
         }
+        if(bind_addr == null)
+            bind_addr=InetAddress.getLocalHost();
+
+        if(bind_addr != null)
+            if(log.isInfoEnabled()) log.info("sockets will use interface " + bind_addr.getHostAddress());
+
+        if(bind_addr != null) {
+            mcast_sock.setInterface(bind_addr);
+            // mcast_sock.setNetworkInterface(NetworkInterface.getByInetAddress(bind_addr)); // JDK 1.4 specific
+        }
+        mcast_sock.joinGroup(mcast_addr);
 
         startReceiver();
         super.start();
     }
 
 
-
-
-    private void bindToAllInterfaces() throws IOException {
-        SocketAddress tmp_mcast_addr=new InetSocketAddress(mcast_addr, mcast_port);
-        Enumeration en=NetworkInterface.getNetworkInterfaces();
-        while(en.hasMoreElements()) {
-            NetworkInterface i=(NetworkInterface)en.nextElement();
-            for(Enumeration en2=i.getInetAddresses(); en2.hasMoreElements();) {
-                InetAddress addr=(InetAddress)en2.nextElement();
-                // if(addr.isLoopbackAddress())
-                   // continue;
-                mcast_sock.joinGroup(tmp_mcast_addr, i);
-                if(trace)
-                    log.trace("joined " + tmp_mcast_addr + " on interface " + i.getName() + " (" + addr + ")");
-                break;
-            }
-        }
-    }
-
     private void startReceiver() {
         if(receiver == null || !receiver.isAlive()) {
-            receiver=new Thread(Util.getGlobalThreadGroup(), this, "ReceiverThread");
+            receiver=new Thread(this, "ReceiverThread");
             receiver.setDaemon(true);
             receiver.start();
             if(trace)

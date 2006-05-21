@@ -1,4 +1,4 @@
-// $Id: NAKACK.java,v 1.76 2006/04/11 06:21:34 belaban Exp $
+// $Id: NAKACK.java,v 1.61.4.1 2006/05/21 09:37:14 mimbert Exp $
 
 package org.jgroups.protocols.pbcast;
 
@@ -8,8 +8,8 @@ import org.jgroups.stack.Protocol;
 import org.jgroups.stack.Retransmitter;
 import org.jgroups.util.*;
 
-import java.io.IOException;
 import java.util.*;
+import java.io.*;
 
 
 /**
@@ -33,7 +33,7 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
     private boolean is_server=false;
     private Address local_addr=null;
     private final Vector  members=new Vector(11);
-    private long    seqno=-1;                                  // current message sequence number (starts with 0)
+    private long    seqno=0;                                   // current message sequence number (starts with 0)
     private long    max_xmit_size=8192;                        // max size of a retransmit message (otherwise send multiple)
     private int     gc_lag=20;                                 // number of msgs garbage collection lags behind
 
@@ -41,7 +41,7 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
      * Retransmit messages using multicast rather than unicast. This has the advantage that, if many receivers lost a
      * message, the sender only retransmits once.
      */
-    private boolean use_mcast_xmit=true;
+    private boolean use_mcast_xmit=false;
 
     /**
      * Ask a random member for retransmission of a missing message. If set to true, discard_delivered_msgs will be
@@ -75,7 +75,6 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
     private final TreeMap sent_msgs=new TreeMap();
 
     private boolean leaving=false;
-    private boolean started=false;
     private TimeScheduler timer=null;
     private static final String name="NAKACK";
 
@@ -130,17 +129,13 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
     }
 
     public int getSentTableSize() {
-        int size;
-        synchronized(sent_msgs) {
-            size=sent_msgs.size();
-        }
-        return size;
+        return sent_msgs.size();
     }
 
     public int getReceivedTableSize() {
         int ret=0;
         NakReceiverWindow win;
-        Set s=new LinkedHashSet(received_msgs.values());
+        Set s=new HashSet(received_msgs.values());
         for(Iterator it=s.iterator(); it.hasNext();) {
             win=(NakReceiverWindow)it.next();
             ret+=win.size();
@@ -378,14 +373,13 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
 
     public void start() throws Exception {
         timer=stack != null ? stack.timer : null;
-        if(timer == null)
-            throw new Exception("timer is null");
-        started=true;
+        if(timer == null) {
+            throw new Exception("NAKACK.up(): timer is null");
+        }
     }
 
     public void stop() {
-        started=false;
-        reset();  // clears sent_msgs and destroys all NakReceiverWindows
+        removeAll();  // clears sent_msgs and destroys all NakReceiverWindows
     }
 
 
@@ -457,7 +451,7 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
             adjustReceivers();
             is_server=true;  // check vids from now on
 
-            Set tmp=new LinkedHashSet(members);
+            Set tmp=new HashSet(members);
             tmp.add(null); // for null destination (= mcast)
             sent.keySet().retainAll(tmp);
             received.keySet().retainAll(tmp);
@@ -469,7 +463,8 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
 
         case Event.DISCONNECT:
             leaving=true;
-            reset();
+            removeAll();
+            seqno=0;
             break;
         }
 
@@ -571,57 +566,31 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
 
     /* --------------------------------- Private Methods --------------------------------------- */
 
+    private synchronized long getNextSeqno() {
+        return seqno++;
+    }
+
+
     /**
      * Adds the message to the sent_msgs table and then passes it down the stack. Change Bela Ban May 26 2002: we don't
      * store a copy of the message, but a reference ! This saves us a lot of memory. However, this also means that a
      * message should not be changed after storing it in the sent-table ! See protocols/DESIGN for details.
-     * Made seqno increment and adding to sent_msgs atomic, e.g. seqno won't get incremented if adding to
-     * sent_msgs fails e.g. due to an OOM (see http://jira.jboss.com/jira/browse/JGRP-179). bela Jan 13 2006
      */
     private void send(Event evt, Message msg) {
-        if(msg == null)
-            throw new NullPointerException("msg is null; event is " + evt);
+        long msg_id=getNextSeqno();
+        if(trace)
+            log.trace("sending msg #" + msg_id);
 
-        if(!started) {
-            if(warn)
-                log.warn("discarded message as start() has not yet been called, message: " + msg);
-            return;
-        }
-
+        msg.putHeader(name, new NakAckHeader(NakAckHeader.MSG, msg_id));
         synchronized(sent_msgs) {
-            long msg_id;
-            try { // incrementing seqno and adding the msg to sent_msgs needs to be atomic
-                msg_id=seqno +1;
-                msg.putHeader(name, new NakAckHeader(NakAckHeader.MSG, msg_id));
-                if(Global.copy) {
-                    sent_msgs.put(new Long(msg_id), msg.copy());
-                }
-                else {
-                    sent_msgs.put(new Long(msg_id), msg);
-                }
-                seqno=msg_id;
+            if(Global.copy) {
+                sent_msgs.put(new Long(msg_id), msg.copy());
             }
-            catch(Throwable t) {
-                if(t instanceof Error)
-                    throw (Error)t;
-                if(t instanceof RuntimeException)
-                    throw (RuntimeException)t;
-                else {
-                    throw new RuntimeException("failure adding msg " + msg + " to the retransmit table", t);
-                }
-            }
-
-            try {
-                if(trace)
-                    log.trace(local_addr + ": sending msg #" + msg_id);
-                passDown(evt); // if this fails, since msg is in sent_msgs, it can be retransmitted
-            }
-            catch(Throwable t) { // eat the exception, don't pass it up the stack
-                if(warn) {
-                    log.warn("failure passing message down", t);
-                }
+            else {
+                sent_msgs.put(new Long(msg_id), msg);
             }
         }
+        passDown(evt);
     }
 
 
@@ -642,7 +611,7 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
 
         if(trace) {
             StringBuffer sb=new StringBuffer('[');
-            sb.append(local_addr).append(": received ").append(sender).append('#').append(hdr.seqno);
+            sb.append(local_addr).append("] received ").append(sender).append('#').append(hdr.seqno);
             log.trace(sb.toString());
         }
 
@@ -661,25 +630,17 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
                 StringBuffer sb=new StringBuffer('[');
                 sb.append(local_addr).append("] discarded message from non-member ").append(sender);
                 if(warn)
-                    log.warn(sb);
+                    log.warn(sb.toString());
             }
             return;
         }
         win.add(hdr.seqno, msg);  // add in order, then remove and pass up as many msgs as possible
 
-        // Prevents concurrent passing up of messages by different threads (http://jira.jboss.com/jira/browse/JGRP-198);
-        // this is all the more important once we have a threadless stack (http://jira.jboss.com/jira/browse/JGRP-181),
-        // where lots of threads can come up to this point concurrently, but only 1 is allowed to pass at a time
-        // We *can* deliver messages from *different* senders concurrently, e.g. reception of P1, Q1, P2, Q2 can result in
-        // delivery of P1, Q1, Q2, P2: FIFO (implemented by NAKACK) says messages need to be delivered only in the
-        // order in which they were sent by the sender
-        synchronized(win) {
-            while((msg_to_deliver=win.remove()) != null) {
+        while((msg_to_deliver=win.remove()) != null) {
 
-                // Changed by bela Jan 29 2003: not needed (see above)
-                //msg_to_deliver.removeHeader(getName());
-                passUp(new Event(Event.MSG, msg_to_deliver));
-            }
+            // Changed by bela Jan 29 2003: not needed (see above)
+            //msg_to_deliver.removeHeader(getName());
+            passUp(new Event(Event.MSG, msg_to_deliver));
         }
     }
 
@@ -745,7 +706,7 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
                     else {
                         sb.append("\nSent messages: ").append(printSentMsgs());
                     }
-                    log.error(sb);
+                    log.error(sb.toString());
                 }
                 continue;
             }
@@ -848,7 +809,7 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
         }
         catch(Exception ex) {
             if(log.isErrorEnabled()) {
-                log.error("failed reading list of retransmitted messages", ex);
+                log.error("message did not contain a list (LinkedList) of retransmitted messages: " + ex);
             }
         }
     }
@@ -1268,12 +1229,11 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
     }
 
 
-    private void reset() {
+    private void removeAll() {
         NakReceiverWindow win;
 
         synchronized(sent_msgs) {
             sent_msgs.clear();
-            seqno=-1;
         }
 
         synchronized(received_msgs) {
@@ -1313,7 +1273,7 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
             min_seqno=sent_msgs.size() > 0 ? (Long)sent_msgs.firstKey() : new Long(0);
             max_seqno=sent_msgs.size() > 0 ? (Long)sent_msgs.lastKey() : new Long(0);
         }
-        sb.append('[').append(min_seqno).append(" - ").append(max_seqno).append("] (").append(sent_msgs.size()).append(")");
+        sb.append('[').append(min_seqno).append(" - ").append(max_seqno).append("] (" + sent_msgs.size() + ")");
         return sb.toString();
     }
 

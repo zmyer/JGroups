@@ -1,4 +1,4 @@
-// $Id: ReplicatedTreeDemo.java,v 1.7 2005/06/14 08:36:49 belaban Exp $
+// $Id: ReplicatedTreeDemo.java,v 1.7.4.1 2006/05/21 09:37:08 mimbert Exp $
 
 package org.jgroups.demos;
 
@@ -650,6 +650,7 @@ public class ReplicatedTreeDemo {
                 continue;
             }
             if("-jmx".equals(args[i])) {
+                System.out.println("warn: -jmx option unsupported in j2me/cdc 1.0 version");
                 jmx=true;
                 continue;
             }
@@ -658,7 +659,7 @@ public class ReplicatedTreeDemo {
         }
 
         try {
-            tree=new ReplicatedTree("ReplicatedTreeDemo-Group", props, 10000, jmx);
+            tree=new ReplicatedTree("ReplicatedTreeDemo-Group", props, 10000);
             new ReplicatedTreeView(tree, tree.getLocalAddress());
             // demo.setVisible(true);
 

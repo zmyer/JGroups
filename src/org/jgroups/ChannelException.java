@@ -1,4 +1,4 @@
-// $Id: ChannelException.java,v 1.6 2005/07/17 11:38:05 chrislott Exp $
+// $Id: ChannelException.java,v 1.6.4.1 2006/05/21 09:36:58 mimbert Exp $
 
 package org.jgroups;
 
@@ -17,7 +17,7 @@ public class ChannelException extends Exception {
     }
 
     public ChannelException(String reason, Throwable cause) {
-        super(reason, cause);
+        super(reason + " - Cause = " + cause.getMessage());
     }
 
 }

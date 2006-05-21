@@ -18,11 +18,11 @@ import java.util.*;
  * It includes the name of the method (case sensitive) and a list of arguments.
  * A method call is serializable and can be passed over the wire.
  * @author Bela Ban
- * @version $Revision: 1.23 $
+ * @version $Revision: 1.19.4.1 $
  */
 public class MethodCall implements Externalizable {
 
-    private static final long serialVersionUID=7873471327078957662L;
+    static final long serialVersionUID=7873471327078957662L;
 
     /** The name of the method, case sensitive. */
     protected String method_name=null;
@@ -216,6 +216,7 @@ public class MethodCall implements Externalizable {
      * and those inherited from superclasses and superinterfaces.
      */
     Method[] getAllMethods(Class target) {
+
         Class superclass = target;
         List methods = new ArrayList();
         int size = 0;
@@ -226,14 +227,12 @@ public class MethodCall implements Externalizable {
                 methods.add(m);
                 size += m.length;
                 superclass = superclass.getSuperclass();
-            }
-            catch(SecurityException e) {
+            } catch (SecurityException e) {
                 // if it runs in an applet context, it won't be able to retrieve
                 // methods from superclasses that belong to the java VM and it will
                 // raise a security exception, so we catch it here.
-                if(log.isWarnEnabled())
-                    log.warn("unable to enumerate methods of superclass "+superclass+" of class "+target);
-                superclass=null;
+                if(log.isWarnEnabled()) log.warn("unable to enumerate methods of superclass "+superclass+" of class "+target);
+                superclass = null;
             }
         }
 
@@ -330,7 +329,7 @@ public class MethodCall implements Externalizable {
                 retval=meth.invoke(target, args);
             }
             else {
-                throw new NoSuchMethodException(method_name);
+                if(log.isErrorEnabled()) log.error("method " + method_name + " not found");
             }
             return retval;
         }
@@ -518,6 +517,8 @@ public class MethodCall implements Externalizable {
             payload=(Map)in.readObject();
         }
     }
+
+
 
 
 }

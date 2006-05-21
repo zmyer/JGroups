@@ -1,4 +1,4 @@
-// $Id: IpAddressTest.java,v 1.16 2006/05/16 11:14:28 belaban Exp $
+// $Id: IpAddressTest.java,v 1.14.4.1 2006/05/21 09:37:16 mimbert Exp $
 
 package org.jgroups.tests;
 
@@ -11,8 +11,8 @@ import org.jgroups.util.Util;
 import java.io.*;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.HashMap;
 import java.util.HashSet;
+import java.util.HashMap;
 
 
 public class IpAddressTest extends TestCase {
@@ -39,20 +39,16 @@ public class IpAddressTest extends TestCase {
 
 
 
-    public void testUnknownAddress() {
-        try {
-            IpAddress tmp=new IpAddress("idontknow.com", 55);
-            fail("should throw an UnknownHostException");
-        }
-        catch(UnknownHostException e1) {
-        }
+    public void testUnknownAddress() throws UnknownHostException {
+        IpAddress addr=new IpAddress("idontknow.com", 55);
+        assertEquals(addr.getIpAddress(), InetAddress.getLocalHost());
     }
 
     public void testEquality() throws Exception {
-        assertEquals(a, b);
-        assertEquals(c, b);
-        assertEquals(a, e);
-        assertEquals(c, e);
+        assertTrue(a.equals(b));
+        assertTrue(c.equals(b));
+        assertTrue(a.equals(e));
+        assertTrue(c.equals(e));
     }
 
     public void testEqualityWithDnsRoundRobin() throws UnknownHostException {
@@ -61,9 +57,9 @@ public class IpAddressTest extends TestCase {
         InetAddress addr=InetAddress.getByName("127.0.0.1");
         byte[] rawAddr=addr.getAddress();
 
-        InetAddress inet1=InetAddress.getByAddress("MyHost1", rawAddr);
-        InetAddress inet2=InetAddress.getByAddress("MyHost2", rawAddr);
-        InetAddress inet3=InetAddress.getByAddress("MyHost3", rawAddr);
+        InetAddress inet1=InetAddress.getByName(Util.addressToString(rawAddr));
+        InetAddress inet2=InetAddress.getByName(Util.addressToString(rawAddr));
+        InetAddress inet3=InetAddress.getByName(Util.addressToString(rawAddr));
         assertEquals(inet1, inet2);
 
         x1=new IpAddress(inet1, 5555);
@@ -126,7 +122,7 @@ public class IpAddressTest extends TestCase {
 
     
     public void testCompareTo() {
-        assertEquals(0, a.compareTo(b));
+        assertTrue(a.compareTo(b) == 0);
         assertTrue(a.compareTo(d) < 0);
         assertTrue(d.compareTo(a) > 0);
     }
@@ -174,50 +170,6 @@ public class IpAddressTest extends TestCase {
         System.out.println("taking the hash code of " + a + "(" + hash + ") took " + diff + "ms");
     }
 
-
-    public void testIPv6WithExternalization() throws IOException, ClassNotFoundException {
-        InetAddress tmp=Util.getFirstNonLoopbackIPv6Address();
-        IpAddress ip=new IpAddress(tmp, 5555);
-
-        ByteArrayOutputStream bos=new ByteArrayOutputStream();
-        ObjectOutputStream    oos=new ObjectOutputStream(bos);
-        byte[]                buf=null;
-        ByteArrayInputStream  bis=null;
-        ObjectInputStream     ois;
-
-        System.out.println("-- address is " + tmp);
-
-        oos.writeObject(ip);
-        buf=bos.toByteArray();
-        bis=new ByteArrayInputStream(buf);
-        ois=new ObjectInputStream(bis);
-        IpAddress ip2=(IpAddress)ois.readObject();
-        assertEquals(ip, ip2);
-    }
-
-
-
-    public void testIPv6WithStreamable() throws IOException, ClassNotFoundException {
-        InetAddress tmp=Util.getFirstNonLoopbackIPv6Address();
-        IpAddress ip=new IpAddress(tmp, 5555);
-
-        ByteArrayOutputStream bos=new ByteArrayOutputStream();
-        DataOutputStream      dos=new DataOutputStream(bos);
-        byte[]                buf=null;
-        ByteArrayInputStream  bis=null;
-        DataInputStream       dis;
-
-        System.out.println("-- address is " + tmp);
-
-        ip.writeTo(dos);
-        buf=bos.toByteArray();
-        bis=new ByteArrayInputStream(buf);
-        dis=new DataInputStream(bis);
-        IpAddress ip2=new IpAddress();
-        ip2.readFrom(dis);
-        assertEquals(ip, ip2);
-    }
-
     public void testExternalization() throws Exception {
         ByteArrayOutputStream bos=new ByteArrayOutputStream();
         ObjectOutputStream    oos=new ObjectOutputStream(bos);
@@ -238,55 +190,55 @@ public class IpAddressTest extends TestCase {
         a2=(IpAddress)ois.readObject();
         b2=(IpAddress)ois.readObject();
 
-        assertEquals(a, a2);
-        assertEquals(b, b2);
+        assertTrue(a.equals(a2));
+        assertTrue(b.equals(b2));
         
         assertTrue(a2.getAdditionalData() == null);
-        assertEquals("Bela Ban", new String(b2.getAdditionalData()));
+        assertTrue("Bela Ban".equals(new String(b2.getAdditionalData())));
     }
 
     
     
     public void testExternalizationAdditionalData() throws Exception {
-        ByteArrayOutputStream bos=new ByteArrayOutputStream();
-        ObjectOutputStream    oos=new ObjectOutputStream(bos);
-        byte[]                buf=null;
-        ByteArrayInputStream  bis=null;
-        ObjectInputStream     ois;
-        IpAddress             a2, b2, c2, d2, e2, f2, g2, h2;
+         ByteArrayOutputStream bos=new ByteArrayOutputStream();
+         ObjectOutputStream    oos=new ObjectOutputStream(bos);
+         byte[]                buf=null;
+         ByteArrayInputStream  bis=null;
+         ObjectInputStream     ois;
+         IpAddress             a2, b2, c2, d2, e2, f2, g2, h2;
         
-        oos.writeObject(a);
-        oos.writeObject(b);
-        oos.writeObject(c);
-        oos.writeObject(d);
-        oos.writeObject(e);
-        oos.writeObject(f);
-        oos.writeObject(g);
-        oos.writeObject(h);
+         oos.writeObject(a);
+         oos.writeObject(b);
+         oos.writeObject(c);
+         oos.writeObject(d);
+         oos.writeObject(e);
+         oos.writeObject(f);
+         oos.writeObject(g);
+         oos.writeObject(h);
 
 
-        buf=bos.toByteArray();
-        bis=new ByteArrayInputStream(buf);
-        ois=new ObjectInputStream(bis);
-        a2=(IpAddress)ois.readObject();
-        b2=(IpAddress)ois.readObject();
-        c2=(IpAddress)ois.readObject();
-        d2=(IpAddress)ois.readObject();
-        e2=(IpAddress)ois.readObject();
-        f2=(IpAddress)ois.readObject();
-        g2=(IpAddress)ois.readObject();
-        h2=(IpAddress)ois.readObject();
+         buf=bos.toByteArray();        
+         bis=new ByteArrayInputStream(buf);
+         ois=new ObjectInputStream(bis);
+         a2=(IpAddress)ois.readObject();
+         b2=(IpAddress)ois.readObject();
+         c2=(IpAddress)ois.readObject();
+         d2=(IpAddress)ois.readObject();
+         e2=(IpAddress)ois.readObject();
+         f2=(IpAddress)ois.readObject();
+         g2=(IpAddress)ois.readObject();
+         h2=(IpAddress)ois.readObject();
 
-        assertEquals(b2, c2);
-        assertEquals(a, a2);
-        assertEquals(b, b2);
-        assertEquals(c, c2);
-        assertEquals(d, d2);
-        assertEquals(e, e2);
-        assertEquals(f, f2);
-        assertEquals(g, g2);
-        assertEquals(h, h2);
-    }
+         assertTrue(b2.equals(c2));
+         assertTrue(a.equals(a2));
+         assertTrue(b.equals(b2));
+         assertTrue(c.equals(c2));
+         assertTrue(d.equals(d2));
+         assertTrue(e.equals(e2));
+         assertTrue(f.equals(f2));
+         assertTrue(g.equals(g2));
+         assertTrue(h.equals(h2));
+     }
 
 
     public void testStreamable() throws Exception {
@@ -322,14 +274,14 @@ public class IpAddressTest extends TestCase {
         y2=new IpAddress();
         y2.readFrom(ois);
 
-        assertEquals(a, a2);
-        assertEquals(b, b2);
+        assertTrue(a.equals(a2));
+        assertTrue(b.equals(b2));
 
         assertNull(a2.getAdditionalData());
         assertEquals("Bela Ban", new String(b2.getAdditionalData()));
 
         assertNotNull(x2.getAdditionalData());
-        assertEquals(4, x2.getAdditionalData().length);
+        assertEquals(x2.getAdditionalData().length, 4);
 
         assertNull(y2.getIpAddress());
         assertEquals(0, y2.getPort());
@@ -377,21 +329,22 @@ public class IpAddressTest extends TestCase {
         h2=new IpAddress();
         h2.readFrom(ois);
 
-        assertEquals(b2, c2);
-        assertEquals(a, a2);
-        assertEquals(b, b2);
-        assertEquals(c, c2);
-        assertEquals(d, d2);
-        assertEquals(e, e2);
-        assertEquals(f, f2);
-        assertEquals(g, g2);
-        assertEquals(h, h2);
+        assertTrue(b2.equals(c2));
+        assertTrue(a.equals(a2));
+        assertTrue(b.equals(b2));
+        assertTrue(c.equals(c2));
+        assertTrue(d.equals(d2));
+        assertTrue(e.equals(e2));
+        assertTrue(f.equals(f2));
+        assertTrue(g.equals(g2));
+        assertTrue(h.equals(h2));
     }
 
 
 
     public static Test suite() {
-        return new TestSuite(IpAddressTest.class);
+        TestSuite s=new TestSuite(IpAddressTest.class);
+        return s;
     }
 
     public static void main(String[] args) {

@@ -13,7 +13,7 @@ import java.util.*;
 /**
  * @author Bela Ban Jan 22
  * @author 2004
- * @version $Id: TcpTransport.java,v 1.15 2005/09/08 14:27:35 belaban Exp $
+ * @version $Id: TcpTransport.java,v 1.15.4.1 2006/05/21 09:37:27 mimbert Exp $
  */
 public class TcpTransport implements Transport {
     Receiver         receiver=null;
@@ -128,15 +128,17 @@ public class TcpTransport implements Transport {
             int i=0;
 
             for(Iterator it=myNodes.iterator(); it.hasNext();) {
-                InetSocketAddress addr=(InetSocketAddress)it.next();
+                Object[] o = (Object[])it.next();
+                InetAddress ipaddr = (InetAddress)o[0];
+                int port = ((Integer)o[1]).intValue();
                 if(connections[i] == null) {
                     try {
-                        connections[i]=new Connection(addr);
+                        connections[i]=new Connection(ipaddr,port);
                         connections[i].createSocket();
-                        System.out.println("-- connected to " +addr);
+                        System.out.println("-- connected to " + ipaddr + ":" + port);
                     }
                     catch(ConnectException connect_ex) {
-                        System.out.println("-- failed to connect to " +addr);
+                        System.out.println("-- failed to connect to " + ipaddr + ":" + port);
                     }
                     catch(Exception all_others) {
                         throw all_others;
@@ -181,15 +183,17 @@ public class TcpTransport implements Transport {
      class Connection {
          Socket sock=null;
          DataOutputStream out;
-         InetSocketAddress to;
+         InetAddress to_addr;
+         int to_port;
          final Object mutex=new Object();
 
-         Connection(InetSocketAddress addr) {
-             this.to=addr;
+         Connection(InetAddress addr, int port) {
+             this.to_addr=addr;
+             this.to_port=port;
          }
 
          void createSocket() throws IOException {
-             sock=new Socket(to.getAddress(), to.getPort());
+             sock=new Socket(to_addr, to_port);
              sock.setSendBufferSize(max_send_buffer_size);
              sock.setReceiveBufferSize(max_receiver_buffer_size);
              out=new DataOutputStream(new BufferedOutputStream(sock.getOutputStream()));
@@ -218,7 +222,7 @@ public class TcpTransport implements Transport {
          }
 
          public String toString() {
-             return "Connection from " + local_addr + " to " + to;
+             return "Connection from " + local_addr + " to " + to_addr + ":" + to_port;
          }
      }
 
@@ -276,7 +280,6 @@ public class TcpTransport implements Transport {
         StringTokenizer tok;
         String hostname, tmp;
         int    port;
-        InetSocketAddress addr;
         int index;
 
         if(s == null) return null;
@@ -288,8 +291,8 @@ public class TcpTransport implements Transport {
                 throw new Exception("host must be in format <host:port>, was " + tmp);
             hostname=tmp.substring(0, index);
             port=Integer.parseInt(tmp.substring(index+1));
-            addr=new InetSocketAddress(hostname, port);
-            retval.add(addr);
+            Object[] o = {hostname,new Integer(port)};
+            retval.add(o);
         }
         return retval;
     }

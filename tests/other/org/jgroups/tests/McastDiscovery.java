@@ -1,8 +1,9 @@
-// $Id: McastDiscovery.java,v 1.1 2005/06/23 13:31:10 belaban Exp $
+// $Id: McastDiscovery.java,v 1.1.4.1 2006/05/21 09:37:17 mimbert Exp $
 
 package org.jgroups.tests;
 
 import org.jgroups.util.Util;
+import org.jgroups.stack.IpAddress;
 
 import java.io.Serializable;
 import java.net.*;
@@ -17,7 +18,7 @@ import java.util.*;
  * After n responses or m milliseconds, the sender terminates and computes the network interfaces which should be used.
  * The network interface is the intersection of the interface variable of all ACKs received.
  * @author Bela Ban July 26 2002
- * @version $Revision: 1.1 $
+ * @version $Revision: 1.1.4.1 $
  */
 public class McastDiscovery {
     int ttl = 32;
@@ -27,7 +28,7 @@ public class McastDiscovery {
     long interval = 2000; // time between sends
     McastSender mcast_sender = null;
     boolean running = true;
-    HashMap map = new HashMap(); // keys=interface (InetAddress), values=List of receivers (InetAddress)
+    HashMap map = new HashMap(); // keys=interface (InetAddress), values=List of receivers (IpAddress)
 
 
     class McastSender extends Thread {
@@ -63,20 +64,17 @@ public class McastDiscovery {
 
 
     public void start() throws Exception {
-        NetworkInterface intf;
+        InetAddress[] interfaces = InetAddress.getAllByName(InetAddress.getLocalHost().getHostAddress());
         InetAddress bind_addr;
         MessageHandler handler;
 
-        for (Enumeration en = NetworkInterface.getNetworkInterfaces(); en.hasMoreElements();) {
-            intf = (NetworkInterface) en.nextElement();
-            for (Enumeration en2 = intf.getInetAddresses(); en2.hasMoreElements();) {
-                bind_addr = (InetAddress) en2.nextElement();
-                map.put(bind_addr, new ArrayList());
-                System.out.println("-- creating receiver for " + bind_addr);
-                handler = new MessageHandler(bind_addr);
-                handlers.add(handler);
-                handler.start();
-            }
+        for (int i = 0; i < interfaces.length; i++) {
+            bind_addr = interfaces[i];
+            map.put(bind_addr, new ArrayList());
+            System.out.println("-- creating receiver for " + bind_addr);
+            handler = new MessageHandler(bind_addr);
+            handlers.add(handler);
+            handler.start();
         }
 
         // Now start sending mcast discovery messages:
@@ -96,7 +94,7 @@ public class McastDiscovery {
         Map.Entry entry;
         List all_mbrs = new ArrayList();
         List l;
-        InetSocketAddress tmp_addr;
+        IpAddress tmp_addr;
         HashMap map_copy = (HashMap) map.clone();
         SortedSet s;
         Stack st;
@@ -114,14 +112,14 @@ public class McastDiscovery {
         for (Iterator it = map.values().iterator(); it.hasNext();) {
             l = (List) it.next();
             for (Iterator it2 = l.iterator(); it2.hasNext();) {
-                tmp_addr = (InetSocketAddress) it2.next();
+                tmp_addr = (IpAddress) it2.next();
                 if (!all_mbrs.contains(tmp_addr))
                     all_mbrs.add(tmp_addr);
             }
         }
 
         for (Iterator it = all_mbrs.iterator(); it.hasNext();) {
-            tmp_addr = (InetSocketAddress) it.next();
+            tmp_addr = (IpAddress) it.next();
 
             // tmp_mbr has to be in all values (Lists) of map, remove entry from map if not
             for (Iterator it2 = map.entrySet().iterator(); it2.hasNext();) {
@@ -196,13 +194,13 @@ public class McastDiscovery {
                         System.out.println("<-- " + req);
 
                         // send response back to req.sender_addr
-                        rsp = new DiscoveryResponse(new InetSocketAddress(local_addr, local_port), req.sender_addr.getAddress());
+                        rsp = new DiscoveryResponse(local_addr, local_port, req.sender_addr);
                         buf = Util.objectToByteBuffer(rsp);
-                        rsp_packet = new DatagramPacket(buf, buf.length, req.sender_addr);
+                        rsp_packet = new DatagramPacket(buf, buf.length, req.sender_addr, req.sender_port);
                         sock.send(rsp_packet);
                     } catch (Exception ex) {
                         System.err.println("McastReceiver.run(): " + ex + ", rsp_packet=" +
-                                rsp_packet.getSocketAddress() + ", length=" + rsp_packet.getLength() + " bytes");
+                                rsp_packet.getAddress() + ":" + rsp_packet.getPort() +", length=" + rsp_packet.getLength() + " bytes");
                         ex.printStackTrace();
                     }
                 }
@@ -224,7 +222,7 @@ public class McastDiscovery {
                 DiscoveryResponse rsp;
                 List l;
                 InetAddress bind_interface;
-                InetSocketAddress responder_addr;
+                IpAddress responder_addr;
 
                 while (running) {
                     try {
@@ -237,7 +235,7 @@ public class McastDiscovery {
                         l = (List) map.get(bind_interface);
                         if (l == null)
                             map.put(bind_interface, (l = new ArrayList()));
-                        responder_addr = rsp.discovery_responder;
+                        responder_addr = new IpAddress (rsp.discovery_responder_addr,rsp.discovery_responder_port);
                         if (!l.contains(responder_addr))
                             l.add(responder_addr);
                     } catch (Exception ex) {
@@ -359,32 +357,36 @@ abstract class DiscoveryPacket implements Serializable {
 }
 
 class DiscoveryRequest extends DiscoveryPacket {
-    InetSocketAddress sender_addr = null;
+    InetAddress sender_addr = null;
+    int sender_port = 0;
 
     DiscoveryRequest(InetAddress addr, int port) {
-        sender_addr = new InetSocketAddress(addr, port);
+        sender_addr = addr;
+        sender_port = port;
     }
 
 
     public String toString() {
-        return "DiscoveryRequest [sender_addr=" + sender_addr + ']';
+        return "DiscoveryRequest [sender_addr=" + sender_addr + ":" + sender_port + ']';
     }
 
 }
 
 
 class DiscoveryResponse extends DiscoveryPacket {
-    InetSocketAddress discovery_responder = null; // address of member who responds to discovery request
+    InetAddress discovery_responder_addr = null; // address of member who responds to discovery request
+    int discovery_responder_port = 0;
     InetAddress interface_used = null;
 
-    DiscoveryResponse(InetSocketAddress discovery_responder, InetAddress interface_used) {
-        this.discovery_responder = discovery_responder;
+    DiscoveryResponse(InetAddress discovery_responder_addr, int discovery_responder_port, InetAddress interface_used) {
+        this.discovery_responder_addr = discovery_responder_addr;
+        this.discovery_responder_port = discovery_responder_port;
         this.interface_used = interface_used;
     }
 
 
     public String toString() {
-        return "DiscoveryResponse [discovery_responder=" + discovery_responder +
+        return "DiscoveryResponse [discovery_responder=" + discovery_responder_addr + ":" + discovery_responder_port +
                 ", interface_used=" + interface_used + ']';
     }
 }

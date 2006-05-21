@@ -1,4 +1,4 @@
-// $Id: ConnectionTable.java,v 1.44 2006/03/27 15:31:54 belaban Exp $
+// $Id: ConnectionTable.java,v 1.39.4.1 2006/05/21 09:37:00 mimbert Exp $
 
 package org.jgroups.blocks;
 
@@ -13,7 +13,10 @@ import org.jgroups.util.Util;
 
 import java.io.*;
 import java.net.*;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Vector;
 
 
 /**
@@ -56,6 +59,7 @@ public class ConnectionTable implements Runnable {
     int                 sock_conn_timeout=1000;      // max time in millis to wait for Socket.connect() to return
     ThreadGroup         thread_group=null;
     protected final Log log=LogFactory.getLog(getClass());
+    final static        byte[] NULL_DATA={};
     final byte[]        cookie={'b', 'e', 'l', 'a'};
 
 
@@ -128,9 +132,9 @@ public class ConnectionTable implements Runnable {
     public ConnectionTable(Receiver r, InetAddress bind_addr, InetAddress external_addr, int srv_port, int max_port) throws Exception {
         setReceiver(r);
         this.bind_addr=bind_addr;
-        this.external_addr=external_addr;
+	    this.external_addr=external_addr;
         this.srv_port=srv_port;
-        this.max_port=max_port;
+	    this.max_port=max_port;
         start();
     }
 
@@ -169,7 +173,7 @@ public class ConnectionTable implements Runnable {
     }
 
 
-    public final void setReceiver(Receiver r) {
+    public void setReceiver(Receiver r) {
         receiver=r;
     }
 
@@ -244,7 +248,7 @@ public class ConnectionTable implements Runnable {
             if(conn == null) return;
         }
         catch(Throwable ex) {
-            throw new Exception("connection to " + dest + " could not be established", ex);
+            throw new Exception("connection to " + dest + " could not be established - Cause = " + ex.getMessage());
         }
 
         // 2. Send the message using that connection
@@ -269,13 +273,7 @@ public class ConnectionTable implements Runnable {
             conn=(Connection)conns.get(dest);
             if(conn == null) {
                 // changed by bela Jan 18 2004: use the bind address for the client sockets as well
-                SocketAddress tmpBindAddr=new InetSocketAddress(bind_addr, 0);
-                InetAddress tmpDest=((IpAddress)dest).getIpAddress();
-                SocketAddress destAddr=new InetSocketAddress(tmpDest, ((IpAddress)dest).getPort());
-                sock=new Socket();
-                sock.bind(tmpBindAddr);
-                sock.setKeepAlive(true);
-                sock.connect(destAddr, sock_conn_timeout);
+                sock=new Socket(((IpAddress)dest).getIpAddress(),((IpAddress)dest).getPort(),bind_addr,0);
 
                 try {
                     sock.setSendBufferSize(send_buf_size);
@@ -304,7 +302,7 @@ public class ConnectionTable implements Runnable {
     }
 
 
-    public final void start() throws Exception {
+    public void start() throws Exception {
         init();
         srv_sock=createServerSocket(srv_port, max_port);
 
@@ -318,7 +316,7 @@ public class ConnectionTable implements Runnable {
         if(log.isInfoEnabled()) log.info("server socket created on " + local_addr);
 
         //Roland Kurmann 4/7/2003, build new thread group
-        thread_group = new ThreadGroup(Util.getGlobalThreadGroup(), "ConnectionTableGroup");
+        thread_group = new ThreadGroup(Thread.currentThread().getThreadGroup(), "ConnectionTableGroup");
         //Roland Kurmann 4/7/2003, put in thread_group
         acceptor=new Thread(thread_group, this, "ConnectionTable.AcceptorThread");
         acceptor.setDaemon(true);
@@ -333,7 +331,7 @@ public class ConnectionTable implements Runnable {
 
     protected void init() throws Exception {
     }
-
+    
     /** Closes all open sockets, the server socket and all threads waiting for incoming messages */
     public void stop() {
         Iterator it=null;
@@ -385,14 +383,6 @@ public class ConnectionTable implements Runnable {
         if(log.isTraceEnabled()) log.trace("removed " + addr + ", connections are " + toString());
     }
 
-    /**
-     * Removes all connections from ConnectionTable which are not in c
-     * @param c
-     */
-    public void retainAll(Collection c) {
-        conns.keySet().retainAll(c);
-    }
-
 
     /**
      * Acceptor thread. Continuously accept new connections. Create a new thread for each new
@@ -423,8 +413,6 @@ public class ConnectionTable implements Runnable {
                     if(log.isErrorEnabled()) log.error("exception setting receive buffer size to " +
                            send_buf_size + " bytes", ex);
                 }
-
-                client_sock.setKeepAlive(true);
 
                 // create new thread and add to conn table
                 conn=new Connection(client_sock, null); // will call receive(msg)
@@ -521,11 +509,14 @@ public class ConnectionTable implements Runnable {
             }
             catch(BindException bind_ex) {
                 if (start_port==end_port) throw new BindException("No available port to bind to");
+                /*
+                  this test (which is not absolutely essential) is disabled for the j2me/cdc/pp version
                 if(bind_addr != null) {
                     NetworkInterface nic=NetworkInterface.getByInetAddress(bind_addr);
                     if(nic == null)
                         throw new BindException("bind_addr " + bind_addr + " is not a valid interface");
                 }
+                */
                 start_port++;
                 continue;
             }
@@ -646,19 +637,18 @@ public class ConnectionTable implements Runnable {
         }
 
 
-        /**
-         *
-         * @param data Guaranteed to be non null (checked in {@link ConnectionTable#send(org.jgroups.Address, byte[], int, int)})
-         * @param offset
-         * @param length
-         */
         void send(byte[] data, int offset, int length) {
             if(use_send_queues) {
                 try {
-                    // we need to copy the byte[] buffer here because the original buffer might get changed meanwhile
-                    byte[] tmp=new byte[length];
-                    System.arraycopy(data, offset, tmp, 0, length);
-                    send_queue.add(tmp);
+                    if(data != null) {
+                        // we need to copy the byte[] buffer here because the original buffer might get changed
+                        // in the meantime
+                        byte[] tmp=new byte[length];
+                        System.arraycopy(data, offset, tmp, 0, length);
+                        send_queue.add(tmp);}
+                    else {
+                        send_queue.add(NULL_DATA);
+                    }
                     if(!sender.isRunning())
                         sender.start();
                 }
@@ -917,11 +907,8 @@ public class ConnectionTable implements Runnable {
 
             void stop() {
                 if(senderThread != null) {
-                    if(send_queue != null)
-                        send_queue.close(false);
-                    Thread tmp=senderThread;
+                    senderThread.interrupt();
                     senderThread=null;
-                    tmp.interrupt();
                     running=false;
                 }
             }

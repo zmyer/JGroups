@@ -1,4 +1,4 @@
-// $Id: McastSenderTest.java,v 1.8 2005/09/12 14:03:19 belaban Exp $
+// $Id: McastSenderTest.java,v 1.8.4.1 2006/05/21 09:37:17 mimbert Exp $
 
 package org.jgroups.tests;
 
@@ -17,7 +17,7 @@ import java.util.Enumeration;
  test whether IPMCAST works between different subnets.
  @see McastReceiverTest
  @author Bela Ban
- @version $Revision: 1.8 $
+ @version $Revision: 1.8.4.1 $
  */
 public class McastSenderTest {
 
@@ -77,16 +77,17 @@ public class McastSenderTest {
 
         try {
             if(send_on_all_interfaces) {
+                InetAddress[] interfaces = InetAddress.getAllByName(InetAddress.getLocalHost().getHostAddress());
                 sockets=new ArrayList(10);
-                NetworkInterface intf;
+                InetAddress intf;
                 MulticastSocket s;
 
-                for(Enumeration en=NetworkInterface.getNetworkInterfaces(); en.hasMoreElements();) {
-                    intf=(NetworkInterface)en.nextElement();
+                for (int i = 0; i < interfaces.length; i++) {
+                    intf = interfaces[i];
                     s=new MulticastSocket();
                     sockets.add(s);
                     s.setTimeToLive(ttl);
-                    s.setNetworkInterface(intf);
+                    s.setInterface(intf);
                     System.out.println("Socket=" + s.getLocalAddress() + ':' + s.getLocalPort() +
                             ", ttl=" + s.getTimeToLive() + ", bind interface=" + s.getInterface());
                     ack_receiver=new AckReceiver(s);

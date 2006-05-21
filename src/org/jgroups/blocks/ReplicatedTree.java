@@ -1,4 +1,4 @@
-// $Id: ReplicatedTree.java,v 1.13 2006/05/02 11:06:00 belaban Exp $
+// $Id: ReplicatedTree.java,v 1.11.4.1 2006/05/21 09:37:00 mimbert Exp $
 
 package org.jgroups.blocks;
 
@@ -6,13 +6,10 @@ package org.jgroups.blocks;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.jgroups.*;
-import org.jgroups.jmx.JmxConfigurator;
 import org.jgroups.util.Queue;
 import org.jgroups.util.QueueClosedException;
 import org.jgroups.util.Util;
 
-import javax.management.MBeanServerFactory;
-import javax.management.MBeanServer;
 import java.io.Serializable;
 import java.util.*;
 
@@ -37,7 +34,6 @@ public class ReplicatedTree implements Runnable, MessageListener, MembershipList
     String groupname="ReplicatedTree-Group";
     final Vector members=new Vector();
     long state_fetch_timeout=10000;
-    boolean jmx=false;
 
     protected final Log log=LogFactory.getLog(this.getClass());
 
@@ -93,27 +89,6 @@ public class ReplicatedTree implements Runnable, MessageListener, MembershipList
         start();
     }
 
-    public ReplicatedTree(String groupname, String props, long state_fetch_timeout, boolean jmx) throws Exception {
-        if(groupname != null)
-            this.groupname=groupname;
-        if(props != null)
-            this.props=props;
-        this.jmx=jmx;
-        this.state_fetch_timeout=state_fetch_timeout;
-        channel=new JChannel(this.props);
-        channel.connect(this.groupname);
-        if(jmx) {
-            ArrayList servers=MBeanServerFactory.findMBeanServer(null);
-            if(servers == null || servers.size() == 0) {
-                throw new Exception("No MBeanServers found;" +
-                                    "\nJmxTest needs to be run with an MBeanServer present, or inside JDK 5");
-            }
-            MBeanServer server=(MBeanServer)servers.get(0);
-            JmxConfigurator.registerChannel(channel, server, "jgroups", channel.getChannelName() , true);
-        }
-        start();
-    }
-
     public ReplicatedTree() {
     }
 
@@ -149,12 +124,10 @@ public class ReplicatedTree implements Runnable, MessageListener, MembershipList
      */
     public void fetchState(long timeout) throws ChannelClosedException, ChannelNotConnectedException {
         boolean rc=channel.getState(null, timeout);
-        if(log.isInfoEnabled()) {
-            if(rc)
-                log.info("state was retrieved successfully");
-            else
-                log.info("state could not be retrieved (first member)");
-        }
+        if(rc)
+            if(log.isInfoEnabled()) log.info("state was retrieved successfully");
+        else
+            if(log.isInfoEnabled()) log.info("state could not be retrieved (first member)");
     }
 
 
@@ -169,7 +142,7 @@ public class ReplicatedTree implements Runnable, MessageListener, MembershipList
     }
 
 
-    public final void start() throws Exception {
+    public void start() throws Exception {
         if(request_handler == null) {
             request_handler=new Thread(this, "ReplicatedTree.RequestHandler thread");
             request_handler.setDaemon(true);
@@ -177,6 +150,7 @@ public class ReplicatedTree implements Runnable, MessageListener, MembershipList
         }
         adapter=new PullPushAdapter(channel, this, this);
         adapter.setListener(this);
+        channel.setOpt(Channel.GET_STATE_EVENTS, Boolean.TRUE);
         boolean rc=channel.getState(null, state_fetch_timeout);
         if(rc)
             if(log.isInfoEnabled()) log.info("state was retrieved successfully");

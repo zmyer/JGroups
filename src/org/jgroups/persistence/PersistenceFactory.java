@@ -104,10 +104,19 @@ public class PersistenceFactory
      */
     private PersistenceManager createManagerDB(String filePath) throws Exception
     {
-
-            if(log.isInfoEnabled()) log.info("Calling db persist from factory: " + filePath);
-        if (_manager == null)
-            _manager = new DBPersistenceManager(filePath);
+        if(log.isInfoEnabled()) log.info("Calling db persist from factory: " + filePath);
+        if (_manager == null) {
+            // load the class dynamically, it won't always be available (j2me/cdc/pp)
+            Class clazz = Util.loadClass("DBPersistenceManager",this.getClass());
+            if (clazz != null) {
+                Class[] paramtypes = {String.class};
+                Constructor c = clazz.getDeclaredConstructor(paramtypes);
+                if (c != null) {
+                    Object[] params = {filePath};
+                    _manager = (PersistenceManager) c.newInstance(params);
+                }
+            }
+        }
         return _manager;
     }// end of DB persistence
 
@@ -188,8 +197,8 @@ public class PersistenceFactory
         return props;
     }
 
-    private static volatile PersistenceManager _manager = null;
-    private static volatile PersistenceFactory _factory = null;
+    private static PersistenceManager _manager = null;
+    private static PersistenceFactory _factory = null;
    
 
     /* Please set this according to configuration */

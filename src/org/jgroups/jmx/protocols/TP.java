@@ -8,7 +8,7 @@ import java.util.List;
 
 /**
  * @author Bela Ban
- * @version $Id: TP.java,v 1.5 2005/11/09 17:42:25 belaban Exp $
+ * @version $Id: TP.java,v 1.5.4.1 2006/05/21 09:37:08 mimbert Exp $
  */
 public class TP extends org.jgroups.jmx.Protocol implements TPMBean {
     org.jgroups.protocols.TP tp;
@@ -62,16 +62,16 @@ public class TP extends org.jgroups.jmx.Protocol implements TPMBean {
         return tp.isReceiveOnAllInterfaces();
     }
 
-    public List getReceiveInterfaces() {
-        return tp.getReceiveInterfaces();
+    public List getReceiveInterfacesAddrs() {
+        return tp.getReceiveInterfacesAddrs();
     }
 
     public boolean isSendOnAllInterfaces() {
         return tp.isSendOnAllInterfaces();
     }
 
-    public List getSendInterfaces() {
-        return tp.getSendInterfaces();
+    public List getSendInterfacesAddrs() {
+        return tp.getSendInterfacesAddrs();
     }
 
     public boolean isDiscardIncompatiblePackets() {

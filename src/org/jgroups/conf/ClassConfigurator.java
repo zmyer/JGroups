@@ -1,4 +1,4 @@
-// $Id: ClassConfigurator.java,v 1.19 2006/02/27 14:08:45 belaban Exp $
+// $Id: ClassConfigurator.java,v 1.18.4.1 2006/05/21 09:37:06 mimbert Exp $
 
 package org.jgroups.conf;
 
@@ -26,7 +26,7 @@ import java.util.*;
  * @see MagicNumberReader
  */
 public class ClassConfigurator {
-    static volatile ClassConfigurator instance=null; // works under the new JSR 133 memory model in JDK 5
+    static ClassConfigurator instance=null;
 
     //this is where we store magic numbers
     private final Map classMap=new HashMap(); // key=Class, value=magic number
@@ -89,7 +89,9 @@ public class ClassConfigurator {
                         }
                     }
                     catch(ClassNotFoundException cnf) {
-                        throw new ChannelException("failed loading class", cnf);
+                        log.warn("failed loading class " + mapping[i].getClassName());
+                        //throw new ChannelException("failed loading class", cnf);
+                        // commented for j2me/cdc/pp version
                     }
                 }
                 if(log.isDebugEnabled()) log.debug("mapping is:\n" + printMagicMap());

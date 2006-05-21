@@ -51,7 +51,7 @@ public class XmlConfigurationTest extends TestCase {
     
     public static void main(String[] args) {
         String[] testCaseName={XmlConfigurationTest.class.getName()};
-        junit.swingui.TestRunner.main(testCaseName);
+        junit.awtui.TestRunner.main(testCaseName);
     } //public static void main(String[] args)
 
 } //public class XmlConfigurationTest extends TestCase

@@ -1,4 +1,4 @@
-// $Id: Channel.java,v 1.20 2006/03/27 08:25:26 belaban Exp $
+// $Id: Channel.java,v 1.13.4.1 2006/05/21 09:36:58 mimbert Exp $
 
 package org.jgroups;
 
@@ -95,7 +95,7 @@ public abstract class Channel implements Transport {
 
 
     /** Shuts down the channel without disconnecting if connected, stops all the threads */
-    abstract protected void shutdown();
+    abstract void shutdown();
 
 
     /**
@@ -306,7 +306,7 @@ public abstract class Channel implements Transport {
         if(listener == null)
             return;
         if(channel_listeners == null)
-            channel_listeners=new LinkedHashSet();
+            channel_listeners=new HashSet();
         channel_listeners.add(listener);
     }
 
@@ -324,9 +324,16 @@ public abstract class Channel implements Transport {
      Sets an option. The following options are currently recognized:
      <ol>
      <li><code>BLOCK</code>. Turn the reception of BLOCK events on/off (value is Boolean).
-     Default is off
+     Default is off. If set to on, receiving VIEW events will be set to on, too.
+     <li><code>VIEW</code>. Turn the reception of VIEW events on/off (value is Boolean).
+     Default is on.
+     <li><code>SUSPECT</code>. Turn the reception of SUSPECT events on/off (value is Boolean).
+     Default is on.
      <li><code>LOCAL</code>. Receive its own broadcast messages to the group
      (value is Boolean). Default is on.
+     <li><code>GET_STATE_EVENTS</code>. Turn the reception of GetState events on/off
+     (value is Boolean). Default is off, which means that no other members can
+     ask this member for its state (null will be returned).
      <li><code>AUTO_RECONNECT</code>. Turn auto-reconnection on/off. If on, when a member if forced out
      of a group (EXIT event), then we will reconnect.
      <li><code>AUTO_GETSTATE</code>. Turn automatic fetching of state after an auto-reconnect on/off.
@@ -376,18 +383,6 @@ public abstract class Channel implements Transport {
 
 
     /**
-     * Fetches a partial state identified by state_id.
-     * @param target
-     * @param state_id
-     * @param timeout
-     * @return
-     * @throws ChannelNotConnectedException
-     * @throws ChannelClosedException
-     */
-    abstract public boolean getState(Address target, String state_id, long timeout)
-            throws ChannelNotConnectedException, ChannelClosedException;
-
-    /**
      Retrieve all states of the group members. Will contact all group members to get
      the states. When the method returns true, a <code>SetStateEvent</code> will have been
      added to the channel's queue, causing <code>Receive</code> to return the states in one of
@@ -398,9 +393,9 @@ public abstract class Channel implements Transport {
      @return boolean True if the state was retrieved successfully, otherwise false.
      @exception ChannelNotConnectedException The channel must be connected to
      receive messages.
+
      @exception ChannelClosedException The channel is closed and therefore cannot be used
      any longer. A new channel has to be created first.
-     @deprecated Not really needed - we always want to get the state from a single member
      */
     abstract public boolean getAllStates(Vector targets, long timeout)
             throws ChannelNotConnectedException, ChannelClosedException;
@@ -414,8 +409,6 @@ public abstract class Channel implements Transport {
      */
     public abstract void returnState(byte[] state);
 
-    /** Returns a given substate (state_id of null means return entire state) */
-    public abstract void returnState(byte[] state, String state_id);
 
 
     public static String option2String(int option) {

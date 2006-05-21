@@ -1,4 +1,4 @@
-// $Id: McastReceiverTest.java,v 1.7 2005/09/12 13:26:22 belaban Exp $
+// $Id: McastReceiverTest.java,v 1.7.4.1 2006/05/21 09:37:17 mimbert Exp $
 
 package org.jgroups.tests;
 
@@ -15,7 +15,7 @@ import java.util.Enumeration;
  test whether IPMCAST works between different subnets.
  @see McastSenderTest
  @author Bela Ban
- @version $Revision: 1.7 $
+ @version $Revision: 1.7.4.1 $
  */
 public class McastReceiverTest {
 
@@ -66,22 +66,15 @@ public class McastReceiverTest {
 
         try {
             sock=new MulticastSocket(port);
-            SocketAddress join_addr=new InetSocketAddress(mcast_addr, port);
+            //SocketAddress join_addr=new InetSocketAddress(mcast_addr, port);
 
 
             if(receive_on_all_interfaces) {
-                NetworkInterface intf;
-                for(Enumeration en=NetworkInterface.getNetworkInterfaces(); en.hasMoreElements();) {
-                    intf=(NetworkInterface)en.nextElement();
-                    sock.joinGroup(join_addr, intf);
-                    System.out.println("joined " + join_addr + " on " + intf.getName());
-                }
+                System.out.println("receive_on_all_interfaces option unsupported in j2me/cdc 1.0 version");
             }
-            else {
-                if(bind_addr != null)
-                    sock.setInterface(bind_addr);
-                sock.joinGroup(join_addr, null);
-            }
+            if(bind_addr != null)
+                sock.setInterface(bind_addr);
+            sock.joinGroup(mcast_addr);
 
 
             System.out.println("Socket=" + sock.getLocalAddress() + ':' + sock.getLocalPort() + ", bind interface=" +

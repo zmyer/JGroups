@@ -1,4 +1,4 @@
-// $Id: IpAddress.java,v 1.35 2006/05/16 11:14:28 belaban Exp $
+// $Id: IpAddress.java,v 1.29.4.1 2006/05/21 09:37:14 mimbert Exp $
 
 package org.jgroups.stack;
 
@@ -9,7 +9,7 @@ import org.jgroups.Global;
 
 import java.io.*;
 import java.net.InetAddress;
-import java.net.UnknownHostException;
+
 
 
 /**
@@ -20,7 +20,7 @@ import java.net.UnknownHostException;
 public class IpAddress implements Address {
     private InetAddress             ip_addr=null;
     private int                     port=0;
-    private byte[]                  additional_data;
+    private byte[]                  additional_data=null;
     protected static final Log      log=LogFactory.getLog(IpAddress.class);
     static boolean                  resolve_dns=false;
     transient int                   size=-1;
@@ -41,10 +41,17 @@ public class IpAddress implements Address {
     // Used only by Externalization
     public IpAddress() {
     }
-
-    public IpAddress(String i, int p) throws UnknownHostException {
+    
+    public IpAddress(String i, int p) {
         port=p;
-        ip_addr=InetAddress.getByName(i);
+    	try {
+        	ip_addr=InetAddress.getByName(i);
+        }
+        catch(Exception e) {
+            if(log.isWarnEnabled()) log.warn("failed to get " + i + ": " + e);
+        }
+        if(this.ip_addr == null)
+            setAddressToLocalHost();
     }
 
 
@@ -98,8 +105,7 @@ public class IpAddress implements Address {
      * @param additional_data The additional_data to set
      */
     public final void setAdditionalData(byte[] additional_data) {
-        this.additional_data=additional_data;
-        size=-1;  // changed May 13 2006 bela (suggested by Bruce Schuchardt)
+        this.additional_data = additional_data;
         size=size();
     }
 
@@ -134,7 +140,7 @@ public class IpAddress implements Address {
         if(ip_addr == null)
             if (other.ip_addr == null) return port < other.port ? -1 : (port > other.port ? 1 : 0);
             else return -1;
-
+      
         h1=ip_addr.hashCode();
         h2=other.ip_addr.hashCode();
         rc=h1 < h2? -1 : h1 > h2? 1 : 0;
@@ -146,7 +152,7 @@ public class IpAddress implements Address {
     public final boolean equals(Object obj) {
         if(this == obj) return true; // added Nov 7 2005, makes sense with canonical addresses
         if(obj == null) return false;
-        return compareTo(obj) == 0;
+        return compareTo(obj) == 0 ? true : false;
     }
 
 
@@ -169,81 +175,86 @@ public class IpAddress implements Address {
                 sb.append(ip_addr.getHostAddress());
             else {
                 String host_name=null;
-                if(resolve_dns) {
+                if(resolve_dns)
                     host_name=ip_addr.getHostName();
-                    // appendShortName(host_name, sb);
-                }
-                else {
+                else
                     host_name=ip_addr.getHostAddress();
-                }
-                sb.append(host_name);
+                appendShortName(host_name, sb);
             }
         }
-        sb.append(":").append(port);
+        sb.append(":" + port);
+        if(additional_data != null)
+            sb.append(" (additional data: ").append(additional_data.length).append(" bytes)");
         return sb.toString();
     }
 
 
 
-    public void writeExternal(ObjectOutput out) throws IOException {
-        if(ip_addr != null) {
-            byte[] address=ip_addr.getAddress();
-            out.writeByte(address.length); // 1 byte
-            out.write(address, 0, address.length);
-        }
-        else {
-            out.writeByte(0);
-        }
-        out.writeInt(port);
-        if(additional_data != null) {
-            out.writeBoolean(true);
-            out.writeShort(additional_data.length);
-            out.write(additional_data, 0, additional_data.length);
-        }
+
+
+    /**
+     * Input: "daddy.nms.fnc.fujitsu.com", output: "daddy". Appends result to string buffer 'sb'.
+     * @param hostname The hostname in long form. Guaranteed not to be null
+     * @param sb The string buffer to which the result is to be appended
+     */
+    private void appendShortName(String hostname, StringBuffer sb) {
+        if(hostname == null) return;
+        int  index=hostname.indexOf('.');
+        if(index > 0 && !Character.isDigit(hostname.charAt(0)))
+            sb.append(hostname.substring(0, index));
         else
-            out.writeBoolean(false);
+            sb.append(hostname);
     }
 
 
-
-
-    public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
-        int len=in.readByte();
-        if(len > 0) {
-            //read the four bytes
-            byte[] a = new byte[len];
-            //in theory readFully(byte[]) should be faster
-            //than read(byte[]) since latter reads
-            // 4 bytes one at a time
-            in.readFully(a);
-            //look up an instance in the cache
-            this.ip_addr=InetAddress.getByAddress(a);
+    public void writeExternal(ObjectOutput out) throws IOException {
+        byte[] address = ip_addr.getAddress();   
+        out.write(address);   
+        out.writeInt(port);
+        if(additional_data != null) {
+            out.writeInt(additional_data.length);
+            out.write(additional_data, 0, additional_data.length);
         }
+        else
+            out.writeInt(0);
+    } 
+    
+    
+    
+    public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+        int len=0;   
+        //read the four bytes
+        byte[] a = new byte[4];   
+        //in theory readFully(byte[]) should be faster   
+        //than read(byte[]) since latter reads   
+        // 4 bytes one at a time   
+        in.readFully(a);   
         //then read the port
-        port=in.readInt();
+        port = in.readInt();
 
-        if(in.readBoolean() == false)
-            return;
-        len=in.readShort();
+        this.ip_addr = InetAddress.getByName(org.jgroups.util.Util.addressToString(a));
+        len=in.readInt();
         if(len > 0) {
             additional_data=new byte[len];
-            in.readFully(additional_data, 0, additional_data.length);
+            in.readFully(additional_data, 0, additional_data.length);        
         }
     }
 
     public void writeTo(DataOutputStream out) throws IOException {
+        byte[] address;
+
         if(ip_addr != null) {
-            byte[] address=ip_addr.getAddress();  // 4 bytes (IPv4) or 16 bytes (IPv6)
-            out.writeByte(address.length); // 1 byte
+            address=ip_addr.getAddress();
+            out.writeShort(address.length); // 2 bytes
             out.write(address, 0, address.length);
         }
         else {
-            out.writeByte(0);
+            out.writeShort(0);
         }
         out.writeInt(port);
         if(additional_data != null) {
             out.writeBoolean(true); // 1 byte
-            out.writeShort(additional_data.length);
+            out.writeInt(additional_data.length);
             out.write(additional_data, 0, additional_data.length);
         }
         else {
@@ -252,17 +263,23 @@ public class IpAddress implements Address {
     }
 
     public void readFrom(DataInputStream in) throws IOException {
-        int len=in.readByte();
+        int len=in.readShort();
         if(len > 0) {
-            byte[] a = new byte[len]; // 4 bytes (IPv4) or 16 bytes (IPv6)
+            //read the four bytes
+            byte[] a = new byte[len];
+            //in theory readFully(byte[]) should be faster
+            //than read(byte[]) since latter reads
+            // 4 bytes one at a time
             in.readFully(a);
-            this.ip_addr=InetAddress.getByAddress(a);
+
+            this.ip_addr = InetAddress.getByName(org.jgroups.util.Util.addressToString(a));
         }
+        //then read the port
         port=in.readInt();
 
         if(in.readBoolean() == false)
             return;
-        len=in.readShort();
+        len=in.readInt();
         if(len > 0) {
             additional_data=new byte[len];
             in.readFully(additional_data, 0, additional_data.length);
@@ -272,12 +289,12 @@ public class IpAddress implements Address {
     public int size() {
         if(size >= 0)
             return size;
-        // length (1 bytes) + 4 bytes for port + 1 for additional_data available
-        int tmp_size=Global.BYTE_SIZE+ Global.INT_SIZE + Global.BYTE_SIZE;
+        // length + 4 bytes for port + 1 for additional_data available
+        int tmp_size=Global.SHORT_SIZE + Global.INT_SIZE + Global.BYTE_SIZE;
         if(ip_addr != null)
             tmp_size+=ip_addr.getAddress().length; // 4 bytes for IPv4
         if(additional_data != null)
-            tmp_size+=additional_data.length+Global.SHORT_SIZE;
+            tmp_size+=additional_data.length+Global.INT_SIZE;
         size=tmp_size;
         return tmp_size;
     }

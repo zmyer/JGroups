@@ -1,4 +1,4 @@
-// $Id: Message.java,v 1.49 2006/05/12 09:35:18 belaban Exp $
+// $Id: Message.java,v 1.43.4.1 2006/05/21 09:36:58 mimbert Exp $
 
 package org.jgroups;
 
@@ -47,7 +47,7 @@ public class Message implements Externalizable, Streamable {
 
     protected static final Log log=LogFactory.getLog(Message.class);
 
-    private static final long serialVersionUID=7966206671974139740L;
+    static final long serialVersionUID=-1137364035832847034L;
 
     static final byte DEST_SET=1;
     static final byte SRC_SET=2;
@@ -61,22 +61,20 @@ public class Message implements Externalizable, Streamable {
 
     /** Map<Address,Address>. Maintains mappings to canonical addresses */
     private static final Map canonicalAddresses=new ConcurrentReaderHashMap();
-    private static final boolean DISABLE_CANONICALIZATION=Boolean.getBoolean("disable_canonicalization");
-
-
-    /** Public constructor
-     *  @param dest Address of receiver. If it is <em>null</em> or a <em>string</em>, then
-     *              it is sent to the group (either to current group or to the group as given
-     *              in the string). If it is a Vector, then it contains a number of addresses
-     *              to which it must be sent. Otherwise, it contains a single destination.<p>
-     *              Addresses are generally untyped (all are of type <em>Object</em>. A channel
-     *              instance must know what types of addresses it expects and downcast
-     *              accordingly.
-     */
-    public Message(Address dest) {
-        dest_addr=dest;
-        headers=createHeaders(7);
+    private static final boolean DISABLE_CANONICALIZATION;
+    static {
+        boolean b;
+        try {
+            b=Boolean.getBoolean("disable_canonicalization");
+        }
+        catch (java.security.AccessControlException e) {
+            // this will happen in an applet context
+            b=false;
+        }
+        DISABLE_CANONICALIZATION=b;
     }
+
+
 
     /** Public constructor
      *  @param dest Address of receiver. If it is <em>null</em> or a <em>string</em>, then
@@ -91,9 +89,10 @@ public class Message implements Externalizable, Streamable {
      *              not allowed), since we don't copy the contents on clopy() or clone().
      */
     public Message(Address dest, Address src, byte[] buf) {
-        this(dest);
+        dest_addr=dest;
         src_addr=src;
         setBuffer(buf);
+        headers=createHeaders(7);
     }
 
     /**
@@ -114,9 +113,10 @@ public class Message implements Externalizable, Streamable {
      *               array index violations and an ArrayIndexOutOfBoundsException will be thrown if invalid
      */
     public Message(Address dest, Address src, byte[] buf, int offset, int length) {
-        this(dest);
+        dest_addr=dest;
         src_addr=src;
         setBuffer(buf, offset, length);
+        headers=createHeaders(7);
     }
 
 
@@ -134,9 +134,10 @@ public class Message implements Externalizable, Streamable {
      *              (e.g. buf[0]=0 is not allowed), since we don't copy the contents on clopy() or clone().
      */
     public Message(Address dest, Address src, Serializable obj) {
-        this(dest);
+        dest_addr=dest;
         src_addr=src;
         setObject(obj);
+        headers=createHeaders(7);
     }
 
 
@@ -186,7 +187,7 @@ public class Message implements Externalizable, Streamable {
      * Returns a copy of the buffer if offset and length are used, otherwise a reference.
      * @return byte array with a copy of the buffer.
      */
-    final public byte[] getBuffer() {
+    public byte[] getBuffer() {
         if(buf == null)
             return null;
         if(offset == 0 && length == buf.length)
@@ -198,7 +199,7 @@ public class Message implements Externalizable, Streamable {
         }
     }
 
-    final public void setBuffer(byte[] b) {
+    public void setBuffer(byte[] b) {
         buf=b;
         if(buf != null) {
             offset=0;
@@ -215,7 +216,7 @@ public class Message implements Externalizable, Streamable {
      * @param offset The initial position
      * @param length The number of bytes
      */
-    final public void setBuffer(byte[] b, int offset, int length) {
+    public void setBuffer(byte[] b, int offset, int length) {
         buf=b;
         if(buf != null) {
             if(offset < 0 || offset > buf.length)
@@ -244,7 +245,7 @@ public class Message implements Externalizable, Streamable {
         return headers;
     }
 
-    final public void setObject(Serializable obj) {
+    public void setObject(Serializable obj) {
         if(obj == null) return;
         try {
             ByteArrayOutputStream out_stream=new ByteArrayOutputStream();
@@ -257,7 +258,7 @@ public class Message implements Externalizable, Streamable {
         }
     }
 
-    final public Object getObject() {
+    public Object getObject() {
         if(buf == null) return null;
         try {
             ByteArrayInputStream in_stream=new ByteArrayInputStream(buf, offset, length);
@@ -333,7 +334,7 @@ public class Message implements Externalizable, Streamable {
     }
 
     public Message makeReply() {
-        return new Message(src_addr);
+        return new Message(src_addr, null, null);
     }
 
 
@@ -367,10 +368,11 @@ public class Message implements Externalizable, Streamable {
 
     /** Tries to read an object from the message's buffer and prints it */
     public String toStringAsObject() {
+        Object obj;
 
         if(buf == null) return null;
         try {
-            Object obj=getObject();
+            obj=getObject();
             return obj != null ? obj.toString() : "";
         }
         catch(Exception e) {  // it is not an object
@@ -386,14 +388,6 @@ public class Message implements Externalizable, Streamable {
      * size.<p> Size estimations don't have to be very accurate since this is mainly used by FRAG to
      * determine whether to fragment a message or not. Fragmentation will then serialize the message,
      * therefore getting the correct value.
-     */
-
-
-    /**
-     * Returns the exact size of the marshalled message. Uses method size() of each header to compute the size, so if
-     * a Header subclass doesn't implement size() we will use an approximation. However, most relevant header subclasses
-     * have size() implemented correctly. (See org.jgroups.tests.SizeTest).
-     * @return The number of bytes for the marshalled message
      */
     public long size() {
         long retval=Global.BYTE_SIZE                  // leading byte
@@ -478,7 +472,10 @@ public class Message implements Externalizable, Streamable {
 
 
     public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+        int      len;
         boolean  destAddressExist=in.readBoolean();
+        boolean  srcAddressExist;
+        Object   key, value;
 
         if(destAddressExist) {
             dest_addr=(Address)Marshaller.read(in);
@@ -486,7 +483,7 @@ public class Message implements Externalizable, Streamable {
                 dest_addr=canonicalAddress(dest_addr);
         }
 
-        boolean srcAddressExist=in.readBoolean();
+        srcAddressExist=in.readBoolean();
         if(srcAddressExist) {
             src_addr=(Address)Marshaller.read(in);
             if(!DISABLE_CANONICALIZATION)
@@ -501,10 +498,10 @@ public class Message implements Externalizable, Streamable {
             length=buf.length;
         }
 
-        int len=in.readInt();
+        len=in.readInt();
         while(len-- > 0) {
-            Object key=in.readUTF();
-            Object value=Marshaller.read(in);
+            key=in.readUTF();
+            value=Marshaller.read(in);
             headers.put(key, value);
         }
     }
@@ -638,7 +635,7 @@ public class Message implements Externalizable, Streamable {
 
     /* ----------------------------------- Private methods ------------------------------- */
 
-    private static void writeHeader(Header value, DataOutputStream out) throws IOException {
+    private void writeHeader(Header value, DataOutputStream out) throws IOException {
         int magic_number;
         String classname;
         ObjectOutputStream oos=null;
@@ -670,9 +667,7 @@ public class Message implements Externalizable, Streamable {
             }
         }
         catch(ChannelException e) {
-            IOException io_ex=new IOException("failed writing header");
-            io_ex.initCause(e);
-            throw io_ex;
+            log.error("failed writing the header", e);
         }
         finally {
             if(oos != null)
@@ -681,7 +676,7 @@ public class Message implements Externalizable, Streamable {
     }
 
 
-    private static Header readHeader(DataInputStream in) throws IOException {
+    private Header readHeader(DataInputStream in) throws IOException {
         Header            hdr;
         boolean           use_magic_number=in.readBoolean();
         int               magic_number;
@@ -710,19 +705,21 @@ public class Message implements Externalizable, Streamable {
             }
         }
         catch(Exception ex) {
-            IOException io_ex=new IOException("failed reading header");
-            io_ex.initCause(ex);
-            throw io_ex;
+            throw new IOException("failed read header: " + ex.toString());
+        }
+        finally {
+            // if(ois != null) // we cannot close this because other readers depend on it
+               // ois.close();
         }
         return hdr;
     }
 
-    private static Map createHeaders(int size) {
+    private Map createHeaders(int size) {
         return size > 0? new ConcurrentReaderHashMap(size) : new ConcurrentReaderHashMap();
     }
 
 
-    private static Map createHeaders(Map m) {
+    private Map createHeaders(Map m) {
         return new ConcurrentReaderHashMap(m);
     }
 

@@ -1,10 +1,8 @@
-// $Id: Util.java,v 1.73 2006/05/12 09:58:33 belaban Exp $
+// $Id: Util.java,v 1.62.4.1 2006/05/21 09:37:15 mimbert Exp $
 
 package org.jgroups.util;
 
-import org.apache.commons.logging.LogFactory;
 import org.jgroups.*;
-import org.jgroups.auth.AuthToken;
 import org.jgroups.conf.ClassConfigurator;
 import org.jgroups.protocols.FD;
 import org.jgroups.protocols.PingHeader;
@@ -14,8 +12,6 @@ import org.jgroups.stack.IpAddress;
 
 import java.io.*;
 import java.net.*;
-import java.nio.ByteBuffer;
-import java.nio.channels.WritableByteChannel;
 import java.text.NumberFormat;
 import java.util.*;
 import java.util.List;
@@ -25,6 +21,7 @@ import java.util.List;
  * Collection of various utility routines that can not be assigned to other classes.
  */
 public class Util {
+    private static final Object mutex=new Object();
     private static final ByteArrayOutputStream out_stream=new ByteArrayOutputStream(512);
 
     private static  NumberFormat f;
@@ -34,20 +31,6 @@ public class Util {
     public static final String DIAG_GROUP="DIAG_GROUP-BELA-322649"; // unique
     static boolean resolve_dns=false;
     static final String IGNORE_BIND_ADDRESS_PROPERTY="ignore.bind.address";
-
-    /**
-     * Global thread group to which all (most!) JGroups threads belong
-     */
-    private static ThreadGroup GLOBAL_GROUP=new ThreadGroup("JGroups threads") {
-        public void uncaughtException(Thread t, Throwable e) {
-            LogFactory.getLog("org.jgroups").error("uncaught exception in " + t + " (thread group=" + GLOBAL_GROUP + " )", e);
-        }
-    };
-
-    public static ThreadGroup getGlobalThreadGroup() {
-        return GLOBAL_GROUP;
-    }
-
 
     static {
         /* Trying to get value of resolve_dns. PropertyPermission not granted if
@@ -80,71 +63,50 @@ public class Util {
      * Creates an object from a byte buffer
      */
     public static Object objectFromByteBuffer(byte[] buffer) throws Exception {
-        if(buffer == null) return null;
-        Object retval=null;
-
-        try {  // to read the object as an Externalizable
+        synchronized(mutex) {
+            if(buffer == null) return null;
+            Object retval=null;
             ByteArrayInputStream in_stream=new ByteArrayInputStream(buffer);
             ObjectInputStream in=new ContextObjectInputStream(in_stream); // changed Nov 29 2004 (bela)
             retval=in.readObject();
             in.close();
+            if(retval == null)
+                return null;
+            return retval;
         }
-        catch(StreamCorruptedException sce) {
-            try {  // is it Streamable?
-                ByteArrayInputStream in_stream=new ByteArrayInputStream(buffer);
-                DataInputStream in=new DataInputStream(in_stream);
-                retval=readGenericStreamable(in);
-                in.close();
-            }
-            catch(Exception ee) {
-                IOException tmp=new IOException("unmarshalling failed");
-                tmp.initCause(ee);
-                throw tmp;
-            }
-        }
-
-        if(retval == null)
-            return null;
-        return retval;
     }
 
     /**
-     * Serializes/Streams an object into a byte buffer.
+     * Serializes an object into a byte buffer.
      * The object has to implement interface Serializable or Externalizable
-     * or Streamable.  Only Streamable objects are interoperable w/ jgroups-me
      */
     public static byte[] objectToByteBuffer(Object obj) throws Exception {
         byte[] result=null;
         synchronized(out_stream) {
             out_stream.reset();
-            if(obj instanceof Streamable) {  // use Streamable if we can
-                DataOutputStream out=new DataOutputStream(out_stream);
-                writeGenericStreamable((Streamable)obj, out);
-                out.close();
-            }
-            else {
-                ObjectOutputStream out=new ObjectOutputStream(out_stream);
-                out.writeObject(obj);
-                out.close();
-            }
+            ObjectOutputStream out=new ObjectOutputStream(out_stream);
+            out.writeObject(obj);
             result=out_stream.toByteArray();
+            out.close();
         }
         return result;
     }
 
 
      public static Streamable streamableFromByteBuffer(Class cl, byte[] buffer) throws Exception {
-         if(buffer == null) return null;
-         Streamable retval=null;
-         ByteArrayInputStream in_stream=new ByteArrayInputStream(buffer);
-         DataInputStream in=new DataInputStream(in_stream); // changed Nov 29 2004 (bela)
-         retval=(Streamable)cl.newInstance();
-         retval.readFrom(in);
-         in.close();
-         if(retval == null)
-             return null;
-         return retval;
-     }
+        synchronized(mutex) {
+            if(buffer == null) return null;
+            Streamable retval=null;
+            ByteArrayInputStream in_stream=new ByteArrayInputStream(buffer);
+            DataInputStream in=new DataInputStream(in_stream); // changed Nov 29 2004 (bela)
+            retval=(Streamable)cl.newInstance();
+            retval.readFrom(in);
+            in.close();
+            if(retval == null)
+                return null;
+            return retval;
+        }
+    }
 
     public static byte[] streamableToByteBuffer(Streamable obj) throws Exception {
         byte[] result=null;
@@ -178,23 +140,6 @@ public class Util {
         return retval;
     }
 
-    public static void writeAuthToken(AuthToken token, DataOutputStream out) throws IOException{
-        Util.writeString(token.getName(), out);
-        token.writeTo(out);
-    }
-
-    public static AuthToken readAuthToken(DataInputStream in) throws IOException, IllegalAccessException, InstantiationException {
-        try{
-            String type = Util.readString(in);
-            Object obj = Class.forName(type).newInstance();
-            AuthToken token = (AuthToken) obj;
-            token.readFrom(in);
-            return token;
-        }
-        catch(ClassNotFoundException cnfe){
-            return null;
-        }
-    }
 
     public static void writeAddress(Address addr, DataOutputStream out) throws IOException {
         if(addr == null) {
@@ -213,6 +158,8 @@ public class Util {
             writeOtherAddress(addr, out);
         }
     }
+
+
 
     public static Address readAddress(DataInputStream in) throws IOException, IllegalAccessException, InstantiationException {
         Address addr=null;
@@ -560,16 +507,7 @@ public class Util {
         try {
             Thread.sleep(timeout);
         }
-        catch(Throwable e) {
-        }
-    }
-
-
-    public static void sleep(long timeout, int nanos) {
-        try {
-            Thread.sleep(timeout, nanos);
-        }
-        catch(Throwable e) {
+        catch(Exception e) {
         }
     }
 
@@ -618,7 +556,10 @@ public class Util {
     public static boolean tossWeightedCoin(double probability) {
         long r=random(100);
         long cutoff=(long)(probability * 100);
-        return r < cutoff;
+        if(r < cutoff)
+            return true;
+        else
+            return false;
     }
 
 
@@ -1034,16 +975,6 @@ public class Util {
         return ret.toString();
     }
 
-    /** Returns true if all elements of c match obj */
-    public static boolean all(Collection c, Object obj) {
-        for(Iterator iterator=c.iterator(); iterator.hasNext();) {
-            Object o=iterator.next();
-            if(!o.equals(obj))
-                return false;
-        }
-        return true;
-    }
-
 
     /**
      * Selects a random subset of members according to subset_percentage and returns them.
@@ -1153,20 +1084,6 @@ public class Util {
         }
     }
 
-    /**
-    * if we were to register for OP_WRITE and send the remaining data on
-    * readyOps for this channel we have to either block the caller thread or
-    * queue the message buffers that may arrive while waiting for OP_WRITE.
-    * Instead of the above approach this method will continuously write to the
-    * channel until the buffer sent fully.
-    */
-    public static void writeFully(ByteBuffer buf, WritableByteChannel out) throws IOException {
-        int written = 0;
-        int toWrite = buf.limit();
-        while (written < toWrite) {
-            written += out.write(buf);
-        }
-    }
 
 //    /* double writes are not required.*/
 //	public static void doubleWriteBuffer(
@@ -1253,7 +1170,7 @@ public class Util {
         try {
             loader=Thread.currentThread().getContextClassLoader();
             if(loader != null) {
-                return loader.loadClass(classname);
+                return Class.forName(classname,false,loader);
             }
         }
         catch(Throwable t) {
@@ -1263,7 +1180,7 @@ public class Util {
             try {
                 loader=clazz.getClassLoader();
                 if(loader != null) {
-                    return loader.loadClass(classname);
+                    return Class.forName(classname,false,loader);
                 }
             }
             catch(Throwable t) {
@@ -1273,7 +1190,7 @@ public class Util {
         try {
             loader=ClassLoader.getSystemClassLoader();
             if(loader != null) {
-                return loader.loadClass(classname);
+                return Class.forName(classname,false,loader);
             }
         }
         catch(Throwable t) {
@@ -1370,23 +1287,17 @@ public class Util {
 
     /** e.g. "bela,jeannette,michelle" --> List{"bela", "jeannette", "michelle"} */
     public static java.util.List parseCommaDelimitedStrings(String l) {
-        return parseStringList(l, ",");
+        java.util.List tmp=new ArrayList();
+        StringTokenizer tok=new StringTokenizer(l, ",");
+        String t;
+
+        while(tok.hasMoreTokens()) {
+            t=tok.nextToken();
+            tmp.add(t);
+        }
+
+        return tmp;
     }
-
-
-    public static List parseStringList(String l, String separator) {
-         List tmp=new LinkedList();
-         StringTokenizer tok=new StringTokenizer(l, separator);
-         String t;
-
-         while(tok.hasMoreTokens()) {
-             t=tok.nextToken();
-             tmp.add(t.trim());
-         }
-
-         return tmp;
-     }
-
 
 
 
@@ -1502,17 +1413,17 @@ public class Util {
 
     public static boolean checkForLinux() {
         String os=System.getProperty("os.name");
-        return os != null && os.toLowerCase().startsWith("linux");
+        return os != null && os.toLowerCase().startsWith("linux") ? true : false;
     }
 
     public static boolean checkForSolaris() {
         String os=System.getProperty("os.name");
-        return os != null && os.toLowerCase().startsWith("sun");
+        return os != null && os.toLowerCase().startsWith("sun") ? true : false;
     }
 
     public static boolean checkForWindows() {
         String os=System.getProperty("os.name");
-        return os != null && os.toLowerCase().startsWith("win");
+        return os != null && os.toLowerCase().startsWith("win") ? true : false;
     }
 
     public static void prompt(String s) {
@@ -1580,81 +1491,76 @@ public class Util {
 //    }
 
 
-    public static InetAddress getFirstNonLoopbackAddress() throws SocketException {
-        Enumeration en=NetworkInterface.getNetworkInterfaces();
-        boolean preferIpv4=Boolean.getBoolean("java.net.preferIPv4Stack");
-        boolean preferIPv6=Boolean.getBoolean("java.net.preferIPv6Addresses");
-        while(en.hasMoreElements()) {
-            NetworkInterface i=(NetworkInterface)en.nextElement();
-            for(Enumeration en2=i.getInetAddresses(); en2.hasMoreElements();) {
-                InetAddress addr=(InetAddress)en2.nextElement();
-                if(!addr.isLoopbackAddress()) {
-                    if(addr instanceof Inet4Address) {
-                        if(preferIPv6)
-                            continue;
-                        return addr;
-                    }
-                    if(addr instanceof Inet6Address) {
-                        if(preferIpv4)
-                            continue;
-                        return addr;
-                    }
-                }
-            }
-        }
-        return null;
-    }
-
-
-
-    public static InetAddress getFirstNonLoopbackIPv6Address() throws SocketException {
-        Enumeration en=NetworkInterface.getNetworkInterfaces();
-        boolean preferIpv4=false;
-        boolean preferIPv6=true;
-        while(en.hasMoreElements()) {
-            NetworkInterface i=(NetworkInterface)en.nextElement();
-            for(Enumeration en2=i.getInetAddresses(); en2.hasMoreElements();) {
-                InetAddress addr=(InetAddress)en2.nextElement();
-                if(!addr.isLoopbackAddress()) {
-                    if(addr instanceof Inet4Address) {
-                        if(preferIPv6)
-                            continue;
-                        return addr;
-                    }
-                    if(addr instanceof Inet6Address) {
-                        if(preferIpv4)
-                            continue;
-                        return addr;
-                    }
-                }
-            }
-        }
-        return null;
-    }
-
-    public static List getAllAvailableInterfaces() throws SocketException {
-        List retval=new ArrayList(10);
-        NetworkInterface intf;
-        for(Enumeration en=NetworkInterface.getNetworkInterfaces(); en.hasMoreElements();) {
-            intf=(NetworkInterface)en.nextElement();
-            retval.add(intf);
-        }
-        return retval;
-    }
-
-
     public static boolean isBindAddressPropertyIgnored() {
         String tmp=System.getProperty(IGNORE_BIND_ADDRESS_PROPERTY);
         if(tmp == null)
             return false;
 
         tmp=tmp.trim().toLowerCase();
-        return !(tmp.equals("false") ||
+        if(tmp.equals("false") ||
                 tmp.equals("no") ||
-                tmp.equals("off"));
+                tmp.equals("off"))
+            return false;
 
+        return true;
     }
 
+
+    static final char[] digits = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
+    /**   
+     * Converts 4 byte address representation into a char array   
+     * of length 7-15, depending on the actual address, i.e XXX.XXX.XXX.XXX   
+     * and returns a String representation of that address.   
+     *   
+     * @param address 4 byte array representing address   
+     *   
+     */   
+    public static final String addressToString(byte[] address) {   
+        int q,r = 0;   
+        int charPos = 15;   
+        char[] buf = new char[15];   
+        char dot = '.';   
+        
+        int i = address[3] & 0xFF;   
+        for(;;) {   
+            q = (i * 52429) >>> (19);   
+            r = i - ((q << 3) + (q << 1));   
+            buf[--charPos] = digits[r];   
+            i = q;   
+            if (i == 0) break;   
+        }   
+        buf[--charPos] = dot;   
+        i = address[2] & 0xFF;   
+        for (;;) {   
+            q = (i * 52429) >>> (19);   
+            r = i - ((q << 3) + (q << 1));   
+            buf[--charPos] = digits[r];   
+            i = q;   
+            if (i == 0) break;   
+        }   
+        buf[--charPos] = dot;   
+        
+        i = address[1] & 0xFF;   
+        for (;;) {   
+            q = (i * 52429) >>> (19);   
+            r = i - ((q << 3) + (q << 1));   
+            buf[--charPos] = digits[r];   
+            i = q;   
+            if (i == 0) break;   
+        }   
+        
+        buf[--charPos] = dot;   
+        i = address[0] & 0xFF;   
+        
+        for (;;) {   
+            q = (i * 52429) >>> (19);   
+            r = i - ((q << 3) + (q << 1));   
+            buf[--charPos] = digits[r];   
+            i = q;   
+            if (i == 0) break;   
+        }   
+        return new String(buf, charPos, 15 - charPos);   
+    } 
 
     /*
     public static void main(String[] args) {
@@ -1728,20 +1634,5 @@ public class Util {
     }
 
 
-    public static String generateList(Collection c, String separator) {
-        if(c == null) return null;
-        StringBuffer sb=new StringBuffer();
-        boolean first=true;
 
-        for(Iterator it=c.iterator(); it.hasNext();) {
-            if(first) {
-                first=false;
-            }
-            else {
-                sb.append(separator);
-            }
-            sb.append(it.next());
-        }
-        return sb.toString();
-    }
 }
