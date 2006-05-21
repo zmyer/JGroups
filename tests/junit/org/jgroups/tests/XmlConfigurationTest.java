@@ -4,7 +4,6 @@ import junit.framework.TestCase;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.jgroups.conf.XmlConfigurator;
-import org.jgroups.util.Util;
 
 import java.io.InputStream;
 
@@ -22,7 +21,7 @@ public class XmlConfigurationTest extends TestCase {
     public void testBasic() {
         try {
             // InputStream default_config = XmlConfigurator.class.getClassLoader().getResourceAsStream("default.xml");
-            InputStream default_config=Util.getResourceAsStream("default.xml", this.getClass());
+            InputStream default_config=Thread.currentThread().getContextClassLoader().getResourceAsStream("default.xml");
             XmlConfigurator conf=XmlConfigurator.getInstance(default_config);
             if(log.isDebugEnabled()) log.debug(conf.getProtocolStackString());
             assertTrue("Successfully parsed a valid XML configuration file.", true);
@@ -51,7 +50,7 @@ public class XmlConfigurationTest extends TestCase {
     
     public static void main(String[] args) {
         String[] testCaseName={XmlConfigurationTest.class.getName()};
-        junit.swingui.TestRunner.main(testCaseName);
+        junit.awtui.TestRunner.main(testCaseName);
     } //public static void main(String[] args)
 
 } //public class XmlConfigurationTest extends TestCase

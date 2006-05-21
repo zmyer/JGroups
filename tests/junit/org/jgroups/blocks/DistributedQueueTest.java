@@ -1,11 +1,12 @@
-// $Id: DistributedQueueTest.java,v 1.8 2005/12/27 14:38:35 belaban Exp $
+// $Id: DistributedQueueTest.java,v 1.7.6.1 2006/05/21 09:34:57 mimbert Exp $
 
 package org.jgroups.blocks;
 
 import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
-import org.apache.log4j.Logger;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 import java.util.Vector;
 
@@ -13,7 +14,7 @@ public class DistributedQueueTest extends TestCase
 {
 
 	final int NUM_ITEMS = 10;
-	static Logger logger = Logger.getLogger(DistributedQueueTest.class.getName());
+    static Log logger = LogFactory.getLog(DistributedQueueTest.class);
     String props;
 
 	public DistributedQueueTest(String testName)
@@ -49,9 +50,8 @@ public class DistributedQueueTest extends TestCase
 
 
 		queue1 = new DistributedQueue("testing", null, props, 5000);
-        log("created queue1");
 
-        // give some time for the channel to become a coordinator
+		// give some time for the channel to become a coordinator
 		try
 		{
 			Thread.sleep(1000);
@@ -61,9 +61,8 @@ public class DistributedQueueTest extends TestCase
 		}
 
 		queue2 = new DistributedQueue("testing", null, props, 5000);
-        log("created queue2");
 
-        try
+		try
 		{
 			Thread.sleep(1000);
 		}
@@ -72,9 +71,8 @@ public class DistributedQueueTest extends TestCase
 		}
 
 		queue3 = new DistributedQueue("testing", null, props, 5000);
-        log("created queue3");
 
-        try
+		try
 		{
 			Thread.sleep(1000);
 		}
@@ -86,24 +84,12 @@ public class DistributedQueueTest extends TestCase
 	public void tearDown() throws Exception
 	{
         super.tearDown();
-        log("stopping queue1");
-        queue1.stop();
-        log("stopped queue1");
+		queue1.stop();
+		queue2.stop();
+		queue3.stop();
+	}
 
-        log("stopping queue2");
-        queue2.stop();
-        log("stopped queue2");
-
-        log("stopping queue3");
-        queue3.stop();
-        log("stopped queue3");
-    }
-
-    void log(String msg) {
-        System.out.println("-- [" + Thread.currentThread().getName() + "]: " + msg);
-    }
-
-    class PutTask implements Runnable
+	class PutTask implements Runnable
 	{
 		protected DistributedQueue queue;
 		protected String name;
@@ -123,8 +109,7 @@ public class DistributedQueueTest extends TestCase
 				queue.add(name + '_' + i);
 			}
 			finished = true;
-            log("added " + NUM_ITEMS + " elements - done");
-        }
+		}
 
 		public boolean finished()
 		{

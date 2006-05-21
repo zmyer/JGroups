@@ -10,65 +10,60 @@ import java.io.ObjectInput;
 import java.io.ObjectOutput;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.*;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Iterator;
+
+
 
 
 /**
- * A method call is the JGroups representation of a remote method.
+ * A method call is the JavaGroup representation of a remote method.
  * It includes the name of the method (case sensitive) and a list of arguments.
  * A method call is serializable and can be passed over the wire.
  * @author Bela Ban
- * @version $Revision: 1.23 $
+ * @version $Revision: 1.16.6.1 $
  */
 public class MethodCall implements Externalizable {
 
-    private static final long serialVersionUID=7873471327078957662L;
+    static final long serialVersionUID=7873471327078957662L;
 
-    /** The name of the method, case sensitive. */
+    /** the name of the method, case sensitive */
     protected String method_name=null;
 
-    /** The ID of a method, maps to a java.lang.reflect.Method */
-    protected short method_id=-1;
-
-    /** The arguments of the method. */
+    /** the arguments of the method */
     protected Object[] args=null;
 
-    /** The class types, e.g., new Class[]{String.class, int.class}. */
+    /** the class types, e.g. new Class[]{String.class, int.class} */
     protected Class[] types=null;
 
-    /** The signature, e.g., new String[]{String.class.getName(), int.class.getName()}. */
+    /** the signature, e.g. new String[]{String.class.getName(), int.class.getName()} */
     protected String[] signature=null;
 
-    /** The Method of the call. */
+    /** the Method of the call */
     protected Method method=null;
-
-    /** To carry arbitrary data with a method call, data needs to be serializable if sent across the wire */
-    protected Map payload=null;
 
     protected static final Log log=LogFactory.getLog(MethodCall.class);
 
-    /** Which mode to use. */
+    /** which mode to use */
     protected short mode=OLD;
 
-    /** Infer the method from the arguments. */
+    /** infer the method from the arguments */
     protected static final short OLD=1;
 
-    /** Explicitly ship the method, caller has to determine method himself. */
+    /** explicitly ship the method, caller has to determine method himself */
     protected static final short METHOD=2;
 
-    /** Use class information. */
+    /** use class information */
     protected static final short TYPES=3;
 
-    /** Provide a signature, similar to JMX. */
+    /** provide a signature, similar to JMX */
     protected static final short SIGNATURE=4;
-
-    /** Use an ID to map to a method */
-    protected static final short ID=5;
 
 
     /**
-     * Creates an empty method call, this is always invalid, until
-     * <code>setName()</code> has been called.
+     * creates an empty method call, this is always invalid, until
+     * <code>setName()</code> has been called
      */
     public MethodCall() {
     }
@@ -95,12 +90,6 @@ public class MethodCall implements Externalizable {
         this.args=args;
     }
 
-    public MethodCall(short method_id, Object[] args) {
-        this.method_id=method_id;
-        this.mode=ID;
-        this.args=args;
-    }
-
 
     public MethodCall(String method_name, Object[] args, Class[] types) {
         this.method_name=method_name;
@@ -116,7 +105,7 @@ public class MethodCall implements Externalizable {
         this.mode=SIGNATURE;
     }
 
-    private void init(Method method) {
+    void init(Method method) {
         this.method=method;
         this.mode=METHOD;
         method_name=method.getName();
@@ -146,14 +135,6 @@ public class MethodCall implements Externalizable {
         method_name=n;
     }
 
-    public short getId() {
-        return method_id;
-    }
-
-    public void setId(short method_id) {
-        this.method_id=method_id;
-    }
-
     /**
      * returns an ordered list of arguments used for the method invokation
      * @return returns the list of ordered arguments
@@ -172,20 +153,6 @@ public class MethodCall implements Externalizable {
     }
 
 
-    public void setMethod(Method m) {
-        init(m);
-    }
-
-
-    public synchronized Object put(Object key, Object value) {
-        if(payload == null)
-            payload=new HashMap();
-        return payload.put(key, value);
-    }
-
-    public synchronized Object get(Object key) {
-        return payload != null? payload.get(key) : null;
-    }
 
 
     /**
@@ -216,6 +183,7 @@ public class MethodCall implements Externalizable {
      * and those inherited from superclasses and superinterfaces.
      */
     Method[] getAllMethods(Class target) {
+
         Class superclass = target;
         List methods = new ArrayList();
         int size = 0;
@@ -226,14 +194,12 @@ public class MethodCall implements Externalizable {
                 methods.add(m);
                 size += m.length;
                 superclass = superclass.getSuperclass();
-            }
-            catch(SecurityException e) {
+            } catch (SecurityException e) {
                 // if it runs in an applet context, it won't be able to retrieve
                 // methods from superclasses that belong to the java VM and it will
                 // raise a security exception, so we catch it here.
-                if(log.isWarnEnabled())
-                    log.warn("unable to enumerate methods of superclass "+superclass+" of class "+target);
-                superclass=null;
+                if(log.isWarnEnabled()) log.warn("unable to enumerate methods of superclass "+superclass+" of class "+target);
+                superclass = null;
             }
         }
 
@@ -264,11 +230,11 @@ public class MethodCall implements Externalizable {
         methods: for(int i = 0; i < methods.length; i++) {
             Method m = methods[i];
             if (!methodName.equals(m.getName())) {
-                continue;
+                continue methods;
             }
             Class[] parameters = m.getParameterTypes();
             if (types.length != parameters.length) {
-                continue;
+                continue methods;
             }
             for(int j = 0; j < types.length; j++) {
                 if (!types[j].equals(parameters[j])) {
@@ -301,36 +267,34 @@ public class MethodCall implements Externalizable {
         cl=target.getClass();
         try {
             switch(mode) {
-            case OLD:
-                meth=findMethod(cl);
-                break;
-            case METHOD:
-                if(this.method != null)
-                    meth=this.method;
-                break;
-            case TYPES:
-                //meth=cl.getDeclaredMethod(method_name, types);
-                meth = getMethod(cl, method_name, types);
-                break;
-            case SIGNATURE:
-                Class[] mytypes=null;
-                if(signature != null)
-                    mytypes=getTypesFromString(cl, signature);
-                //meth=cl.getDeclaredMethod(method_name, mytypes);
-                meth = getMethod(cl, method_name, mytypes);
-                break;
-            case ID:
-                break;
-            default:
-                if(log.isErrorEnabled()) log.error("mode " + mode + " is invalid");
-                break;
+                case OLD:
+                    meth=findMethod(cl);
+                    break;
+                case METHOD:
+                    if(this.method != null)
+                        meth=this.method;
+                    break;
+                case TYPES:
+                    //meth=cl.getDeclaredMethod(method_name, types);
+                    meth = getMethod(cl, method_name, types);
+                    break;
+                case SIGNATURE:
+                    Class[] mytypes=null;
+                    if(signature != null)
+                        mytypes=getTypesFromString(cl, signature);
+                    //meth=cl.getDeclaredMethod(method_name, mytypes);
+                    meth = getMethod(cl, method_name, mytypes);
+                    break;
+                default:
+                    if(log.isErrorEnabled()) log.error("mode " + mode + " is invalid");
+                    break;
             }
 
             if(meth != null) {
                 retval=meth.invoke(target, args);
             }
             else {
-                throw new NoSuchMethodException(method_name);
+                if(log.isErrorEnabled()) log.error("method " + method_name + " not found");
             }
             return retval;
         }
@@ -400,17 +364,15 @@ public class MethodCall implements Externalizable {
     public String toString() {
         StringBuffer ret=new StringBuffer();
         boolean first=true;
-        if(method_name != null)
-            ret.append(method_name);
-        else
-            ret.append(method_id);
-        ret.append('(');
+        ret.append(method_name).append('(');
         if(args != null) {
             for(int i=0; i < args.length; i++) {
-                if(first)
+                if(first) {
                     first=false;
-                else
+                }
+                else {
                     ret.append(", ");
+                }
                 ret.append(args[i]);
             }
         }
@@ -420,17 +382,13 @@ public class MethodCall implements Externalizable {
 
     public String toStringDetails() {
         StringBuffer ret=new StringBuffer();
-        ret.append("MethodCall ");
-        if(method_name != null)
-            ret.append("name=").append(method_name);
-        else
-            ret.append("id=").append(method_id);
-        ret.append(", number of args=").append((args != null? args.length : 0)).append(')');
+        ret.append("MethodCall (name=" + method_name);
+        ret.append(", number of args=" + (args != null? args.length : 0) + ')');
         if(args != null) {
             ret.append("\nArgs:");
             for(int i=0; i < args.length; i++) {
-                ret.append("\n[").append(args[i]).append(" (").
-                        append((args[i] != null? args[i].getClass().getName() : "null")).append(")]");
+                ret.append("\n[" + args[i] + " (" +
+                           (args[i] != null? args[i].getClass().getName() : "null") + ")]");
             }
         }
         return ret.toString();
@@ -438,86 +396,72 @@ public class MethodCall implements Externalizable {
 
 
     public void writeExternal(ObjectOutput out) throws IOException {
-        if(method_name != null) {
-            out.writeBoolean(true);
-            out.writeUTF(method_name);
-        }
-        else {
-            out.writeBoolean(false);
-            out.writeShort(method_id);
-        }
+        out.writeUTF(method_name);
         out.writeObject(args);
         out.writeShort(mode);
 
         switch(mode) {
-        case OLD:
-            break;
-        case METHOD:
-            out.writeObject(method.getParameterTypes());
-            out.writeObject(method.getDeclaringClass());
-            break;
-        case TYPES:
-            out.writeObject(types);
-            break;
-        case SIGNATURE:
-            out.writeObject(signature);
-            break;
-        case ID:
-            break;
-        default:
-            if(log.isErrorEnabled()) log.error("mode " + mode + " is invalid");
-            break;
-        }
-
-        if(payload != null) {
-            out.writeBoolean(true);
-            out.writeObject(payload);
-        }
-        else {
-            out.writeBoolean(false);
+            case OLD:
+                break;
+            case METHOD:
+                out.writeObject(method.getParameterTypes());
+                out.writeObject(method.getDeclaringClass());
+                break;
+            case TYPES:
+                out.writeObject(types);
+                break;
+            case SIGNATURE:
+                out.writeObject(signature);
+//                out.writeInt(signature != null? signature.length : 0);
+//                for(int i=0; i < signature.length; i++) {
+//                    String s=signature[i];
+//                    out.writeUTF(s);
+//                }
+                break;
+            default:
+                if(log.isErrorEnabled()) log.error("mode " + mode + " is invalid");
+                break;
         }
     }
 
     public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
-        boolean name_available=in.readBoolean();
-        if(name_available)
-            method_name=in.readUTF();
-        else
-            method_id=in.readShort();
+        method_name=in.readUTF();
         args=(Object[])in.readObject();
         mode=in.readShort();
 
         switch(mode) {
-        case OLD:
-            break;
-        case METHOD:
-            Class[] parametertypes=(Class[])in.readObject();
-            Class   declaringclass=(Class)in.readObject();
-            try {
-                method=declaringclass.getDeclaredMethod(method_name, parametertypes);
-            }
-            catch(NoSuchMethodException e) {
-                throw new IOException(e.toString());
-            }
-            break;
-        case TYPES:
-            types=(Class[])in.readObject();
-            break;
-        case SIGNATURE:
-            signature=(String[])in.readObject();
-            break;
-        case ID:
-            break;
-        default:
-            if(log.isErrorEnabled()) log.error("mode " + mode + " is invalid");
-            break;
-        }
-
-        boolean payload_available=in.readBoolean();
-        if(payload_available) {
-            payload=(Map)in.readObject();
+            case OLD:
+                break;
+            case METHOD:
+                Class[] parametertypes=(Class[])in.readObject();
+                Class   declaringclass=(Class)in.readObject();
+                try {
+                    method=declaringclass.getDeclaredMethod(method_name, parametertypes);
+                }
+                catch(NoSuchMethodException e) {
+                    throw new IOException(e.toString());
+                }
+                break;
+            case TYPES:
+                types=(Class[])in.readObject();
+                break;
+            case SIGNATURE:
+                signature=(String[])in.readObject();
+//                int len=in.readInt();
+//                if(len > 0) {
+//                    signature=new String[len];
+//                    for(int i=0; i < len; i++) {
+//                        signature[i]=in.readUTF();
+//                    }
+//                }
+                break;
+            default:
+                if(log.isErrorEnabled()) log.error("mode " + mode + " is invalid");
+                break;
         }
     }
+
+
 
 
 }

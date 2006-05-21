@@ -3,14 +3,13 @@ package org.jgroups.persistence;
 /**
  * @author Mandar Shinde
  * This class is the factory to get access to any DB based or file based
- * implementation. None of the implementations should expose directly
+ * implementation. None of the implemenations should expose directly
  * to user for migration purposes
  */
 
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.jgroups.util.Util;
 
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -21,7 +20,7 @@ import java.util.Properties;
 public class PersistenceFactory
 {
 
-    protected final static Log log=LogFactory.getLog(PersistenceFactory.class);
+    protected final Log log=LogFactory.getLog(this.getClass());
 
     /**
      * Default private constructor// does nothing
@@ -40,7 +39,7 @@ public class PersistenceFactory
      * @return PersistenceFactory;
      */
     public static PersistenceFactory getInstance() {
-        log.error(" getting factory instance ");
+        System.err.println(" getting factory instance ");
         if (_factory == null)
             _factory = new PersistenceFactory();
         return _factory;
@@ -70,7 +69,7 @@ public class PersistenceFactory
         {
             if (checkDB())
                 _manager = createManagerDB(propPath);
-            else
+            if (_manager == null)
                 _manager = createManagerFile(propPath);
         }
         return _manager;
@@ -90,7 +89,7 @@ public class PersistenceFactory
         {
             if (checkDB(filePath))
                 _manager = createManagerDB(filePath);
-            else
+            if (_manager == null)
                 _manager = createManagerFile(filePath);
         }
         return _manager;
@@ -104,11 +103,22 @@ public class PersistenceFactory
      */
     private PersistenceManager createManagerDB(String filePath) throws Exception
     {
-
-            if(log.isInfoEnabled()) log.info("Calling db persist from factory: " + filePath);
-        if (_manager == null)
-            _manager = new DBPersistenceManager(filePath);
-        return _manager;
+        // load the DBPersistenceManager dynamically, because this class will not
+        // always be available
+        Class clazz = ClassLoader.getSystemClassLoader().loadClass("DBPersistenceManager");
+        if (clazz != null) {
+            Class[] paramtypes = {String.class};
+            Constructor c = clazz.getDeclaredConstructor(paramtypes);
+            if (c != null) {
+                if(log.isInfoEnabled()) log.info("Calling db persist from factory: " + filePath);
+                if (_manager == null) {
+                    Object[] params = {filePath};
+                    _manager = (PersistenceManager) c.newInstance(params);
+                    return _manager;
+                }
+            }
+        }
+        return null;
     }// end of DB persistence
 
     /**
@@ -129,7 +139,7 @@ public class PersistenceFactory
                 String classname=props.getProperty(filePersistMgr);
                 if(classname != null)
                 {
-                    Class cl=Util.loadClass(classname, this.getClass());
+                    Class cl=Thread.currentThread().getContextClassLoader().loadClass(classname);
                     Constructor ctor=cl.getConstructor(new Class[]{String.class});
                     _manager=(PersistenceManager)ctor.newInstance(new Object[]{filePath});
                 }
@@ -188,8 +198,8 @@ public class PersistenceFactory
         return props;
     }
 
-    private static volatile PersistenceManager _manager = null;
-    private static volatile PersistenceFactory _factory = null;
+    private static PersistenceManager _manager = null;
+    private static PersistenceFactory _factory = null;
    
 
     /* Please set this according to configuration */
