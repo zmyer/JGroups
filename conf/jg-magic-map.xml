@@ -271,17 +271,5 @@
         <preload>true</preload>
         <magic-number>57</magic-number>
     </class>
-    <class>
-        <description>(Description goes here)</description>
-        <class-name>org.jgroups.protocols.SEQUENCER$SequencerHeader</class-name>
-        <preload>true</preload>
-        <magic-number>58</magic-number>
-    </class>
-    <class>
-        <description>(Description goes here)</description>
-        <class-name>org.jgroups.protocols.FD_SIMPLE$FdHeader</class-name>
-        <preload>true</preload>
-        <magic-number>59</magic-number>
-    </class>
 
 </magic-number-class-mapping>
