@@ -53,7 +53,7 @@ import java.util.concurrent.TimeUnit;
  * additional administrative effort on the part of the user.<p>
  * @author Bela Ban
  * @author Ovidiu Feodorov <ovidiuf@users.sourceforge.net>
- * @version $Id: GossipRouter.java,v 1.40.2.1 2009/01/07 08:07:34 jiwils Exp $
+ * @version $Id: GossipRouter.java,v 1.40.2.2 2009/01/08 22:18:50 jiwils Exp $
  * @since 2.1.1
  */
 public class GossipRouter {
@@ -416,9 +416,9 @@ public class GossipRouter {
         // start the main server thread
         new Thread(new Runnable() {
             public void run() {
-                    mainLoop();
-                    cleanup();
-                }
+                mainLoop();
+                cleanup();
+            }
         }, "GossipRouter").start();
 
         // starts the cache sweeper as daemon thread, so we won't block on it
@@ -441,10 +441,10 @@ public class GossipRouter {
 
         timer.cancel();
         if(srvSock != null) {
-            shutdown();
+        shutdown();
             Util.close(srvSock);
-            // exiting the mainLoop will clean the tables
-            srvSock=null;
+        // exiting the mainLoop will clean the tables
+        srvSock=null;
         }
         if(log.isInfoEnabled()) log.info("router stopped");
     }
@@ -486,23 +486,22 @@ public class GossipRouter {
 
     private void mainLoop() {
 
-		if (bindAddress == null) {
-			bindAddress = srvSock.getInetAddress();
-		}
-		System.out.println("GossipRouter started at " + new Date()
-				+ "\nListening on port " + port + " bound on address "
-				+ bindAddress + '\n');
+        if(bindAddress == null) {
+            bindAddress=srvSock.getInetAddress();
+        }
 
-		while (up && srvSock != null) {
-			try {
+        printStartupInfo();
+
+        while(up && srvSock != null) {
+            try {
 				final Socket sock = srvSock.accept();
-				if (linger_timeout > 0) {
-					int linger = Math.max(1, (int) (linger_timeout / 1000));
-					sock.setSoLinger(true, linger);
-				}
-				if (sock_read_timeout > 0) {
-					sock.setSoTimeout((int) sock_read_timeout);
-				}
+                if(linger_timeout > 0) {
+                    int linger=Math.max(1, (int)(linger_timeout / 1000));
+                    sock.setSoLinger(true, linger);
+                }
+                if(sock_read_timeout > 0) {
+                    sock.setSoTimeout((int)sock_read_timeout);
+                }
 
 				final DataInputStream input = new DataInputStream(sock.getInputStream());
 				Runnable task = new Runnable(){
@@ -513,131 +512,131 @@ public class GossipRouter {
 						String group;
 						GossipData req = new GossipData();
 						try {
-							req.readFrom(input);
+                req.readFrom(input);
 
-							switch (req.getType()) {
-							case GossipRouter.REGISTER:
-								mbr = req.getAddress();
-								group = req.getGroup();
-								if (log.isTraceEnabled())
-									log.trace("REGISTER(" + group + ", " + mbr + ")");
-								if (group == null || mbr == null) {
+                switch(req.getType()) {
+                    case GossipRouter.REGISTER:
+                        mbr=req.getAddress();
+                        group=req.getGroup();
+                        if(log.isTraceEnabled())
+                            log.trace("REGISTER(" + group + ", " + mbr + ")");
+                        if(group == null || mbr == null) {
 									if (log.isErrorEnabled())
 										log.error("group or member is null, cannot register member");
 								} else
-									addGossipEntry(group, mbr, new AddressEntry(mbr));
-								Util.close(input);
-								Util.close(sock);
-								break;
+                            addGossipEntry(group, mbr, new AddressEntry(mbr));
+                        Util.close(input);
+                        Util.close(sock);
+                        break;
 
-							case GossipRouter.UNREGISTER:
-								mbr = req.getAddress();
-								group = req.getGroup();
-								if (log.isTraceEnabled())
-									log.trace("UNREGISTER(" + group + ", " + mbr + ")");
-								if (group == null || mbr == null) {
+                    case GossipRouter.UNREGISTER:
+                        mbr=req.getAddress();
+                        group=req.getGroup();
+                        if(log.isTraceEnabled())
+                            log.trace("UNREGISTER(" + group + ", " + mbr + ")");
+                        if(group == null || mbr == null) {
 									if (log.isErrorEnabled())
 										log.error("group or member is null, cannot unregister member");
 								} else
-									removeGossipEntry(group, mbr);
-								Util.close(input);
-								Util.close(output);
-								Util.close(sock);
-								break;
+                            removeGossipEntry(group, mbr);
+                        Util.close(input);
+                        Util.close(output);
+                        Util.close(sock);
+                        break;
 
-							case GossipRouter.GOSSIP_GET:
-								group = req.getGroup();
-								List<Address> mbrs = null;
-								Map<Address, AddressEntry> map;
-								map = routingTable.get(group);
-								if (map != null) {
-									mbrs = new LinkedList<Address>(map.keySet());
-								}
+                    case GossipRouter.GOSSIP_GET:
+                        group=req.getGroup();
+                        List<Address> mbrs=null;
+                        Map<Address,AddressEntry> map;
+                        map=routingTable.get(group);
+                        if(map != null) {
+                            mbrs=new LinkedList<Address>(map.keySet());
+                        }
 
-								if (log.isTraceEnabled())
-									log.trace("GOSSIP_GET(" + group + ") --> " + mbrs);
-								output = new DataOutputStream(sock.getOutputStream());
-								GossipData rsp = new GossipData(GossipRouter.GET_RSP,group, null, mbrs);
-								rsp.writeTo(output);
-								Util.close(input);
-								Util.close(output);
-								Util.close(sock);
-								break;
+                        if(log.isTraceEnabled())
+                            log.trace("GOSSIP_GET(" + group + ") --> " + mbrs);
+                        output=new DataOutputStream(sock.getOutputStream());
+                        GossipData rsp=new GossipData(GossipRouter.GET_RSP, group, null, mbrs);
+                        rsp.writeTo(output);
+                        Util.close(input);
+                        Util.close(output);
+                        Util.close(sock);
+                        break;
 
-							case GossipRouter.ROUTER_GET:
-								group = req.getGroup();
-								output = new DataOutputStream(sock.getOutputStream());
+                    case GossipRouter.ROUTER_GET:
+                        group=req.getGroup();
+                        output=new DataOutputStream(sock.getOutputStream());
 
-								List<Address> ret = null;
-								map = routingTable.get(group);
-								if (map != null) {
-									ret = new LinkedList<Address>(map.keySet());
+                        List<Address> ret=null;
+                        map=routingTable.get(group);
+                        if(map != null) {
+                            ret=new LinkedList<Address>(map.keySet());
 								} else
-									ret = new LinkedList<Address>();
-								if (log.isTraceEnabled())
-									log.trace("ROUTER_GET(" + group + ") --> " + ret);
+                            ret=new LinkedList<Address>();
+                        if(log.isTraceEnabled())
+                            log.trace("ROUTER_GET(" + group + ") --> " + ret);
 								rsp = new GossipData(GossipRouter.GET_RSP, group, null,
 										ret);
-								rsp.writeTo(output);
-								Util.close(input);
-								Util.close(output);
-								Util.close(sock);
-								break;
+                        rsp.writeTo(output);
+                        Util.close(input);
+                        Util.close(output);
+                        Util.close(sock);
+                        break;
 
-							case GossipRouter.DUMP:
-								output = new DataOutputStream(sock.getOutputStream());
-								output.writeUTF(dumpRoutingTable());
-								Util.close(input);
-								Util.close(output);
-								Util.close(sock);
-								break;
+                    case GossipRouter.DUMP:
+                        output=new DataOutputStream(sock.getOutputStream());
+                        output.writeUTF(dumpRoutingTable());
+                        Util.close(input);
+                        Util.close(output);
+                        Util.close(sock);
+                        break;
 
-							case GossipRouter.CONNECT:
-								sock.setSoTimeout(0); // we have to disable this here
-								output = new DataOutputStream(sock.getOutputStream());
-								peer_addr = new IpAddress(sock.getInetAddress(), sock.getPort());
-								logical_addr = req.getAddress();
-								String group_name = req.getGroup();
+                    case GossipRouter.CONNECT:
+                        sock.setSoTimeout(0); // we have to disable this here
+                        output=new DataOutputStream(sock.getOutputStream());
+                        peer_addr=new IpAddress(sock.getInetAddress(), sock.getPort());
+                        logical_addr=req.getAddress();
+                        String group_name=req.getGroup();
 
-								if (log.isTraceEnabled())
-									log.trace("CONNECT(" + group_name + ", "+ logical_addr + ")");
-								SocketThread st = new SocketThread(sock, input,group_name, logical_addr);
-								addEntry(group_name, logical_addr, new AddressEntry(logical_addr, peer_addr, sock, st, output));
-								st.start();
-								break;
+                        if(log.isTraceEnabled())
+                            log.trace("CONNECT(" + group_name + ", " + logical_addr + ")");
+                        SocketThread st=new SocketThread(sock, input, group_name, logical_addr);
+                        addEntry(group_name, logical_addr, new AddressEntry(logical_addr, peer_addr, sock, st, output));
+                        st.start();
+                        break;
 
-							case GossipRouter.DISCONNECT:
-								Address addr = req.getAddress();
-								group_name = req.getGroup();
-								removeEntry(group_name, addr);
-								if (log.isTraceEnabled())
-									log.trace("DISCONNECT(" + group_name + ", " + addr+ ")");
-								Util.close(input);
-								Util.close(output);
-								Util.close(sock);
-								break;
+                    case GossipRouter.DISCONNECT:
+                        Address addr=req.getAddress();
+                        group_name=req.getGroup();
+                        removeEntry(group_name, addr);
+                        if(log.isTraceEnabled())
+                            log.trace("DISCONNECT(" + group_name + ", " + addr + ")");
+                        Util.close(input);
+                        Util.close(output);
+                        Util.close(sock);
+                        break;
 
-							case GossipRouter.SHUTDOWN:
+                    case GossipRouter.SHUTDOWN:
 								if (log.isInfoEnabled())
 									log.info("router shutting down");
-								Util.close(input);
-								Util.close(output);
-								Util.close(sock);
-								up = false;
-								break;
-							default:
-								if (log.isWarnEnabled())
-									log.warn("received unkown gossip request (gossip="+ req + ')');
-								break;
-							}
+                        Util.close(input);
+                        Util.close(output);
+                        Util.close(sock);
+                        up=false;
+                        break;
+                    default:
+                        if(log.isWarnEnabled())
+                            log.warn("received unkown gossip request (gossip=" + req + ')');
+                        break;
+                }
 						} catch (Exception e) {
-							if (up)
+                if(up)
 								if (log.isErrorEnabled())
 									log.error("failure handling a client request", e);
-							Util.close(input);
-							Util.close(output);
-							Util.close(sock);
-						}
+                Util.close(input);
+                Util.close(output);
+                Util.close(sock);
+            }
 					}};
 					if(!thread_pool.isShutdown())
 						thread_pool.submit(task);
@@ -647,8 +646,8 @@ public class GossipRouter {
 				if (log.isErrorEnabled())
 					log.error("failure receiving and setting up a client request", exc);
 			}
-		}
-	}
+        }
+    }
 
     protected ExecutorService createThreadPool(int min_threads,
 			int max_threads, long keep_alive_time, String rejection_policy,
@@ -917,6 +916,21 @@ public class GossipRouter {
 
 
     /**
+     * Prints startup information.
+     */
+    private void printStartupInfo() {
+        System.out.println("GossipRouter started at " + new Date());
+
+        System.out.print("Listening on port " + port);
+        System.out.println(" bound on address " + bindAddress);
+
+        System.out.print("Backlog is " + backlog);
+        System.out.print(", linger timeout is " + linger_timeout);
+        System.out.println(", and read timeout is " + sock_read_timeout);
+    }
+
+
+    /**
      * Class used to store Addresses in both routing and gossip tables.
      * If it is used for routing, sock and output have valid values, otherwise
      * they're null and only the timestamp counts.
@@ -1076,6 +1090,11 @@ public class GossipRouter {
         long expiry=GossipRouter.EXPIRY_TIME;
         long timeout=GossipRouter.GOSSIP_REQUEST_TIMEOUT;
         long routingTimeout=GossipRouter.ROUTING_CLIENT_REPLY_TIMEOUT;
+
+        int backlog = 0;
+        long soLinger = -1;
+        long soTimeout = -1;
+
         GossipRouter router=null;
         String bind_addr=null;
         boolean jmx=false;
@@ -1090,20 +1109,36 @@ public class GossipRouter {
                 bind_addr=args[++i];
                 continue;
             }
+            if ("-backlog".equals(arg)) {
+                backlog=Integer.parseInt(args[++i]);
+                continue;
+            }
             if("-expiry".equals(arg)) {
                 expiry=Long.parseLong(args[++i]);
                 continue;
             }
+            if("-jmx".equals(arg)) {
+                jmx=true;
+                continue;
+            }
+            // this option is not used and should be deprecated/removed
+            // in a future release
             if("-timeout".equals(arg)) {
                 timeout=Long.parseLong(args[++i]);
                 continue;
             }
+            // this option is not used and should be deprecated/removed
+            // in a future release
             if("-rtimeout".equals(arg)) {
                 routingTimeout=Long.parseLong(args[++i]);
                 continue;
             }
-             if("-jmx".equals(arg)) {
-                jmx=true;
+            if ("-solinger".equals(arg)) {
+                soLinger=Long.parseLong(args[++i]);
+                continue;
+            }
+            if ("-sotimeout".equals(arg)) {
+                soTimeout=Long.parseLong(args[++i]);
                 continue;
             }
             help();
@@ -1113,6 +1148,16 @@ public class GossipRouter {
 
         try {
             router=new GossipRouter(port, bind_addr, expiry, timeout, routingTimeout, jmx);
+
+            if (backlog > 0)
+                router.setBacklog(backlog);
+
+            if (soTimeout >= 0)
+                router.setSocketReadTimeout(soTimeout);
+
+            if (soLinger >= 0)
+                router.setLingerTimeout(soLinger);
+
             router.start();
         }
         catch(Exception e) {
@@ -1134,14 +1179,37 @@ public class GossipRouter {
     static void help() {
         System.out.println();
         System.out.println("GossipRouter [-port <port>] [-bind_addr <address>] [options]");
-        System.out.println("Options: ");
-        System.out.println("        -expiry <msecs>   - Time until a gossip cache entry expires.");
-        System.out.println("        -timeout <msecs>  - Number of millisecs the router waits to receive");
-        System.out.println("                            a gossip request after connection was established;");
-        System.out.println("                            upon expiration, the router initiates the routing");
-        System.out.println("                            protocol on the connection.");
-        System.out.println("        -rtimeout  <mcsec> - Routing timeout");
-        System.out.println("        -jmx               - Expose attrs and operations via JMX");
+        System.out.println();
+        System.out.println("Options:");
+        System.out.println();
+
+        // -timeout isn't used and should be deprecated/removed
+        // in a future release. It's left in this code for backwards
+        // compatability, but it is no longer advertized.
+        //System.out.println("        -timeout <msecs>  - Number of millisecs the router waits to receive");
+        //System.out.println("                            a gossip request after connection was established;");
+        //System.out.println("                            upon expiration, the router initiates the routing");
+        //System.out.println("                            protocol on the connection.");
+
+        System.out.println("    -backlog <backlog>    - Max queue size of backlogged connections. Must be");
+        System.out.println("                            greater than zero or the default of 1000 will be");
+        System.out.println("                            used.");
+        System.out.println();
+        System.out.println("    -expiry <msecs>       - Time until a gossip cache entry expires. 30000 is");
+        System.out.println("                            the default value.");
+        System.out.println();
+        System.out.println("    -jmx                  - Expose attributes and operations via JMX.");
+        System.out.println();
+        System.out.println("    -solinger <msecs>     - Time for setting SO_LINGER on connections. 0");
+        System.out.println("                            means do not set SO_LINGER. Must be greater than");
+        System.out.println("                            or equal to zero or the default of 2000 will be");
+        System.out.println("                            used.");
+        System.out.println();
+        System.out.println("    -sotimeout <msecs>    - Time for setting SO_TIMEOUT on connections. 0");
+        System.out.println("                            means don't set SO_TIMEOUT. Must be greater than");
+        System.out.println("                            or equal to zero or the default of 3000 will be");
+        System.out.println("                            used.");
+        System.out.println();
     }
 
 
