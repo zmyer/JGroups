@@ -53,7 +53,7 @@ import java.util.concurrent.TimeUnit;
  * additional administrative effort on the part of the user.<p>
  * @author Bela Ban
  * @author Ovidiu Feodorov <ovidiuf@users.sourceforge.net>
- * @version $Id: GossipRouter.java,v 1.40.2.4 2009/01/08 22:31:55 jiwils Exp $
+ * @version $Id: GossipRouter.java,v 1.40.2.5 2009/02/05 16:28:39 vlada Exp $
  * @since 2.1.1
  */
 public class GossipRouter {
@@ -85,11 +85,13 @@ public class GossipRouter {
             "after connection was established; upon expiration, the router initiates " +
             "the routing protocol on the connection. Don't set the interval too big, " +
             "otherwise the router will appear slow in answering routing requests.", writable=true)
+    @Deprecated
     private long gossipRequestTimeout;
 
     @ManagedAttribute(description="time (in ms) main thread waits for a router client to send the routing " +
             "request type and the group afiliation before it declares the request " +
             "failed.", writable=true)
+    @Deprecated        
     private long routingClientReplyTimeout;
 
     // Maintains associations between groups and their members
@@ -171,6 +173,23 @@ public class GossipRouter {
         this(port, bindAddressString, expiryTime, GOSSIP_REQUEST_TIMEOUT, ROUTING_CLIENT_REPLY_TIMEOUT);
     }
 
+
+    /**
+	 * 
+	 * Creates a gossip router on a given port bound to a specified interface
+	 * and an expiry time (in msecs) until a cached 'gossip' member entry
+	 * expires.
+	 * 
+	 * <p>
+	 * Remaining two parameters are deprecated and not used.
+	 * 
+	 * @param port
+	 * @param bindAddressString
+	 * @param expiryTime
+	 * @param gossipRequestTimeout
+	 * @param routingClientReplyTimeout
+	 * 
+	 */
     public GossipRouter(int port, String bindAddressString,
                         long expiryTime, long gossipRequestTimeout,
                         long routingClientReplyTimeout) {
@@ -221,18 +240,22 @@ public class GossipRouter {
         return expiryTime;
     }
 
+    @Deprecated
     public void setGossipRequestTimeout(long gossipRequestTimeout) {
         this.gossipRequestTimeout=gossipRequestTimeout;
     }
 
+    @Deprecated
     public long getGossipRequestTimeout() {
         return gossipRequestTimeout;
     }
 
+    @Deprecated
     public void setRoutingClientReplyTimeout(long routingClientReplyTimeout) {
         this.routingClientReplyTimeout=routingClientReplyTimeout;
     }
 
+    @Deprecated
     public long getRoutingClientReplyTimeout() {
         return routingClientReplyTimeout;
     }
