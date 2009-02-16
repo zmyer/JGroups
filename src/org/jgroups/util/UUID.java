@@ -5,13 +5,16 @@ import org.jgroups.Global;
 
 import java.io.*;
 import java.security.SecureRandom;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
 
 /** Logical address which is unique over space and time.
  * <br/>
  * Copied from java.util.UUID, but unneeded fields from the latter have been removed. UUIDs needs to
  * have a small memory footprint.
  * @author Bela Ban
- * @version $Id: UUID.java,v 1.1 2009/02/10 15:22:50 belaban Exp $
+ * @version $Id: UUID.java,v 1.1.2.1 2009/02/16 11:22:06 belaban Exp $
  */
 public final class UUID implements Address, Streamable, Comparable<Address> {
 
@@ -21,6 +24,10 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
 
     /** The random number generator used by this class to create random based UUIDs */
     private static volatile SecureRandom numberGenerator=null;
+
+    /** Keeps track of associations between UUIDs and logical names */
+    private static ConcurrentMap<UUID,String> cache=new ConcurrentHashMap<UUID,String>();
+
     private static final long serialVersionUID=3972962439975931228L;
 
 
@@ -47,13 +54,33 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
     }
 
 
+    public static void add(UUID uuid, String logical_name) {
+        if(uuid != null && logical_name != null)
+            cache.put(uuid, logical_name); // overwrite existing entry
+    }
+
+    public static String get(UUID uuid) {
+        return uuid != null? cache.get(uuid) : null;
+    }
+
+    public static void remove(UUID uuid) {
+        if(uuid != null)
+            cache.remove(uuid);
+    }
+
+    public static String printCache() {
+        StringBuilder sb=new StringBuilder();
+        for(Map.Entry<UUID,String> entry: cache.entrySet()) {
+            sb.append(entry.getValue() + ": " + entry.getKey() + "\n");
+        }
+        return sb.toString();
+    }
+
 
     /**
      * Static factory to retrieve a type 4 (pseudo randomly generated) UUID.
-     *
      * The {@code UUID} is generated using a cryptographically strong pseudo
      * random number generator.
-     *
      * @return  A randomly generated {@code UUID}
      */
     public static UUID randomUUID() {
