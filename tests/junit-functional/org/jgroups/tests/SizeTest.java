@@ -27,7 +27,7 @@ import java.util.*;
 /**
  * Tests whether method size() of a header and its serialized size correspond
  * @author  Bela Ban
- * @version $Id: SizeTest.java,v 1.12 2009/02/10 15:33:39 belaban Exp $
+ * @version $Id: SizeTest.java,v 1.12.2.1 2009/02/16 11:40:30 belaban Exp $
  */
 @Test(groups=Global.FUNCTIONAL)
 public class SizeTest {
@@ -446,6 +446,7 @@ public class SizeTest {
 
     public static void testUUID() throws Exception {
         org.jgroups.util.UUID uuid=org.jgroups.util.UUID.randomUUID();
+        System.out.println("uuid = " + uuid);
         _testSize(uuid);
     }
 

@@ -14,7 +14,7 @@ import java.util.Map;
  * Copied from java.util.UUID, but unneeded fields from the latter have been removed. UUIDs needs to
  * have a small memory footprint.
  * @author Bela Ban
- * @version $Id: UUID.java,v 1.1.2.1 2009/02/16 11:22:06 belaban Exp $
+ * @version $Id: UUID.java,v 1.1.2.2 2009/02/16 11:39:18 belaban Exp $
  */
 public final class UUID implements Address, Streamable, Comparable<Address> {
 
@@ -71,7 +71,7 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
     public static String printCache() {
         StringBuilder sb=new StringBuilder();
         for(Map.Entry<UUID,String> entry: cache.entrySet()) {
-            sb.append(entry.getValue() + ": " + entry.getKey() + "\n");
+            sb.append(entry.getValue() + ": " + entry.getKey().toStringDetailed() + "\n");
         }
         return sb.toString();
     }
@@ -135,6 +135,11 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
      * @return  A string representation of this {@code UUID}
      */
     public String toString() {
+        String val=cache.get(this);
+        return val != null? val : toStringDetailed();
+    }
+
+    public String toStringDetailed() {
         return (digits(mostSigBits >> 32, 8) + "-" +
                 digits(mostSigBits >> 16, 4) + "-" +
                 digits(mostSigBits, 4) + "-" +
