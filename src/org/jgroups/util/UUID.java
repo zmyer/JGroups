@@ -2,6 +2,7 @@ package org.jgroups.util;
 
 import org.jgroups.Address;
 import org.jgroups.Global;
+import org.jgroups.protocols.SIZE;
 
 import java.io.*;
 import java.security.SecureRandom;
@@ -14,7 +15,7 @@ import java.util.Map;
  * Copied from java.util.UUID, but unneeded fields from the latter have been removed. UUIDs needs to
  * have a small memory footprint.
  * @author Bela Ban
- * @version $Id: UUID.java,v 1.1.2.2 2009/02/16 11:39:18 belaban Exp $
+ * @version $Id: UUID.java,v 1.1.2.3 2009/02/16 13:51:34 belaban Exp $
  */
 public final class UUID implements Address, Streamable, Comparable<Address> {
 
@@ -29,6 +30,8 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
     private static ConcurrentMap<UUID,String> cache=new ConcurrentHashMap<UUID,String>();
 
     private static final long serialVersionUID=3972962439975931228L;
+
+    private static final int SIZE=Global.LONG_SIZE * 2;
 
 
     public UUID() {
@@ -219,7 +222,7 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
     }
 
     public int size() {
-        return Global.LONG_SIZE * 2;
+        return SIZE;
     }
 
     public void writeExternal(ObjectOutput out) throws IOException {
