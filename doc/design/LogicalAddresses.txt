@@ -4,7 +4,7 @@ Logical addresses
 =================
 
 Author:  Bela Ban
-Version: $Id: LogicalAddresses.txt,v 1.12 2009/02/11 11:01:26 belaban Exp $
+Version: $Id: LogicalAddresses.txt,v 1.12.2.1 2009/02/16 14:42:17 belaban Exp $
 JIRA:    https://jira.jboss.org/jira/browse/JGRP-129
 
 The address chosen by each node is essentially the IP address and port of the receiver socket. However, for the
@@ -53,9 +53,7 @@ of the receiver is looked up from the cache.
 A UUID can have more than 1 physical address. We envisage providing a pluggable strategy which picks a physical
 address given a UUID. For example, a plugin could load balance between physical addresses.
 
-To exchange cache information, we'll use a simple (TP-internal) protocol similar to ARP. Whenever the cache is changed,
-we set a 'dirty' flag. The next down message(s) will then attached the cache contents to the message in an additional
-I-HAVE header. Receiving nodes will update their local caches upon reception.
+To exchange cache information, we'll use the existing Discovery protocol (see below).
 
 When a physical address for a given UUID is not present, a sender discards (or queues, TBD) the message and broadcasts
 a WHO-HAS message. Receivers then broadcast (or unicast) the UUID-physical address mapping.
@@ -80,7 +78,7 @@ TCPPING:TCP startup
 - The problem is that TCPPING has as initial_hosts the *physical* (not logical) addresses listed !
 - The joiner sends a discovery request to all physical addresses listed in initial_hosts
 - The dest_addr field of a discovery request message is the physical address
-- The transport usually expects UUIDs as addresses and finds the right physical address in the cache
+- The transport usually expects UUIDs as addresses and finds the associated physical address in the cache
 - However, in this case, the transport re-uses the physical address (dest_addr) in the message, bypasses the
   translation UUID --> physical address, and nulls dest_addr in Message
 - The destination address is now *null*. This works because Discovery/PING/TCPPING don't check the messages's
@@ -113,7 +111,7 @@ ARP-like functionality
 ----------------------
 - This is handled by Discovery
 - We'll add WHO-HAS, I-HAVE and INVALIDATE message handling to Discovery
-- Discovery and transport communicate via events
+- The Discovery and transport protocols communicate via events
 - When the transport wants to send a message whose destination UUID is not in its cache, it sends a (non-blocking)
   WHO-HAS up the stack which is handled by Discovery. Meanwhile the message is queued (bounded queue).
 - Discovery sends a WHO-HAS(UUID) message (multicast if PING, sent to initial_hosts in TCPPING, or sent to the
@@ -144,8 +142,8 @@ Startup
 Discovery
 ---------
 - Discovery fetches the local_addr (UUID), logical name and physical address(es) from the transport via a
-  GET-LOCAL-ADDR-INFO
-- A discovery request containing this info is sent out (multicast, unicast via TCP or sent to GossipRouter)
+  GET-LOCAL-ADDRESS
+- A discovery request containing this info is sent out (multicast, unicast via TCP or sent to the GossipRouter)
 - The receivers (Discovery protocols) fetch this info from the message and send it down to the transport, which
   adds it to its cache and to UUID.cache
 - The receivers then fetch their own local information from the transport and send it along with the discovery
@@ -164,6 +162,10 @@ Sending of a message with no physical address available for UUID
 - The transport updates its local cache from the information
 - The transport sends all queued messages if the UUID are now available
 
+
+On view change
+--------------
+- The coordinator's Discovery protocol broadcasts an INVALIDATE(UUID) message for each node which left the cluster
 
 
 TODOs
