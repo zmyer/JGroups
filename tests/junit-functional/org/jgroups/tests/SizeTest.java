@@ -27,7 +27,7 @@ import java.util.*;
 /**
  * Tests whether method size() of a header and its serialized size correspond
  * @author  Bela Ban
- * @version $Id: SizeTest.java,v 1.12.2.2 2009/02/18 07:46:54 belaban Exp $
+ * @version $Id: SizeTest.java,v 1.12.2.3 2009/02/18 07:53:33 belaban Exp $
  */
 @Test(groups=Global.FUNCTIONAL)
 public class SizeTest {
@@ -448,6 +448,18 @@ public class SizeTest {
         org.jgroups.util.UUID uuid=org.jgroups.util.UUID.randomUUID();
         System.out.println("uuid = " + uuid);
         _testSize(uuid);
+
+        uuid=org.jgroups.util.UUID.randomUUID();
+        byte[] buf=Util.streamableToByteBuffer(uuid);
+        org.jgroups.util.UUID uuid2=(org.jgroups.util.UUID)Util.streamableFromByteBuffer(org.jgroups.util.UUID.class, buf);
+        System.out.println("uuid:  " + uuid);
+        System.out.println("uuid2: " + uuid2);
+        assert uuid.equals(uuid2);
+
+        int hash1=uuid.hashCode(), hash2=uuid2.hashCode();
+        System.out.println("hash 1: " + hash1);
+        System.out.println("hash 2: " + hash2);
+        assert hash1 == hash2;
     }
 
 

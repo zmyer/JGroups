@@ -5,6 +5,7 @@ import org.jgroups.Address;
 import org.jgroups.Global;
 import org.jgroups.util.Streamable;
 import org.jgroups.util.Util;
+import org.jgroups.util.UUID;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -15,7 +16,7 @@ import java.io.Serializable;
  * Encapsulates information about a cluster node, e.g. local address, coordinator's addresss, logical name and
  * physical address(es)
  * @author Bela Ban
- * @version $Id: PingData.java,v 1.1.2.1 2009/02/18 07:46:50 belaban Exp $
+ * @version $Id: PingData.java,v 1.1.2.2 2009/02/18 07:53:32 belaban Exp $
  */
 public class PingData implements Serializable, Streamable {
 
@@ -24,6 +25,9 @@ public class PingData implements Serializable, Streamable {
     private Address own_addr=null;
     private Address coord_addr=null;
     private boolean is_server=false;
+
+    private String logical_name=null;
+    private UUID uuid=null;
 
 
     public PingData() {
