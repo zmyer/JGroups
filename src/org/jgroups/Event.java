@@ -1,4 +1,4 @@
-// $Id: Event.java,v 1.63 2008/07/30 11:45:52 belaban Exp $
+// $Id: Event.java,v 1.63.4.1 2009/02/18 10:59:42 belaban Exp $
 
 package org.jgroups;
 
@@ -50,6 +50,9 @@ public class Event {
     public static final int START_PARTITION                    = 82;  // arg = null;
     public static final int STOP_PARTITION                     = 83;  // arg = null; 
     public static final int PREPARE_VIEW                       = 86;  // arg = View
+    public static final int GET_PHYSICAL_ADDRESS               = 87;  // arg = UUID
+    public static final int SET_PHYSICAL_ADDRESS               = 88;  // arg = Tuple<UUID,Address>
+    public static final int REMOVE_PHYSICAL_ADDRESS            = 89;  // arg = UUID
 
     public static final int USER_DEFINED                       = 1000; // arg = <user def., e.g. evt type + data>
 
@@ -134,6 +137,10 @@ public class Event {
             case START_PARTITION:        return "START_PARTITION";
             case STOP_PARTITION:         return "STOP_PARTITION";            
             case PREPARE_VIEW:           return "PREPARE_VIEW";
+            case GET_PHYSICAL_ADDRESS:   return "GET_PHYSICAL_ADDRESS";
+            case SET_PHYSICAL_ADDRESS:   return "SET_PHYSICAL_ADDRESS";
+            case REMOVE_PHYSICAL_ADDRESS: return "REMOVE_PHYSICAL_ADDRESS";
+
             case USER_DEFINED:           return "USER_DEFINED";
             default:                     return "UNDEFINED(" + t + ")";
         }

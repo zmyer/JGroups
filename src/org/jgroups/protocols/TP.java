@@ -8,6 +8,7 @@ import org.jgroups.stack.IpAddress;
 import org.jgroups.stack.Protocol;
 import org.jgroups.util.*;
 import org.jgroups.util.ThreadFactory;
+import org.jgroups.util.UUID;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -44,7 +45,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * The {@link #receive(Address, Address, byte[], int, int)} method must
  * be called by subclasses when a unicast or multicast message has been received.
  * @author Bela Ban
- * @version $Id: TP.java,v 1.239 2008/12/12 08:10:22 belaban Exp $
+ * @version $Id: TP.java,v 1.239.4.1 2009/02/18 10:59:41 belaban Exp $
  */
 @MBean(description="Transport protocol")
 @DeprecatedProperty(names={"bind_to_all_interfaces", "use_incoming_packet_handler", "use_outgoing_packet_handler",
@@ -359,7 +360,14 @@ public abstract class TP extends Protocol {
 
     protected final String name=getName();
 
-    protected PortsManager pm=null;  
+    protected PortsManager pm=null;
+
+
+    /**
+     * Cache which maintains mappings between UUIDs and physical addresses. When sending a message to a UUID destination,
+     * we look up a physical address from uuid_cache and send the message to the physical address
+     */
+    protected final ConcurrentMap<UUID,Address> uuid_cache=new ConcurrentHashMap<UUID,Address>();
    
 
 
@@ -1181,61 +1189,73 @@ public abstract class TP extends Protocol {
     protected Object handleDownEvent(Event evt) {
         switch(evt.getType()) {
 
-        case Event.TMP_VIEW:
-        case Event.VIEW_CHANGE:
-            synchronized(members) {
-                view=(View)evt.getArg();
-                members.clear();
+            case Event.TMP_VIEW:
+            case Event.VIEW_CHANGE:
+                synchronized(members) {
+                    view=(View)evt.getArg();
+                    members.clear();
 
-                if(!isSingleton()) {
-                    Vector<Address> tmpvec=view.getMembers();
-                    members.addAll(tmpvec);
-                }
-                else {
-                    for(Protocol prot: up_prots.values()) {
-                        if(prot instanceof ProtocolAdapter) {
-                            ProtocolAdapter ad=(ProtocolAdapter)prot;
-                            List<Address> tmp=ad.getMembers();
-                            members.addAll(tmp);
+                    if(!isSingleton()) {
+                        Vector<Address> tmpvec=view.getMembers();
+                        members.addAll(tmpvec);
+                    }
+                    else {
+                        for(Protocol prot: up_prots.values()) {
+                            if(prot instanceof ProtocolAdapter) {
+                                ProtocolAdapter ad=(ProtocolAdapter)prot;
+                                List<Address> tmp=ad.getMembers();
+                                members.addAll(tmp);
+                            }
                         }
                     }
                 }
-            }
-            break;
+                break;
 
-        case Event.CONNECT:
-        case Event.CONNECT_WITH_STATE_TRANSFER:    
-            channel_name=(String)evt.getArg();
-            header=new TpHeader(channel_name);
-            setInAllThreadFactories(channel_name, local_addr, thread_naming_pattern);
-            setThreadNames();
-            connectLock.lock();
-            try {
-                handleConnect();
-            }
-            catch(Exception e) {
-                throw new RuntimeException(e);
-            }
-            finally {
-                connectLock.unlock();
-            }
-            return null;
+            case Event.CONNECT:
+            case Event.CONNECT_WITH_STATE_TRANSFER:
+                channel_name=(String)evt.getArg();
+                header=new TpHeader(channel_name);
+                setInAllThreadFactories(channel_name, local_addr, thread_naming_pattern);
+                setThreadNames();
+                connectLock.lock();
+                try {
+                    handleConnect();
+                }
+                catch(Exception e) {
+                    throw new RuntimeException(e);
+                }
+                finally {
+                    connectLock.unlock();
+                }
+                return null;
 
-        case Event.DISCONNECT:
-            unsetThreadNames();
-            connectLock.lock();
-            try {
-                handleDisconnect();
-            }
-            finally {
-                connectLock.unlock();
-            }
-            break;
+            case Event.DISCONNECT:
+                unsetThreadNames();
+                connectLock.lock();
+                try {
+                    handleDisconnect();
+                }
+                finally {
+                    connectLock.unlock();
+                }
+                break;
 
-        case Event.CONFIG:
-            if(log.isDebugEnabled()) log.debug("received CONFIG event: " + evt.getArg());
-            handleConfigEvent((Map<String,Object>)evt.getArg());
-            break;
+            case Event.CONFIG:
+                if(log.isDebugEnabled()) log.debug("received CONFIG event: " + evt.getArg());
+                handleConfigEvent((Map<String,Object>)evt.getArg());
+                break;
+
+            case Event.GET_PHYSICAL_ADDRESS:
+                return getPhysicalAddressFromCache((UUID)evt.getArg());
+
+            case Event.SET_PHYSICAL_ADDRESS:
+                Tuple<UUID,Address> tuple=(Tuple<UUID,Address>)evt.getArg();
+                addPhysicalAddressToCache(tuple.getVal1(), tuple.getVal2());
+                break;
+
+            case Event.REMOVE_PHYSICAL_ADDRESS:
+                removeUUIDFromCache((UUID)evt.getArg());
+                break;
         }
         return null;
     }
@@ -1341,7 +1361,7 @@ public abstract class TP extends Protocol {
         }
     }
 
-    public void sendUpLocalAddressEvent() {
+    protected void sendUpLocalAddressEvent() {
         if(up_prot != null)
             up(new Event(Event.SET_LOCAL_ADDRESS, local_addr));
         else {
@@ -1354,6 +1374,21 @@ public abstract class TP extends Protocol {
             }
         }
     }
+
+    private void addPhysicalAddressToCache(UUID uuid, Address physical_addr) {
+        if(uuid != null && physical_addr != null)
+            uuid_cache.put(uuid, physical_addr);
+    }
+
+    private Address getPhysicalAddressFromCache(UUID uuid) {
+        return uuid != null? uuid_cache.get(uuid) : null;
+    }
+
+    private void removeUUIDFromCache(UUID uuid) {
+        if(uuid != null)
+            uuid_cache.remove(uuid);
+    }
+
 
     /* ----------------------------- End of Private Methods ---------------------------------------- */
 
@@ -1592,6 +1627,20 @@ public abstract class TP extends Protocol {
         /** Returns a list of supported keys */
         String[] supportedKeys();
     }
+
+//    /**
+//     * Maps UUIDs to physical addresses
+//     */
+//    public interface AddressMapper {
+//        /**
+//         * Given a UUID, pick one physical address from a list. If the UUID is null, the message needs to be sent to
+//         * the entire cluster. In UDP, for example, we would pick a multicast address
+//         * @param uuid The UUID. Null for a cluster wide destination
+//         * @param physical_addrs A list of physical addresses
+//         * @return an address from the list
+//         */
+//        Address pick(UUID uuid, List<Address> physical_addrs);
+//    }
 
 
     private class DiagnosticsHandler implements Runnable {

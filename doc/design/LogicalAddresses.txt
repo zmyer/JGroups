@@ -4,7 +4,7 @@ Logical addresses
 =================
 
 Author:  Bela Ban
-Version: $Id: LogicalAddresses.txt,v 1.12.2.2 2009/02/18 09:03:04 belaban Exp $
+Version: $Id: LogicalAddresses.txt,v 1.12.2.3 2009/02/18 10:59:40 belaban Exp $
 JIRA:    https://jira.jboss.org/jira/browse/JGRP-129
 
 The address chosen by each node is essentially the IP address and port of the receiver socket. However, for the
@@ -142,10 +142,10 @@ Startup
 Discovery
 ---------
 - Discovery fetches the local_addr (UUID), logical name and physical address(es) from the transport via a
-  GET-LOCAL-ADDRESS
+  GET_PHYSICAL_ADDRESS
 - A discovery request containing this info is sent out (multicast, unicast via TCP or sent to the GossipRouter)
-- The receivers (Discovery protocols) fetch this info from the message and send it down to the transport, which
-  adds it to its cache and to UUID.cache
+- The receivers (Discovery protocols) fetch this info from the message and send it down to the transport
+  (via a SET_PHYSICAL_ADDRESS), which adds it to its cache and to UUID.cache
 - The receivers then fetch their own local information from the transport and send it along with the discovery
   response
 - On reception of the discovery response, the requester extracts this info from the message and sends it
@@ -166,6 +166,8 @@ Sending of a message with no physical address available for UUID
 On view change
 --------------
 - The coordinator's Discovery protocol broadcasts an INVALIDATE(UUID) message for each node which left the cluster
+- On reception, every receiver sends down a REMOVE_PHYSICAL_ADDRESS(UUID)
+- The transport then removes the mapping for the given UUID
 
 
 TODOs
