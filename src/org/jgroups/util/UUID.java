@@ -2,20 +2,19 @@ package org.jgroups.util;
 
 import org.jgroups.Address;
 import org.jgroups.Global;
-import org.jgroups.protocols.SIZE;
 
 import java.io.*;
 import java.security.SecureRandom;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /** Logical address which is unique over space and time.
  * <br/>
  * Copied from java.util.UUID, but unneeded fields from the latter have been removed. UUIDs needs to
  * have a small memory footprint.
  * @author Bela Ban
- * @version $Id: UUID.java,v 1.1.2.5 2009/02/18 11:43:11 belaban Exp $
+ * @version $Id: UUID.java,v 1.1.2.6 2009/02/18 16:05:00 belaban Exp $
  */
 public final class UUID implements Address, Streamable, Comparable<Address> {
     private long   mostSigBits;
@@ -25,8 +24,8 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
     /** The random number generator used by this class to create random based UUIDs */
     private static volatile SecureRandom numberGenerator=null;
 
-    /** Keeps track of associations between UUIDs and logical names */
-    private static ConcurrentMap<UUID,String> cache=new ConcurrentHashMap<UUID,String>();
+    /** Keeps track of associations between logical addresses (UUIDs) and logical names */
+    private static ConcurrentMap<Address,String> cache=new ConcurrentHashMap<Address,String>();
 
     private static final long serialVersionUID=3972962439975931228L;
 
@@ -61,8 +60,8 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
             cache.put(uuid, logical_name); // overwrite existing entry
     }
 
-    public static String get(UUID uuid) {
-        return uuid != null? cache.get(uuid) : null;
+    public static String get(Address logical_addr) {
+        return logical_addr != null? cache.get(logical_addr) : null;
     }
 
     public static void remove(UUID uuid) {
@@ -72,8 +71,8 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
 
     public static String printCache() {
         StringBuilder sb=new StringBuilder();
-        for(Map.Entry<UUID,String> entry: cache.entrySet()) {
-            sb.append(entry.getValue() + ": " + entry.getKey().toStringDetailed() + "\n");
+        for(Map.Entry<Address,String> entry: cache.entrySet()) {
+            sb.append(entry.getValue() + ": " + entry.getKey().toString() + "\n");
         }
         return sb.toString();
     }
@@ -81,6 +80,8 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
     /**
      * Returns the additional_data.
      * @return byte[]
+     * @since 2.8
+     * @deprecated Will be removed in 3.0. This was only added to be backwards compatible with 2.7
      */
     public final byte[] getAdditionalData() {
         return additional_data;
@@ -89,6 +90,8 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
     /**
      * Sets the additional_data.
      * @param additional_data The additional_data to set
+     * @since 2.8
+     * @deprecated Will be removed in 3.0. This was only added to be backwards compatible with 2.7
      */
     public final void setAdditionalData(byte[] additional_data) {
         this.additional_data=additional_data;
@@ -127,7 +130,13 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
 
 
 
-    /**
+
+    public String toStringShort() {
+        String val=cache.get(this);
+        return val != null? val : toString();
+    }
+
+     /**
      * Returns a {@code String} object representing this {@code UUID}.
      *
      * <p> The UUID string representation is as described by this BNF:
@@ -152,11 +161,6 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
      * @return  A string representation of this {@code UUID}
      */
     public String toString() {
-        String val=cache.get(this);
-        return val != null? val : toStringDetailed();
-    }
-
-    public String toStringDetailed() {
         return (digits(mostSigBits >> 32, 8) + "-" +
                 digits(mostSigBits >> 16, 4) + "-" +
                 digits(mostSigBits, 4) + "-" +

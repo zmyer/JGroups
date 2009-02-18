@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: Discovery.java,v 1.52.4.1 2009/02/18 07:46:50 belaban Exp $
+ * @version $Id: Discovery.java,v 1.52.4.2 2009/02/18 16:05:01 belaban Exp $
  */
 @MBean
 public abstract class Discovery extends Protocol {   

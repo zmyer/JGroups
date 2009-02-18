@@ -2,7 +2,6 @@
 package org.jgroups.tests;
 
 
-import org.testng.annotations.*;
 import org.jgroups.*;
 import org.jgroups.blocks.RequestCorrelator;
 import org.jgroups.mux.MuxHeader;
@@ -10,24 +9,19 @@ import org.jgroups.mux.ServiceInfo;
 import org.jgroups.protocols.*;
 import org.jgroups.protocols.pbcast.*;
 import org.jgroups.stack.IpAddress;
-import org.jgroups.util.Digest;
-import org.jgroups.util.MutableDigest;
-import org.jgroups.util.Streamable;
-import org.jgroups.util.Util;
+import org.jgroups.util.*;
+import org.jgroups.util.UUID;
 import org.testng.Assert;
+import org.testng.annotations.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
+import java.io.*;
 import java.util.*;
-
 
 
 /**
  * Tests whether method size() of a header and its serialized size correspond
  * @author  Bela Ban
- * @version $Id: SizeTest.java,v 1.12.2.5 2009/02/18 11:43:13 belaban Exp $
+ * @version $Id: SizeTest.java,v 1.12.2.6 2009/02/18 16:05:05 belaban Exp $
  */
 @Test(groups=Global.FUNCTIONAL)
 public class SizeTest {
@@ -48,49 +42,65 @@ public class SizeTest {
         PingData rsp=new PingData(self, self, true);
         _testSize(new PingHeader(PingHeader.GET_MBRS_RSP, rsp));
     }
-
+ 
 
     public static void testPingData() throws Exception {
         PingData data;
-        final Address own=new IpAddress("192.168.1.33", 7800);
-        final Address coord=new IpAddress("167.1.2.3", 5555);
+        final Address own=org.jgroups.util.UUID.randomUUID();
+        final Address coord=org.jgroups.util.UUID.randomUUID();
+        final Address physical_addr_1=new IpAddress("127.0.0.1", 7500);
+        final Address physical_addr_2=new IpAddress("192.168.1.5", 6000);
+        final Address physical_addr_3=new IpAddress("192.134.2.1", 6655);
+
+
         data=new PingData(null, null, false);
         _testSize(data);
 
         data=new PingData(own, coord, false);
         _testSize(data);
 
-        data=new PingData(null, null, false, "node-1", null, null);
+        data=new PingData(null, null, false, "node-1", null);
         _testSize(data);
 
-        data=new PingData(own, coord, false, "node-1", null, null);
+        data=new PingData(own, coord, false, "node-1", null);
         _testSize(data);
 
-        data=new PingData(null, null, false, "node-1", org.jgroups.util.UUID.randomUUID(), null);
+        data=new PingData(own, coord, false, "node-1", new ArrayList<Address>(7));
         _testSize(data);
 
-        data=new PingData(own, coord, false, "node-1", org.jgroups.util.UUID.randomUUID(), null);
-        _testSize(data);
-
-        data=new PingData(own, coord, false, "node-1", org.jgroups.util.UUID.randomUUID(), new ArrayList<Address>(7));
-        _testSize(data);
-
-        data=new PingData(null, null, false, "node-1", org.jgroups.util.UUID.randomUUID(), new ArrayList<Address>(7));
+        data=new PingData(null, null, false, "node-1", new ArrayList<Address>(7));
         _testSize(data);
 
         List<Address> list=new ArrayList<Address>();
-        list.add(own);
-        list.add(coord);
-        list.add(new IpAddress("127.0.0.1", 7500));
-        data=new PingData(null, null, false, "node-1", org.jgroups.util.UUID.randomUUID(), list);
+        list.add(physical_addr_1);
+        list.add(physical_addr_2);
+        list.add(physical_addr_3);
+        data=new PingData(null, null, false, "node-1", list);
         _testSize(data);
 
         list.clear();
         list.add(new IpAddress("127.0.0.1", 7500));
-        data=new PingData(null, null, false, "node-1", org.jgroups.util.UUID.randomUUID(), list);
+        data=new PingData(null, null, false, "node-1", list);
         _testSize(data);
     }
 
+
+    public static void testDigest() throws Exception {
+        IpAddress addr=new IpAddress("127.0.0.1", 5555);
+        MutableDigest mutableDigest=new MutableDigest(2);
+        mutableDigest.add(addr, 100, 200, 205);
+        mutableDigest.add(new IpAddress(2314), 102, 104, 105);
+        _testSize(mutableDigest);
+
+        Digest digest=new Digest();
+        _testSize(digest);
+
+        digest=new Digest(10);
+        _testSize(digest);
+
+        digest=new Digest(new IpAddress("192.168.1.5", 7500), 10, 45, 50);
+        _testSize(digest);
+    }
 
     public static void testNakackHeader() throws Exception {
         _testSize(new NakAckHeader(NakAckHeader.MSG, 322649));
@@ -485,6 +495,73 @@ public class SizeTest {
         _testSize(addr);
     }
 
+    public static void testWriteAddress() throws IOException, IllegalAccessException, InstantiationException {
+        UUID uuid=UUID.randomUUID();
+        _testWriteAddress(uuid);
+
+        uuid.setAdditionalData("Bela Ban".getBytes());
+        _testWriteAddress(uuid);
+
+        IpAddress addr=new IpAddress(7500);
+        _testWriteAddress(addr);
+
+        addr=new IpAddress("127.0.0.1", 5678);
+        _testWriteAddress(addr);
+
+        addr.setAdditionalData("Bela Ban".getBytes());
+        _testWriteAddress(addr);
+    }
+
+    private static void _testWriteAddress(Address addr) throws IOException, InstantiationException, IllegalAccessException {
+        int len=Util.size(addr);
+        ByteArrayOutputStream output=new ByteArrayOutputStream();
+        DataOutputStream out=new DataOutputStream(output);
+        Util.writeAddress(addr, out);
+        out.flush();
+        byte[] buf=output.toByteArray();
+        out.close();
+
+        System.out.println("\nlen=" + len + ", serialized length=" + buf.length);
+        assert len == buf.length;
+        DataInputStream in=new DataInputStream(new ByteArrayInputStream(buf));
+        Address new_addr=Util.readAddress(in);
+        System.out.println("old addr=" + addr + "\nnew addr=" + new_addr);
+        assert addr.equals(new_addr);
+    }
+
+
+
+    public static void testWriteAddresses() throws IOException, IllegalAccessException, InstantiationException {
+        List<Address> list=new ArrayList<Address>();
+        for(int i=0; i < 3; i++)
+            list.add(UUID.randomUUID());
+        _testWriteAddresses(list);
+
+        list.clear();
+        list.add(new IpAddress(7500));
+        list.add(new IpAddress("192.168.1.5", 4444));
+        list.add(new IpAddress("127.0.0.1", 5674));
+        _testWriteAddresses(list);
+    }
+
+    private static void _testWriteAddresses(List<Address> list) throws IOException, InstantiationException, IllegalAccessException {
+        long len=Util.size(list);
+        ByteArrayOutputStream output=new ByteArrayOutputStream();
+        DataOutputStream out=new DataOutputStream(output);
+        Util.writeAddresses(list, out);
+        out.flush();
+        byte[] buf=output.toByteArray();
+        out.close();
+
+        System.out.println("\nlen=" + len + ", serialized length=" + buf.length);
+        assert len == buf.length;
+        DataInputStream in=new DataInputStream(new ByteArrayInputStream(buf));
+        Collection<Address> new_list=Util.readAddresses(in, ArrayList.class);
+        System.out.println("old list=" + list + "\nnew list=" + new_list);
+        assert list.equals(new_list);
+    }
+
+
 
     public static void testUUID() throws Exception {
         org.jgroups.util.UUID uuid=org.jgroups.util.UUID.randomUUID();
@@ -566,6 +643,14 @@ public class SizeTest {
         _testSize(new MuxHeader(si));
     }
 
+
+    private static void _testSize(Digest digest) throws Exception {
+        long len=digest.serializedSize();
+        byte[] serialized_form=Util.streamableToByteBuffer(digest);
+        System.out.println("digest = " + digest);
+        System.out.println("size=" + len + ", serialized size=" + serialized_form.length);
+        assert len == serialized_form.length;
+    }
 
     private static void _testSize(Header hdr) throws Exception {
         long size=hdr.size();

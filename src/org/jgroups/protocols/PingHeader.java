@@ -1,4 +1,4 @@
-// $Id: PingHeader.java,v 1.12.4.1 2009/02/18 07:46:50 belaban Exp $
+// $Id: PingHeader.java,v 1.12.4.2 2009/02/18 16:05:02 belaban Exp $
 
 package org.jgroups.protocols;
 
@@ -30,6 +30,11 @@ public class PingHeader extends Header implements Streamable {
     public PingHeader(byte type, PingData arg) {
         this.type=type;
         this.arg=arg;
+    }
+
+    public PingHeader(byte type, PingData arg, String cluster_name) {
+        this(type, arg);
+        this.cluster_name=cluster_name;
     }
 
     public int size() {

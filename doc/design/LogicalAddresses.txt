@@ -4,7 +4,7 @@ Logical addresses
 =================
 
 Author:  Bela Ban
-Version: $Id: LogicalAddresses.txt,v 1.12.2.3 2009/02/18 10:59:40 belaban Exp $
+Version: $Id: LogicalAddresses.txt,v 1.12.2.4 2009/02/18 16:05:04 belaban Exp $
 JIRA:    https://jira.jboss.org/jira/browse/JGRP-129
 
 The address chosen by each node is essentially the IP address and port of the receiver socket. However, for the
@@ -181,6 +181,7 @@ TODOs
   the logical name, but maybe the host name and a random short
 - Util.writeAddress()/writeAddresses(): currently optimized for IpAddress, change to UUID.
   Example: View.writeTo()/readFrom()
+- How are we going to associate logical names to channels when a shared transport is used ?
 
 
 

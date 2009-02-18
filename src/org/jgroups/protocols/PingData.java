@@ -17,14 +17,13 @@ import java.util.ArrayList;
  * Encapsulates information about a cluster node, e.g. local address, coordinator's addresss, logical name and
  * physical address(es)
  * @author Bela Ban
- * @version $Id: PingData.java,v 1.1.2.3 2009/02/18 09:03:05 belaban Exp $
+ * @version $Id: PingData.java,v 1.1.2.4 2009/02/18 16:05:02 belaban Exp $
  */
 public class PingData implements Streamable {
     private Address own_addr=null;
     private Address coord_addr=null;
     private boolean is_server=false;
     private String logical_name=null;
-    private UUID uuid=null;
     private List<Address> physical_addrs=null;
 
 
@@ -39,10 +38,9 @@ public class PingData implements Streamable {
 
 
     public PingData(Address own_addr, Address coord_addr, boolean is_server,
-                    String logical_name, UUID uuid, List<Address> physical_addrs) {
+                    String logical_name, List<Address> physical_addrs) {
         this(own_addr, coord_addr, is_server);
         this.logical_name=logical_name;
-        this.uuid=uuid;
         if(physical_addrs != null) {
             this.physical_addrs=new ArrayList<Address>(physical_addrs);
         }
@@ -73,10 +71,6 @@ public class PingData implements Streamable {
         return logical_name;
     }
 
-    public UUID getUUID() {
-        return uuid;
-    }
-
     public List<Address> getPhysicalAddrs() {
         return physical_addrs;
     }
@@ -103,8 +97,6 @@ public class PingData implements Streamable {
                 .append(", is_server=").append(is_server).append(", is_coord=" + isCoord());
         if(logical_name != null)
             sb.append(", logical_name=").append(logical_name);
-        if(uuid != null)
-            sb.append(", uuid=").append(uuid.toStringDetailed());
         if(physical_addrs != null && !physical_addrs.isEmpty())
             sb.append(", physical_addrs=").append(Util.printListWithDelimiter(physical_addrs, ", "));
         return sb.toString();
@@ -115,7 +107,6 @@ public class PingData implements Streamable {
         Util.writeAddress(coord_addr, outstream);
         outstream.writeBoolean(is_server);
         Util.writeString(logical_name, outstream);
-        Util.writeStreamable(uuid, outstream);
         Util.writeAddresses(physical_addrs, outstream);
     }
 
@@ -124,28 +115,27 @@ public class PingData implements Streamable {
         coord_addr=Util.readAddress(instream);
         is_server=instream.readBoolean();
         logical_name=Util.readString(instream);
-        uuid=(UUID)Util.readStreamable(UUID.class, instream);
         physical_addrs=(List<Address>)Util.readAddresses(instream, ArrayList.class);
     }
 
     public int size() {
-        int retval=Global.BYTE_SIZE * 3; // for is_server, plus 2 presence bytes
-        if(own_addr != null) {
-            retval+=Global.BYTE_SIZE; // 1 boolean for: IpAddress or other address ?
-            retval+=own_addr.size();
-        }
-        if(coord_addr != null) {
-            retval+=Global.BYTE_SIZE; // 1 boolean for: IpAddress or other address ?
-            retval+=coord_addr.size();
-        }
+        int retval=Global.BYTE_SIZE; // for is_server
+
+        retval+=Util.size(own_addr);
+        retval+=Util.size(coord_addr);
+
+//        if(own_addr != null) {
+//            retval+=Global.BYTE_SIZE; // 1 boolean for: IpAddress or other address ?
+//            retval+=Util.size(own_addr);
+//        }
+//        if(coord_addr != null) {
+//            retval+=Global.BYTE_SIZE; // 1 boolean for: IpAddress or other address ?
+//            retval+=Util.size(coord_addr);
+//        }
 
         retval+=Global.BYTE_SIZE;     // presence byte for logical_name
         if(logical_name != null)
             retval+=logical_name.length() +2;
-
-        retval+=Global.BYTE_SIZE;     // presence byte for uuid
-        if(uuid != null)
-            retval+=uuid.size();
 
         retval+=Util.size(physical_addrs);
 

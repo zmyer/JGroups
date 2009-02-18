@@ -28,7 +28,7 @@ import java.util.*;
 /**
  * Collection of various utility routines that can not be assigned to other classes.
  * @author Bela Ban
- * @version $Id: Util.java,v 1.187.2.1 2009/02/18 07:46:51 belaban Exp $
+ * @version $Id: Util.java,v 1.187.2.2 2009/02/18 16:05:00 belaban Exp $
  */
 public class Util {
 
@@ -230,6 +230,18 @@ public class Util {
         }
     }
 
+
+    public static byte setFlag(byte bits, byte flag) {
+        return bits |= flag;
+    }
+
+    public static boolean isFlagSet(byte bits, byte flag) {
+        return (bits & flag) == flag;
+    }
+
+    public static byte clearFlags(byte bits, byte flag) {
+        return bits &= ~flag;
+    }
 
 
     /**
@@ -680,12 +692,7 @@ public class Util {
         return result;
     }
 
-    public static int size(Address addr) {
-        int retval=Global.BYTE_SIZE; // presence byte
-        if(addr != null)
-            retval+=addr.size() + Global.BYTE_SIZE; // plus type of address
-        return retval;
-    }
+
 
     public static void writeAuthToken(AuthToken token, DataOutputStream out) throws IOException{
         Util.writeString(token.getName(), out);
@@ -706,28 +713,42 @@ public class Util {
     }
 
     public static void writeAddress(Address addr, DataOutputStream out) throws IOException {
+        byte flags=0;
+        boolean streamable_addr=true;
+
         if(addr == null) {
-            out.writeBoolean(false);
+            flags=Util.setFlag(flags, Address.NULL);
+            out.writeByte(flags);
             return;
         }
-
-        out.writeBoolean(true);
-        if(addr instanceof IpAddress) {
-            // regular case, we don't need to include class information about the type of Address, e.g. JmsAddress
-            out.writeBoolean(true);
-            addr.writeTo(out);
+        if(addr instanceof UUID) {
+            flags=Util.setFlag(flags, Address.UUID_ADDR);
+        }
+        else if(addr instanceof IpAddress) {
+            flags=Util.setFlag(flags, Address.IP_ADDR);
         }
         else {
-            out.writeBoolean(false);
-            writeOtherAddress(addr, out);
+            streamable_addr=false;
         }
+
+        out.writeByte(flags);
+        if(streamable_addr)
+            addr.writeTo(out);
+        else
+            writeOtherAddress(addr, out);
     }
 
     public static Address readAddress(DataInputStream in) throws IOException, IllegalAccessException, InstantiationException {
-        Address addr=null;
-        if(in.readBoolean() == false)
+        byte flags=in.readByte();
+        if(Util.isFlagSet(flags, Address.NULL))
             return null;
-        if(in.readBoolean()) {
+
+        Address addr;
+        if(Util.isFlagSet(flags, Address.UUID_ADDR)) {
+            addr=new UUID();
+            addr.readFrom(in);
+        }
+        else if(Util.isFlagSet(flags, Address.IP_ADDR)) {
             addr=new IpAddress();
             addr.readFrom(in);
         }
@@ -737,21 +758,25 @@ public class Util {
         return addr;
     }
 
+    public static int size(Address addr) {
+        int retval=Global.BYTE_SIZE; // flags
+        if(addr != null) {
+            if(addr instanceof UUID || addr instanceof IpAddress)
+                retval+=addr.size();
+            else {
+                retval+=Global.SHORT_SIZE; // magic number
+                retval+=addr.size();
+            }
+        }
+        return retval;
+    }
+
     private static Address readOtherAddress(DataInputStream in) throws IOException, IllegalAccessException, InstantiationException {
-        int b=in.read();
-        short magic_number;
-        String classname;
-        Class cl=null;
-        Address addr;
-        if(b == 1) {
-            magic_number=in.readShort();
-            cl=ClassConfigurator.get(magic_number);
-        }
-        else {
-            classname=in.readUTF();
-            cl=ClassConfigurator.get(classname);
-        }
-        addr=(Address)cl.newInstance();
+        short magic_number=in.readShort();
+        Class cl=ClassConfigurator.get(magic_number);
+        if(cl == null)
+            throw new RuntimeException("class for magic number " + magic_number + " not found");
+        Address addr=(Address)cl.newInstance();
         addr.readFrom(in);
         return addr;
     }
@@ -760,16 +785,10 @@ public class Util {
         short magic_number=ClassConfigurator.getMagicNumber(addr.getClass());
 
         // write the class info
-        if(magic_number == -1) {
-            out.write(0);
-            out.writeUTF(addr.getClass().getName());
-        }
-        else {
-            out.write(1);
-            out.writeShort(magic_number);
-        }
+        if(magic_number == -1)
+            throw new RuntimeException("magic number " + magic_number + " not found");
 
-        // write the data itself
+        out.writeShort(magic_number);
         addr.writeTo(out);
     }
 

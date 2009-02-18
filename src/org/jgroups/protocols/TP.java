@@ -45,7 +45,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * The {@link #receive(Address, Address, byte[], int, int)} method must
  * be called by subclasses when a unicast or multicast message has been received.
  * @author Bela Ban
- * @version $Id: TP.java,v 1.239.4.3 2009/02/18 11:43:09 belaban Exp $
+ * @version $Id: TP.java,v 1.239.4.4 2009/02/18 16:05:01 belaban Exp $
  */
 @MBean(description="Transport protocol")
 @DeprecatedProperty(names={"bind_to_all_interfaces", "use_incoming_packet_handler", "use_outgoing_packet_handler",
@@ -364,12 +364,12 @@ public abstract class TP extends Protocol {
 
 
     /**
-     * Cache which maintains mappings between UUIDs and physical addresses. When sending a message to a UUID destination,
-     * we look up a physical address from uuid_cache and send the message to the physical address
+     * Cache which maintains mappings between logical and physical addresses. When sending a message to a logical
+     * address,  we look up the physical address from logical_addr_cache and send the message to the physical address
+     * <br/>
+     * The keys are logical addresses, the values physical addresses
      */
-    protected final ConcurrentMap<UUID,Address> uuid_cache=new ConcurrentHashMap<UUID,Address>();
-   
-
+    protected final ConcurrentMap<Address,Address> logical_addr_cache=new ConcurrentHashMap<Address,Address>();
 
 
     /**
@@ -665,19 +665,19 @@ public abstract class TP extends Protocol {
         return log_discard_msgs;
     }
 
-    @ManagedOperation(description="Dumps the contents of the UUID cache")
+    @ManagedOperation(description="Dumps the contents of the logical address cache")
     public String printUUIDCache() {
         StringBuilder sb=new StringBuilder();
         String logical_name;
-        UUID uuid;
+        Address logical_addr;
         Address physical_addr;
-        for(Map.Entry<UUID,Address> entry: uuid_cache.entrySet()) {
-            uuid=entry.getKey();
+        for(Map.Entry<Address,Address> entry: logical_addr_cache.entrySet()) {
+            logical_addr=entry.getKey();
             physical_addr=entry.getValue();
-            logical_name=UUID.get(uuid);
+            logical_name=UUID.get(logical_addr);
             if(logical_name != null)
                 sb.append(logical_name).append(": ");
-            sb.append(uuid).append(": ").append(physical_addr).append("\n");
+            sb.append(logical_addr).append(": ").append(physical_addr).append("\n");
         }
         return sb.toString();
     }
@@ -1127,7 +1127,14 @@ public abstract class TP extends Protocol {
             sendToAllMembers(buf.getBuf(), buf.getOffset(), buf.getLength());
         }
         else {
-            sendToSingleMember(dest, buf.getBuf(), buf.getOffset(), buf.getLength());
+            Address physical_dest=getPhysicalAddressFromCache(dest);
+            if(physical_dest == null) {
+                // todo: place msg on bounded buffer, send WHO-HAS event up. When result is received, send queued msgs
+                if(log.isWarnEnabled())
+                    log.warn("failed fetching physical address for " + dest + ", dropping message");
+                return;
+            }
+            sendToSingleMember(physical_dest, buf.getBuf(), buf.getOffset(), buf.getLength());
         }
     }
 
@@ -1271,7 +1278,7 @@ public abstract class TP extends Protocol {
                 break;
 
             case Event.REMOVE_PHYSICAL_ADDRESS:
-                removeUUIDFromCache((UUID)evt.getArg());
+                removeLogicalAddressFromCache((UUID)evt.getArg());
                 break;
         }
         return null;
@@ -1392,18 +1399,18 @@ public abstract class TP extends Protocol {
         }
     }
 
-    protected void addPhysicalAddressToCache(UUID uuid, Address physical_addr) {
-        if(uuid != null && physical_addr != null)
-            uuid_cache.put(uuid, physical_addr);
+    protected void addPhysicalAddressToCache(Address logical_addr, Address physical_addr) {
+        if(logical_addr != null && physical_addr != null)
+            logical_addr_cache.put(logical_addr, physical_addr);
     }
 
-    protected Address getPhysicalAddressFromCache(UUID uuid) {
-        return uuid != null? uuid_cache.get(uuid) : null;
+    protected Address getPhysicalAddressFromCache(Address logical_addr) {
+        return logical_addr != null? logical_addr_cache.get(logical_addr) : null;
     }
 
-    protected void removeUUIDFromCache(UUID uuid) {
-        if(uuid != null)
-            uuid_cache.remove(uuid);
+    protected void removeLogicalAddressFromCache(Address logical_addr) {
+        if(logical_addr != null)
+            logical_addr_cache.remove(logical_addr);
     }
 
 
