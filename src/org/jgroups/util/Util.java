@@ -8,7 +8,7 @@ import org.jgroups.blocks.Connection;
 import org.jgroups.conf.ClassConfigurator;
 import org.jgroups.protocols.FD;
 import org.jgroups.protocols.PingHeader;
-import org.jgroups.protocols.PingRsp;
+import org.jgroups.protocols.PingData;
 import org.jgroups.stack.IpAddress;
 
 import javax.management.MBeanServer;
@@ -28,7 +28,7 @@ import java.util.*;
 /**
  * Collection of various utility routines that can not be assigned to other classes.
  * @author Bela Ban
- * @version $Id: Util.java,v 1.187 2009/02/12 16:39:34 vlada Exp $
+ * @version $Id: Util.java,v 1.187.2.1 2009/02/18 07:46:51 belaban Exp $
  */
 public class Util {
 
@@ -1907,12 +1907,12 @@ public class Util {
     }
 
 
-    public static String printPingRsps(List<PingRsp> rsps) {
+    public static String printPingData(List<PingData> rsps) {
         StringBuilder sb=new StringBuilder();
         if(rsps != null) {
             int total=rsps.size();
             int servers=0, clients=0, coords=0;
-            for(PingRsp rsp: rsps) {
+            for(PingData rsp: rsps) {
                 if(rsp.isCoord())
                     coords++;
                 if(rsp.isServer())
@@ -3227,7 +3227,6 @@ public class Util {
             return null;
         }
     }
-
 
 
 }

@@ -5,7 +5,7 @@ package org.jgroups.tests;
 import org.testng.annotations.*;
 import org.jgroups.*;
 import org.jgroups.protocols.PingHeader;
-import org.jgroups.protocols.PingRsp;
+import org.jgroups.protocols.PingData;
 import org.jgroups.protocols.TpHeader;
 import org.jgroups.stack.IpAddress;
 import org.jgroups.util.Util;
@@ -115,7 +115,7 @@ public class StreamableTest {
         dest=new IpAddress("228.1.2.3", 5555);
         src=new IpAddress("127.0.0.1", 6666);
         Message msg=new Message(dest, src, "Hello world".getBytes());
-        PingHeader hdr=new PingHeader(PingHeader.GET_MBRS_REQ, new PingRsp(src, src, true));
+        PingHeader hdr=new PingHeader(PingHeader.GET_MBRS_REQ, new PingData(src, src, true));
         msg.putHeader("ping-header", hdr);
         TpHeader udp_hdr=new TpHeader("bla");
         msg.putHeader("udp-header", udp_hdr);
@@ -131,7 +131,7 @@ public class StreamableTest {
         src=new IpAddress("127.0.0.1", 6666);
         src.setAdditionalData("foobar".getBytes());
         Message msg=new Message(dest, src, "Hello world".getBytes());
-        PingHeader hdr=new PingHeader(PingHeader.GET_MBRS_REQ, new PingRsp(src, src, false));
+        PingHeader hdr=new PingHeader(PingHeader.GET_MBRS_REQ, new PingData(src, src, false));
         msg.putHeader("ping-header", hdr);
         TpHeader udp_hdr=new TpHeader("bla");
         msg.putHeader("udp-header", udp_hdr);

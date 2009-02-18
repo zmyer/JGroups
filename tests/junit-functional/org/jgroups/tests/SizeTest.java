@@ -27,7 +27,7 @@ import java.util.*;
 /**
  * Tests whether method size() of a header and its serialized size correspond
  * @author  Bela Ban
- * @version $Id: SizeTest.java,v 1.12.2.1 2009/02/16 11:40:30 belaban Exp $
+ * @version $Id: SizeTest.java,v 1.12.2.2 2009/02/18 07:46:54 belaban Exp $
  */
 @Test(groups=Global.FUNCTIONAL)
 public class SizeTest {
@@ -40,12 +40,12 @@ public class SizeTest {
 
     public static void testPingHeader() throws Exception {
         _testSize(new PingHeader(PingHeader.GET_MBRS_REQ, "bla"));
-        _testSize(new PingHeader(PingHeader.GET_MBRS_RSP, new PingRsp()));
-        _testSize(new PingHeader(PingHeader.GET_MBRS_RSP, (PingRsp)null));
+        _testSize(new PingHeader(PingHeader.GET_MBRS_RSP, new PingData()));
+        _testSize(new PingHeader(PingHeader.GET_MBRS_RSP, (PingData)null));
         _testSize(new PingHeader(PingHeader.GET_MBRS_RSP, (String)null));
-        _testSize(new PingHeader(PingHeader.GET_MBRS_RSP, new PingRsp(new IpAddress(4444), null, true)));
+        _testSize(new PingHeader(PingHeader.GET_MBRS_RSP, new PingData(new IpAddress(4444), null, true)));
         IpAddress self=new IpAddress("127.0.0.1", 5555);
-        PingRsp rsp=new PingRsp(self, self, true);
+        PingData rsp=new PingData(self, self, true);
         _testSize(new PingHeader(PingHeader.GET_MBRS_RSP, rsp));
     }
 

@@ -15,9 +15,9 @@ import java.io.Serializable;
  * Encapsulates information about a cluster node, e.g. local address, coordinator's addresss, logical name and
  * physical address(es)
  * @author Bela Ban
- * @version $Id: PingRsp.java,v 1.16.4.1 2009/02/18 07:39:04 belaban Exp $
+ * @version $Id: PingData.java,v 1.1.2.1 2009/02/18 07:46:50 belaban Exp $
  */
-public class PingRsp implements Serializable, Streamable {
+public class PingData implements Serializable, Streamable {
 
     private static final long serialVersionUID=3634334590904551586L;
 
@@ -26,19 +26,19 @@ public class PingRsp implements Serializable, Streamable {
     private boolean is_server=false;
 
 
-    public PingRsp() {
+    public PingData() {
     }
 
-    public PingRsp(Address own_addr,Address coord_addr,boolean is_server) {
+    public PingData(Address own_addr,Address coord_addr,boolean is_server) {
         this.own_addr=own_addr;
         this.coord_addr=coord_addr;
         this.is_server=is_server;
     }
 
     public boolean equals(Object obj) {
-        if(!(obj instanceof PingRsp))
+        if(!(obj instanceof PingData))
             return false;
-        PingRsp other=(PingRsp)obj;
+        PingData other=(PingData)obj;
         return own_addr != null && own_addr.equals(other.own_addr);
     }
 
