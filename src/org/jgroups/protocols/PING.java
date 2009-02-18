@@ -33,7 +33,7 @@ import java.util.Vector;
  * property: gossip_host - if you are using GOSSIP then this defines the host of the GossipRouter, default is null
  * property: gossip_port - if you are using GOSSIP then this defines the port of the GossipRouter, default is null
  * @author Bela Ban
- * @version $Id: PING.java,v 1.52.2.1 2009/02/18 16:05:01 belaban Exp $
+ * @version $Id: PING.java,v 1.52.2.2 2009/02/18 17:37:31 belaban Exp $
  */
 public class PING extends Discovery {
     
@@ -268,8 +268,9 @@ public class PING extends Discovery {
             }
             else {
                 // 1. Mcast GET_MBRS_REQ message
-                Address physical_addr=(Address)down(new Event(Event.GET_PHYSICAL_ADDRESS));
+                Address physical_addr=(Address)down(new Event(Event.GET_PHYSICAL_ADDRESS, local_addr));
                 List<Address> physical_addrs=new ArrayList<Address>(1);
+                physical_addrs.add(physical_addr);
                 PingData data=new PingData(local_addr, null, false, UUID.get(local_addr), physical_addrs);
                 hdr=new PingHeader(PingHeader.GET_MBRS_REQ, data, cluster_name);
                 msg=new Message(null);  // mcast msg

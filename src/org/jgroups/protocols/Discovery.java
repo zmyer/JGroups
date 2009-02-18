@@ -7,9 +7,7 @@ import org.jgroups.annotations.ManagedAttribute;
 import org.jgroups.annotations.Property;
 import org.jgroups.protocols.pbcast.JoinRsp;
 import org.jgroups.stack.Protocol;
-import org.jgroups.util.Promise;
-import org.jgroups.util.TimeScheduler;
-import org.jgroups.util.Util;
+import org.jgroups.util.*;
 
 import java.util.*;
 import java.util.concurrent.Future;
@@ -39,7 +37,7 @@ import java.util.concurrent.TimeUnit;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: Discovery.java,v 1.52.4.2 2009/02/18 16:05:01 belaban Exp $
+ * @version $Id: Discovery.java,v 1.52.4.3 2009/02/18 17:37:31 belaban Exp $
  */
 @MBean
 public abstract class Discovery extends Protocol {   
@@ -260,11 +258,25 @@ public abstract class Discovery extends Protocol {
                     }
                 }
 
+                // add physical address (if available) to transport's cache
+                if(hdr.arg != null) {
+                    Address logical_addr=hdr.arg.getAddress();
+                    if(logical_addr == null)
+                        logical_addr=msg.getSrc();
+                    List<Address> physical_addrs=hdr.arg.getPhysicalAddrs();
+                    Address physical_addr=physical_addrs != null && !physical_addrs.isEmpty()? physical_addrs.get(0) : null;
+                    if(logical_addr != null && physical_addr != null)
+                        down(new Event(Event.SET_PHYSICAL_ADDRESS, new Tuple<Address,Address>(logical_addr, physical_addr)));
+                }
+
                 synchronized(members) {
                     coord=!members.isEmpty()? members.firstElement() : local_addr;
                 }
 
-                PingData ping_rsp=new PingData(local_addr, coord, is_server);
+                Address physical_addr=(Address)down(new Event(Event.GET_PHYSICAL_ADDRESS, local_addr));
+                List<Address> physical_addrs=new ArrayList<Address>(1);
+                physical_addrs.add(physical_addr);
+                PingData ping_rsp=new PingData(local_addr, coord, is_server, org.jgroups.util.UUID.get(local_addr), physical_addrs);
                 rsp_msg=new Message(msg.getSrc(), null, null);
                 rsp_msg.setFlag(Message.OOB);
                 rsp_hdr=new PingHeader(PingHeader.GET_MBRS_RSP, ping_rsp);
@@ -279,6 +291,17 @@ public abstract class Discovery extends Protocol {
 
                 if(log.isTraceEnabled())
                     log.trace("received GET_MBRS_RSP, rsp=" + rsp);
+
+                // add physical address (if available) to transport's cache
+                if(rsp != null) {
+                    Address logical_addr=rsp.getAddress();
+                    if(logical_addr == null)
+                        logical_addr=msg.getSrc();
+                    physical_addrs=rsp.getPhysicalAddrs();
+                    physical_addr=physical_addrs != null && !physical_addrs.isEmpty()? physical_addrs.get(0) : null;
+                    if(logical_addr != null && physical_addr != null)
+                        down(new Event(Event.SET_PHYSICAL_ADDRESS, new Tuple<Address,Address>(logical_addr, physical_addr)));
+                }
                 
                 synchronized(ping_responses) {
                     for(Responses rsps: ping_responses)
