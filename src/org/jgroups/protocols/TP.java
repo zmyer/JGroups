@@ -45,7 +45,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * The {@link #receive(Address, Address, byte[], int, int)} method must
  * be called by subclasses when a unicast or multicast message has been received.
  * @author Bela Ban
- * @version $Id: TP.java,v 1.239.4.1 2009/02/18 10:59:41 belaban Exp $
+ * @version $Id: TP.java,v 1.239.4.2 2009/02/18 11:13:18 belaban Exp $
  */
 @MBean(description="Transport protocol")
 @DeprecatedProperty(names={"bind_to_all_interfaces", "use_incoming_packet_handler", "use_outgoing_packet_handler",
@@ -663,6 +663,23 @@ public abstract class TP extends Protocol {
 
     public boolean getLogDiscardMessages() {
         return log_discard_msgs;
+    }
+
+    @ManagedOperation(description="Dumps the contents of the UUID cache")
+    public String printUUIDCache() {
+        StringBuilder sb=new StringBuilder();
+        String logical_name;
+        UUID uuid;
+        Address physical_addr;
+        for(Map.Entry<UUID,Address> entry: uuid_cache.entrySet()) {
+            uuid=entry.getKey();
+            physical_addr=entry.getValue();
+            logical_name=UUID.get(uuid);
+            if(logical_name != null)
+                sb.append(logical_name).append(": ");
+            sb.append(uuid).append(": ").append(physical_addr).append("\n");
+        }
+        return sb.toString();
     }
 
 
@@ -1677,6 +1694,10 @@ public abstract class TP extends Protocol {
                             retval.put("dump", Util.dumpThreads());
                             continue;
                         }
+                        if(key.equals("uuids")) {
+                            retval.put("uuids", printUUIDCache());
+                            continue;
+                        }
                         if(key.equals("keys")) {
                             StringBuilder sb=new StringBuilder();
                             for(ProbeHandler handler: handlers) {
@@ -1693,7 +1714,7 @@ public abstract class TP extends Protocol {
                 }
 
                 public String[] supportedKeys() {
-                    return new String[]{"dump", "keys"};
+                    return new String[]{"dump", "keys", "uuids"};
                 }
             });
 
