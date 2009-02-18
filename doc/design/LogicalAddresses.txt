@@ -4,7 +4,7 @@ Logical addresses
 =================
 
 Author:  Bela Ban
-Version: $Id: LogicalAddresses.txt,v 1.12.2.4 2009/02/18 16:05:04 belaban Exp $
+Version: $Id: LogicalAddresses.txt,v 1.12.2.5 2009/02/18 16:48:05 belaban Exp $
 JIRA:    https://jira.jboss.org/jira/browse/JGRP-129
 
 The address chosen by each node is essentially the IP address and port of the receiver socket. However, for the
@@ -182,6 +182,12 @@ TODOs
 - Util.writeAddress()/writeAddresses(): currently optimized for IpAddress, change to UUID.
   Example: View.writeTo()/readFrom()
 - How are we going to associate logical names to channels when a shared transport is used ?
+- Marshalled size of UUID: 18 bytes, IpAddress: 9 bytes. Size in memory (without superclass, additional_data, on
+  64 bit machine): 16 bytes for UUID, 32 bytes for IpAddress ! So while marshalling takes more space for UUID,
+  it is quite compact in memory !
+  If it turns out that UUIDs generate too much overhead on the wire (bandwidth), we should think about canonicalizing
+  UUIDs to shorts: run an agreement protocol which assigns cluster-wide unique shorts to UUIDs, and send the shorts
+  rather than the UUIDs around !
 
 
 
