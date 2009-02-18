@@ -4,7 +4,7 @@ Logical addresses
 =================
 
 Author:  Bela Ban
-Version: $Id: LogicalAddresses.txt,v 1.12.2.1 2009/02/16 14:42:17 belaban Exp $
+Version: $Id: LogicalAddresses.txt,v 1.12.2.2 2009/02/18 09:03:04 belaban Exp $
 JIRA:    https://jira.jboss.org/jira/browse/JGRP-129
 
 The address chosen by each node is essentially the IP address and port of the receiver socket. However, for the
@@ -177,6 +177,8 @@ TODOs
 - [TBD] Change IpAddress into PhysicalAddress (?)
 - UUID: generate a nice name from UUID if the logical name is not defined. Alternative: don't use the UUID to generate
   the logical name, but maybe the host name and a random short
+- Util.writeAddress()/writeAddresses(): currently optimized for IpAddress, change to UUID.
+  Example: View.writeTo()/readFrom()
 
 
 

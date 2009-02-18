@@ -27,7 +27,7 @@ import java.util.*;
 /**
  * Tests whether method size() of a header and its serialized size correspond
  * @author  Bela Ban
- * @version $Id: SizeTest.java,v 1.12.2.3 2009/02/18 07:53:33 belaban Exp $
+ * @version $Id: SizeTest.java,v 1.12.2.4 2009/02/18 09:03:06 belaban Exp $
  */
 @Test(groups=Global.FUNCTIONAL)
 public class SizeTest {
@@ -47,6 +47,48 @@ public class SizeTest {
         IpAddress self=new IpAddress("127.0.0.1", 5555);
         PingData rsp=new PingData(self, self, true);
         _testSize(new PingHeader(PingHeader.GET_MBRS_RSP, rsp));
+    }
+
+
+    public static void testPingData() throws Exception {
+        PingData data;
+        final Address own=new IpAddress("192.168.1.33", 7800);
+        final Address coord=new IpAddress("167.1.2.3", 5555);
+        data=new PingData(null, null, false);
+        _testSize(data);
+
+        data=new PingData(own, coord, false);
+        _testSize(data);
+
+        data=new PingData(null, null, false, "node-1", null, null);
+        _testSize(data);
+
+        data=new PingData(own, coord, false, "node-1", null, null);
+        _testSize(data);
+
+        data=new PingData(null, null, false, "node-1", org.jgroups.util.UUID.randomUUID(), null);
+        _testSize(data);
+
+        data=new PingData(own, coord, false, "node-1", org.jgroups.util.UUID.randomUUID(), null);
+        _testSize(data);
+
+        data=new PingData(own, coord, false, "node-1", org.jgroups.util.UUID.randomUUID(), new ArrayList<Address>(7));
+        _testSize(data);
+
+        data=new PingData(null, null, false, "node-1", org.jgroups.util.UUID.randomUUID(), new ArrayList<Address>(7));
+        _testSize(data);
+
+        List<Address> list=new ArrayList<Address>();
+        list.add(own);
+        list.add(coord);
+        list.add(new IpAddress("127.0.0.1", 7500));
+        data=new PingData(null, null, false, "node-1", org.jgroups.util.UUID.randomUUID(), list);
+        _testSize(data);
+
+        list.clear();
+        list.add(new IpAddress("127.0.0.1", 7500));
+        data=new PingData(null, null, false, "node-1", org.jgroups.util.UUID.randomUUID(), list);
+        _testSize(data);
     }
 
 
@@ -581,6 +623,14 @@ public class SizeTest {
         byte[] serialized_form=Util.streamableToByteBuffer(rsp);
         System.out.println("size=" + size + ", serialized size=" + serialized_form.length);
         Assert.assertEquals(serialized_form.length, size);
+    }
+
+    private static void _testSize(PingData data) throws Exception {
+        System.out.println("\ndata: " + data);
+        long size=data.size();
+        byte[] serialized_form=Util.streamableToByteBuffer(data);
+        System.out.println("size=" + size + ", serialized size=" + serialized_form.length);
+        assert serialized_form.length == size : "serialized length=" + serialized_form.length + ", size=" + size;
     }
 
     private static void _testSize(ServiceInfo si) throws Exception {
