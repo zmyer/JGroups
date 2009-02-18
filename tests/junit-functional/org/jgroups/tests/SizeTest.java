@@ -27,7 +27,7 @@ import java.util.*;
 /**
  * Tests whether method size() of a header and its serialized size correspond
  * @author  Bela Ban
- * @version $Id: SizeTest.java,v 1.12.2.4 2009/02/18 09:03:06 belaban Exp $
+ * @version $Id: SizeTest.java,v 1.12.2.5 2009/02/18 11:43:13 belaban Exp $
  */
 @Test(groups=Global.FUNCTIONAL)
 public class SizeTest {
@@ -502,6 +502,9 @@ public class SizeTest {
         System.out.println("hash 1: " + hash1);
         System.out.println("hash 2: " + hash2);
         assert hash1 == hash2;
+
+        uuid.setAdditionalData("bela ban".getBytes());
+        _testSize(uuid);
     }
 
 

@@ -9,6 +9,7 @@ import org.jgroups.annotations.Property;
 import org.jgroups.stack.IpAddress;
 import org.jgroups.util.BoundedList;
 import org.jgroups.util.Util;
+import org.jgroups.util.UUID;
 
 import java.io.IOException;
 import java.net.*;
@@ -42,7 +43,7 @@ import java.util.Map;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: UDP.java,v 1.196.2.1 2009/02/18 07:46:50 belaban Exp $
+ * @version $Id: UDP.java,v 1.196.2.2 2009/02/18 11:43:09 belaban Exp $
  */
 @DeprecatedProperty(names={"num_last_ports","null_src_addresses", "send_on_all_interfaces", "send_interfaces"})
 public class UDP extends TP {
@@ -384,7 +385,11 @@ public class UDP extends TP {
         if(sock == null)
             throw new Exception("UDP.createSocket(): sock is null");
 
-        local_addr=createLocalAddress();
+        // local_addr=createLocalAddress();
+        UUID uuid=UUID.randomUUID();
+        local_addr=uuid;
+        addPhysicalAddressToCache(uuid, createLocalAddress());
+
         if(additional_data != null)
             ((IpAddress)local_addr).setAdditionalData(additional_data);
 

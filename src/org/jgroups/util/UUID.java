@@ -15,13 +15,12 @@ import java.util.Map;
  * Copied from java.util.UUID, but unneeded fields from the latter have been removed. UUIDs needs to
  * have a small memory footprint.
  * @author Bela Ban
- * @version $Id: UUID.java,v 1.1.2.4 2009/02/18 07:46:51 belaban Exp $
+ * @version $Id: UUID.java,v 1.1.2.5 2009/02/18 11:43:11 belaban Exp $
  */
 public final class UUID implements Address, Streamable, Comparable<Address> {
-
-    private long mostSigBits;
-
-    private long leastSigBits;
+    private long   mostSigBits;
+    private long   leastSigBits;
+    private byte[] additional_data;
 
     /** The random number generator used by this class to create random based UUIDs */
     private static volatile SecureRandom numberGenerator=null;
@@ -31,7 +30,7 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
 
     private static final long serialVersionUID=3972962439975931228L;
 
-    private static final int SIZE=Global.LONG_SIZE * 2;
+    private static final int SIZE=Global.LONG_SIZE * 2 + Global.BYTE_SIZE;
 
 
     public UUID() {
@@ -77,6 +76,22 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
             sb.append(entry.getValue() + ": " + entry.getKey().toStringDetailed() + "\n");
         }
         return sb.toString();
+    }
+
+    /**
+     * Returns the additional_data.
+     * @return byte[]
+     */
+    public final byte[] getAdditionalData() {
+        return additional_data;
+    }
+
+    /**
+     * Sets the additional_data.
+     * @param additional_data The additional_data to set
+     */
+    public final void setAdditionalData(byte[] additional_data) {
+        this.additional_data=additional_data;
     }
 
 
@@ -204,11 +219,25 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
     public void writeTo(DataOutputStream out) throws IOException {
         out.writeLong(leastSigBits);
         out.writeLong(mostSigBits);
+        if(additional_data != null) {
+            out.writeBoolean(true); // 1 byte
+            out.writeShort(additional_data.length);
+            out.write(additional_data, 0, additional_data.length);
+        }
+        else
+            out.writeBoolean(false);
     }
 
     public void readFrom(DataInputStream in) throws IOException, IllegalAccessException, InstantiationException {
         leastSigBits=in.readLong();
         mostSigBits=in.readLong();
+        if(in.readBoolean() == false)
+            return;
+        int len=in.readUnsignedShort();
+        if(len > 0) {
+            additional_data=new byte[len];
+            in.readFully(additional_data, 0, additional_data.length);
+        }
     }
 
     public boolean isMulticastAddress() {
@@ -216,7 +245,19 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
     }
 
     public int size() {
-        return SIZE;
+        int retval=SIZE;
+        if(additional_data != null)
+            retval+=additional_data.length + Global.SHORT_SIZE;
+        return retval;
+    }
+
+    public Object clone() throws CloneNotSupportedException {
+        UUID ret=new UUID(leastSigBits, mostSigBits);
+        if(additional_data != null) {
+            ret.additional_data=new byte[additional_data.length];
+            System.arraycopy(additional_data, 0, ret.additional_data, 0, additional_data.length);
+        }
+        return ret;
     }
 
     public void writeExternal(ObjectOutput out) throws IOException {
