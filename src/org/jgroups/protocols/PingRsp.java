@@ -1,4 +1,3 @@
-// $Id: PingRsp.java,v 1.16 2008/09/27 15:37:15 belaban Exp $
 
 package org.jgroups.protocols;
 
@@ -12,6 +11,12 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.Serializable;
 
+/**
+ * Encapsulates information about a cluster node, e.g. local address, coordinator's addresss, logical name and
+ * physical address(es)
+ * @author Bela Ban
+ * @version $Id: PingRsp.java,v 1.16.4.1 2009/02/18 07:39:04 belaban Exp $
+ */
 public class PingRsp implements Serializable, Streamable {
 
     private static final long serialVersionUID=3634334590904551586L;
@@ -20,8 +25,8 @@ public class PingRsp implements Serializable, Streamable {
     private Address coord_addr=null;
     private boolean is_server=false;
 
+
     public PingRsp() {
-    // externalization
     }
 
     public PingRsp(Address own_addr,Address coord_addr,boolean is_server) {
