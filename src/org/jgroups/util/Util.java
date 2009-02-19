@@ -28,7 +28,7 @@ import java.util.*;
 /**
  * Collection of various utility routines that can not be assigned to other classes.
  * @author Bela Ban
- * @version $Id: Util.java,v 1.187.2.2 2009/02/18 16:05:00 belaban Exp $
+ * @version $Id: Util.java,v 1.187.2.3 2009/02/19 12:54:37 belaban Exp $
  */
 public class Util {
 
@@ -55,6 +55,8 @@ public class Util {
     static boolean resolve_dns=false;
 
     static boolean      JGROUPS_COMPAT=false;
+
+    private static short COUNTER=1;
 
     /**
      * Global thread group to which all (most!) JGroups threads belong
@@ -2458,6 +2460,29 @@ public class Util {
         else
             sb.append(hostname.getHostAddress());
         return sb.toString();
+    }
+
+    public static String generateLocalName() {
+        String retval=null;
+        try {
+            retval=InetAddress.getLocalHost().getHostName();
+        }
+        catch(UnknownHostException e) {
+            retval="localhost";
+        }
+
+        long counter=Util.random(Short.MAX_VALUE *2);
+        return retval + "-" + counter;
+    }
+
+
+
+
+    public synchronized static short incrCounter() {
+        short retval=COUNTER++;
+        if(COUNTER >= Short.MAX_VALUE)
+            COUNTER=1;
+        return retval;
     }
 
 

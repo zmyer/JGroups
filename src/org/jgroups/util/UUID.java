@@ -14,7 +14,7 @@ import java.util.concurrent.ConcurrentMap;
  * Copied from java.util.UUID, but unneeded fields from the latter have been removed. UUIDs needs to
  * have a small memory footprint.
  * @author Bela Ban
- * @version $Id: UUID.java,v 1.1.2.8 2009/02/19 11:50:06 belaban Exp $
+ * @version $Id: UUID.java,v 1.1.2.9 2009/02/19 12:54:37 belaban Exp $
  */
 public final class UUID implements Address, Streamable, Comparable<Address> {
     private long   mostSigBits;
@@ -29,7 +29,21 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
 
     private static final long serialVersionUID=3972962439975931228L;
 
+    private static boolean print_uuids=false;
+
     private static final int SIZE=Global.LONG_SIZE * 2 + Global.BYTE_SIZE;
+
+
+    static {
+        /* Trying to get value of jgroups.print_uuids. PropertyPermission not granted if
+        * running in an untrusted environment with JNLP */
+        try {
+            String tmp=Util.getProperty(new String[]{Global.PRINT_UUIDS}, null, null, false, "false");
+            print_uuids=Boolean.valueOf(tmp).booleanValue();
+        }
+        catch (SecurityException ex){
+        }
+    }
 
 
     public UUID() {
@@ -72,7 +86,7 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
     public static String printCache() {
         StringBuilder sb=new StringBuilder();
         for(Map.Entry<Address,String> entry: cache.entrySet()) {
-            sb.append(entry.getValue() + ": " + entry.getKey().toString() + "\n");
+            sb.append(entry.getValue() + ": " + ((UUID)entry.getKey()).toStringLong() + "\n");
         }
         return sb.toString();
     }
@@ -132,6 +146,8 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
 
 
     public String toString() {
+        if(print_uuids)
+            return toStringLong();
         String val=cache.get(this);
         return val != null? val : toStringLong();
     }

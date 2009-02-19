@@ -75,7 +75,7 @@ import java.util.concurrent.Exchanger;
  * the construction of the stack will be aborted.
  *
  * @author Bela Ban
- * @version $Id: JChannel.java,v 1.209.4.1 2009/02/19 11:42:43 belaban Exp $
+ * @version $Id: JChannel.java,v 1.209.4.2 2009/02/19 12:54:34 belaban Exp $
  */
 @MBean(description="JGroups channel")
 public class JChannel extends Channel {
@@ -792,9 +792,23 @@ public class JChannel extends Channel {
         return local_addr != null? local_addr.toString() : "n/a";
     }
 
+    @ManagedAttribute(writable=true)
     public String getLocalName() {
         TP transport=prot_stack != null? prot_stack.getTransport() : null;
         return transport != null? transport.getLocalName() : null;
+    }
+
+    /**
+     * Sets the logical name for the channel. The name will stay associated with this channel for the channel's
+     * lifetime (until close() is called). This method should be called <em>before</em> calling connect().<br/>
+     * Note that this method should be called only once !
+     * @param name
+     */
+    @ManagedAttribute(writable=true)
+    public void setLocalName(String name) {
+        TP transport=prot_stack != null? prot_stack.getTransport() : null;
+        if(transport != null && name != null && name.length() > 0)
+            transport.setLocalName(name);
     }
 
     /**
