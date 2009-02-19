@@ -8,6 +8,7 @@ import org.jgroups.annotations.Property;
 import org.jgroups.protocols.pbcast.JoinRsp;
 import org.jgroups.stack.Protocol;
 import org.jgroups.util.*;
+import org.jgroups.util.UUID;
 
 import java.util.*;
 import java.util.concurrent.Future;
@@ -37,7 +38,7 @@ import java.util.concurrent.TimeUnit;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: Discovery.java,v 1.52.4.3 2009/02/18 17:37:31 belaban Exp $
+ * @version $Id: Discovery.java,v 1.52.4.4 2009/02/19 11:42:39 belaban Exp $
  */
 @MBean
 public abstract class Discovery extends Protocol {   
@@ -267,6 +268,8 @@ public abstract class Discovery extends Protocol {
                     Address physical_addr=physical_addrs != null && !physical_addrs.isEmpty()? physical_addrs.get(0) : null;
                     if(logical_addr != null && physical_addr != null)
                         down(new Event(Event.SET_PHYSICAL_ADDRESS, new Tuple<Address,Address>(logical_addr, physical_addr)));
+                    if(logical_addr != null && hdr.arg.getLogicalName() != null)
+                        UUID.add((UUID)logical_addr, hdr.arg.getLogicalName());
                 }
 
                 synchronized(members) {
@@ -301,6 +304,8 @@ public abstract class Discovery extends Protocol {
                     physical_addr=physical_addrs != null && !physical_addrs.isEmpty()? physical_addrs.get(0) : null;
                     if(logical_addr != null && physical_addr != null)
                         down(new Event(Event.SET_PHYSICAL_ADDRESS, new Tuple<Address,Address>(logical_addr, physical_addr)));
+                    if(logical_addr != null && rsp.getLogicalName() != null)
+                        UUID.add((UUID)logical_addr, rsp.getLogicalName());
                 }
                 
                 synchronized(ping_responses) {
@@ -318,6 +323,10 @@ public abstract class Discovery extends Protocol {
             up_prot.up(evt);
             local_addr=(Address)evt.getArg();
             localAddressSet(local_addr);
+            break;
+
+        case Event.GET_PHYSICAL_ADDRESS:
+            sendGetMembersRequest(group_addr);
             break;
 
         default:

@@ -45,7 +45,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * The {@link #receive(Address, Address, byte[], int, int)} method must
  * be called by subclasses when a unicast or multicast message has been received.
  * @author Bela Ban
- * @version $Id: TP.java,v 1.239.4.4 2009/02/18 16:05:01 belaban Exp $
+ * @version $Id: TP.java,v 1.239.4.5 2009/02/19 11:42:39 belaban Exp $
  */
 @MBean(description="Transport protocol")
 @DeprecatedProperty(names={"bind_to_all_interfaces", "use_incoming_packet_handler", "use_outgoing_packet_handler",
@@ -282,6 +282,11 @@ public abstract class TP extends Protocol {
     
     /** The address (host and port) of this member */
     protected Address local_addr=null;
+
+    @ManagedAttribute(writable=false, description="The logical name of this channel. Stays with the channel until " +
+            "the channel is closed")
+    @Property(description="The logical name of this channel. Stays with the channel until the channel is closed")
+    protected String local_name=null;
 
     /** The members of this group (updated when a member joins or leaves) */
     protected final HashSet<Address> members=new HashSet<Address>(11);
@@ -545,6 +550,7 @@ public abstract class TP extends Protocol {
 
     public Address getLocalAddress() {return local_addr;}
     public String getChannelName() {return channel_name;}
+    public String getLocalName() {return local_name;}
     public boolean isLoopback() {return loopback;}
     public void setLoopback(boolean b) {loopback=b;}
 
@@ -667,17 +673,17 @@ public abstract class TP extends Protocol {
 
     @ManagedOperation(description="Dumps the contents of the logical address cache")
     public String printUUIDCache() {
-        StringBuilder sb=new StringBuilder();
-        String logical_name;
+        StringBuilder sb=new StringBuilder("\n");
+        String tmp_logical_name;
         Address logical_addr;
         Address physical_addr;
         for(Map.Entry<Address,Address> entry: logical_addr_cache.entrySet()) {
             logical_addr=entry.getKey();
             physical_addr=entry.getValue();
-            logical_name=UUID.get(logical_addr);
-            if(logical_name != null)
-                sb.append(logical_name).append(": ");
-            sb.append(logical_addr).append(": ").append(physical_addr).append("\n");
+            tmp_logical_name=UUID.get(logical_addr);
+            if(tmp_logical_name != null)
+                sb.append(tmp_logical_name).append(": ");
+            sb.append(((UUID)logical_addr).toStringLong()).append(": ").append(physical_addr).append("\n");
         }
         return sb.toString();
     }
@@ -810,6 +816,10 @@ public abstract class TP extends Protocol {
      * Creates the unicast and multicast sockets and starts the unicast and multicast receiver threads
      */
     public void start() throws Exception {
+        local_addr=UUID.randomUUID();
+        if(local_name != null && local_name.length() > 0)
+            UUID.add((UUID)local_addr, local_name);
+
         if(timer == null)
             throw new Exception("timer is null");
 
@@ -1118,6 +1128,8 @@ public abstract class TP extends Protocol {
     }
 
 
+    long last_time=System.currentTimeMillis();
+
     private void doSend(Buffer buf, Address dest, boolean multicast) throws Exception {
         if(stats) {
             num_msgs_sent++;
@@ -1132,6 +1144,12 @@ public abstract class TP extends Protocol {
                 // todo: place msg on bounded buffer, send WHO-HAS event up. When result is received, send queued msgs
                 if(log.isWarnEnabled())
                     log.warn("failed fetching physical address for " + dest + ", dropping message");
+
+                if(System.currentTimeMillis() - last_time >= 5000) { // send only every 5 secs tops
+                    up_prot.up(new Event(Event.GET_PHYSICAL_ADDRESS, local_addr));
+                    last_time=System.currentTimeMillis();
+                }
+
                 return;
             }
             sendToSingleMember(physical_dest, buf.getBuf(), buf.getOffset(), buf.getLength());

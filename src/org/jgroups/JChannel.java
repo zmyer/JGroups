@@ -75,7 +75,7 @@ import java.util.concurrent.Exchanger;
  * the construction of the stack will be aborted.
  *
  * @author Bela Ban
- * @version $Id: JChannel.java,v 1.209 2008/11/28 14:45:16 belaban Exp $
+ * @version $Id: JChannel.java,v 1.209.4.1 2009/02/19 11:42:43 belaban Exp $
  */
 @MBean(description="JGroups channel")
 public class JChannel extends Channel {
@@ -790,6 +790,11 @@ public class JChannel extends Channel {
     @ManagedAttribute(name="LocalAddress")
     public String getLocalAddressAsString() {
         return local_addr != null? local_addr.toString() : "n/a";
+    }
+
+    public String getLocalName() {
+        TP transport=prot_stack != null? prot_stack.getTransport() : null;
+        return transport != null? transport.getLocalName() : null;
     }
 
     /**
@@ -1960,7 +1965,9 @@ public class JChannel extends Channel {
             map.put("version", Version.description + ", cvs=\"" +  Version.cvs + "\"");
             if(my_view != null && !map.containsKey("view"))
                 map.put("view", my_view.toString());
-            map.put("local_addr", local_addr != null? local_addr.toString() : "null");
+            map.put("local_addr", local_addr != null?
+                    local_addr.toString() + " [" + ((UUID)local_addr).toStringLong() + "]" 
+                    : "null");
             map.put("cluster", getClusterName());
             map.put("member", getLocalAddressAsString() + " (" + getClusterName() + ")");
             return map;

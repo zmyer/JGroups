@@ -43,7 +43,7 @@ import java.util.Map;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: UDP.java,v 1.196.2.2 2009/02/18 11:43:09 belaban Exp $
+ * @version $Id: UDP.java,v 1.196.2.3 2009/02/19 11:42:38 belaban Exp $
  */
 @DeprecatedProperty(names={"num_last_ports","null_src_addresses", "send_on_all_interfaces", "send_interfaces"})
 public class UDP extends TP {
@@ -256,6 +256,8 @@ public class UDP extends TP {
      * Creates the unicast and multicast sockets and starts the unicast and multicast receiver threads
      */
     public void start() throws Exception {
+        super.start();
+
         if(log.isDebugEnabled()) log.debug("creating sockets and starting threads");
         try {
             createSockets();
@@ -264,7 +266,6 @@ public class UDP extends TP {
             String tmp="problem creating sockets (bind_addr=" + bind_addr + ", mcast_addr=" + mcast_addr + ")";
             throw new Exception(tmp, ex);
         }
-        super.start();
 
         ucast_receiver=new PacketReceiver(sock,
                                           local_addr,
@@ -383,12 +384,11 @@ public class UDP extends TP {
         }
 
         if(sock == null)
-            throw new Exception("UDP.createSocket(): sock is null");
+            throw new Exception("socket is null");
 
-        // local_addr=createLocalAddress();
-        UUID uuid=UUID.randomUUID();
-        local_addr=uuid;
-        addPhysicalAddressToCache(uuid, createLocalAddress());
+        if(local_addr == null)
+            throw new IllegalStateException("local_addr is null - cannot associate it with physical address");
+        addPhysicalAddressToCache(local_addr, createLocalAddress());
 
         if(additional_data != null)
             ((IpAddress)local_addr).setAdditionalData(additional_data);

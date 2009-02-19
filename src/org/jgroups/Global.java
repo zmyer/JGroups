@@ -4,7 +4,7 @@ package org.jgroups;
  * Globals used by JGroups packages.
  * 
  * @author Bela Ban Mar 29, 2004
- * @version $Id: Global.java,v 1.41 2008/10/10 14:53:30 belaban Exp $
+ * @version $Id: Global.java,v 1.41.4.1 2009/02/19 11:42:43 belaban Exp $
  */
 public class Global {
     public static final int BYTE_SIZE  = Byte.SIZE    / 8; // 1

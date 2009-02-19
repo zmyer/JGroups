@@ -1,4 +1,4 @@
-// $Id: Channel.java,v 1.46 2008/05/28 15:32:42 belaban Exp $
+// $Id: Channel.java,v 1.46.4.1 2009/02/19 11:42:43 belaban Exp $
 
 package org.jgroups;
 
@@ -308,6 +308,12 @@ public abstract class Channel implements Transport {
      Addresses can be used as destination in the <code>Send</code> operation.
      */
     abstract public Address getLocalAddress();
+
+    /**
+     * Returns the logical name of this channel if set.
+     * @return The logical name or null (if not set)
+     */
+    abstract public String getLocalName();
 
 
     /**

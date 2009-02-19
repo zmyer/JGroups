@@ -14,7 +14,7 @@ import java.util.concurrent.ConcurrentMap;
  * Copied from java.util.UUID, but unneeded fields from the latter have been removed. UUIDs needs to
  * have a small memory footprint.
  * @author Bela Ban
- * @version $Id: UUID.java,v 1.1.2.6 2009/02/18 16:05:00 belaban Exp $
+ * @version $Id: UUID.java,v 1.1.2.7 2009/02/19 11:42:44 belaban Exp $
  */
 public final class UUID implements Address, Streamable, Comparable<Address> {
     private long   mostSigBits;
@@ -131,7 +131,7 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
 
 
 
-    public String toStringShort() {
+    public String toString() {
         String val=cache.get(this);
         return val != null? val : toString();
     }
@@ -160,7 +160,7 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
      *
      * @return  A string representation of this {@code UUID}
      */
-    public String toString() {
+    public String toStringLong() {
         return (digits(mostSigBits >> 32, 8) + "-" +
                 digits(mostSigBits >> 16, 4) + "-" +
                 digits(mostSigBits, 4) + "-" +
