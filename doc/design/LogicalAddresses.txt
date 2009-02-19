@@ -4,7 +4,7 @@ Logical addresses
 =================
 
 Author:  Bela Ban
-Version: $Id: LogicalAddresses.txt,v 1.12.2.5 2009/02/18 16:48:05 belaban Exp $
+Version: $Id: LogicalAddresses.txt,v 1.12.2.6 2009/02/19 09:39:58 belaban Exp $
 JIRA:    https://jira.jboss.org/jira/browse/JGRP-129
 
 The address chosen by each node is essentially the IP address and port of the receiver socket. However, for the
@@ -154,11 +154,11 @@ Discovery
 Sending of a message with no physical address available for UUID
 ----------------------------------------------------------------
 - The transport queues the message
-- The transport sends a WHO-HAS *event* up the stack
-- The Discovery protocol sends out a WHO-HAS *message* (via multicast, TCP unicast, or to the GossipRouter)
+- The transport sends a GET_PHYSICAL_ADDRESS *event* up the stack
+- The Discovery protocol sends out a GET_MBRS_REQ *message* (via multicast, TCP unicast, or to the GossipRouter)
 - The receivers fetch their local information from the transport (exception: the GossipRouter has this information
-  in its local loookup cache), and return it with a I-HAVE message
-- On reception of the I-HAVE message, an I-HAVE event is sent down the stack to the transport
+  in its local loookup cache), and return it with a GET_MBRS_RSP message
+- On reception of the GET_MBRS_RSP message, a SET_PHYSICAL_ADDRESS event is sent down the stack to the transport
 - The transport updates its local cache from the information
 - The transport sends all queued messages if the UUID are now available
 
@@ -168,6 +168,26 @@ On view change
 - The coordinator's Discovery protocol broadcasts an INVALIDATE(UUID) message for each node which left the cluster
 - On reception, every receiver sends down a REMOVE_PHYSICAL_ADDRESS(UUID)
 - The transport then removes the mapping for the given UUID
+
+
+IDs instead of UUIDs
+--------------------
+- Implemented in TP or a separate protocol (ID ?)
+- The coordinator dishes out IDs (shorts) for new nodes
+- The IDs are always increasing
+- Every new ID is broadcast across the cluster, so everyone knows the highest IDs
+- An ID is associated with a UUID, and UUIDs are also associated with physical addresses (2 tables)
+- When we send a message to dest UUID, we lookup the ID associated with UUID. If found, we send the ID (a short)
+  rather than the UUID
+- On reception, if an ID is found, we create an IdAddress, which work on the short field for equals() and hashCode()
+- IdAddress.equals() and IdAddress.compareTo() can compare to both IdAddress *and* UUIDs: in the latter case, they
+  fetch the ID from the table given the UUID as key and do the comparison. UUIDs can also compare to IdAddresses
+- We should probably either add a PhysicalAddress interface, which inherits from Address, and have physical addresses
+  implement PhysicalAddress (so we can do an instanceof PhysicalAddress), or have an isPhysicalAddress() method
+- ID canonicalization should be configurable: we can enable or disable it
+- This could be used by an ID protocol (sitting on top of the transport), which maintains a UUID-ID table and *replaces*
+  dest and src addresses for messages coming in and going out
+- This protocol would replace an UUID dest with an IdAddress and provide the physical address as well (?)
 
 
 TODOs
