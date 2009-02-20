@@ -4,7 +4,7 @@ Logical addresses
 =================
 
 Author:  Bela Ban
-Version: $Id: LogicalAddresses.txt,v 1.12.2.12 2009/02/20 13:55:15 belaban Exp $
+Version: $Id: LogicalAddresses.txt,v 1.12.2.13 2009/02/20 14:22:49 belaban Exp $
 JIRA:    https://jira.jboss.org/jira/browse/JGRP-129
 
 The address chosen by each node is essentially the IP address and port of the receiver socket. However, for the
@@ -214,8 +214,8 @@ TODOs
 
 
 - BIG PROBLEM: Shared transport *********
-  - purging UUIDs from cache on a view change might be incorrect !
-  - what happens when 1 (out of 5 channels) disconnects and reconnects ? Will it have the same UUID ? That would
+  - Purging UUIDs from cache on a view change might be incorrect with a shared transport !
+  - What happens when 1 (out of 5 channels) disconnects and reconnects ? Will it have the same UUID ? That would
     be incorrect !!
     --> Looks like every channel on top of the same shared transport needs to have its *own* UUID. The shared transport
         merely provides (shared) sockets
