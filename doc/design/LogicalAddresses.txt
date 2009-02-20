@@ -4,7 +4,7 @@ Logical addresses
 =================
 
 Author:  Bela Ban
-Version: $Id: LogicalAddresses.txt,v 1.12.2.6 2009/02/19 09:39:58 belaban Exp $
+Version: $Id: LogicalAddresses.txt,v 1.12.2.7 2009/02/20 09:41:46 belaban Exp $
 JIRA:    https://jira.jboss.org/jira/browse/JGRP-129
 
 The address chosen by each node is essentially the IP address and port of the receiver socket. However, for the
@@ -208,6 +208,9 @@ TODOs
   If it turns out that UUIDs generate too much overhead on the wire (bandwidth), we should think about canonicalizing
   UUIDs to shorts: run an agreement protocol which assigns cluster-wide unique shorts to UUIDs, and send the shorts
   rather than the UUIDs around !
+- UDP.initial_hosts also needs to send to physical addresses
+- Implement getLogicalAndPhysicalAddress() in all transports
+- Remove UUID/logical name and UUID/physical address mappings from caches when a node left
 
 
 

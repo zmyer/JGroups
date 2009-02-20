@@ -45,7 +45,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * The {@link #receive(Address, Address, byte[], int, int)} method must
  * be called by subclasses when a unicast or multicast message has been received.
  * @author Bela Ban
- * @version $Id: TP.java,v 1.239.4.6 2009/02/19 12:54:36 belaban Exp $
+ * @version $Id: TP.java,v 1.239.4.7 2009/02/20 09:41:44 belaban Exp $
  */
 @MBean(description="Transport protocol")
 @DeprecatedProperty(names={"bind_to_all_interfaces", "use_incoming_packet_handler", "use_outgoing_packet_handler",
@@ -376,6 +376,8 @@ public abstract class TP extends Protocol {
      */
     protected final ConcurrentMap<Address,Address> logical_addr_cache=new ConcurrentHashMap<Address,Address>();
 
+    /** Time when the last request for a physical address was sent. Used to prevent request floods */
+    protected long last_who_has_request=System.currentTimeMillis();
 
     /**
      * Creates the TP protocol, and initializes the state variables, does
@@ -1138,7 +1140,7 @@ public abstract class TP extends Protocol {
     }
 
 
-    long last_time=System.currentTimeMillis();
+
 
     private void doSend(Buffer buf, Address dest, boolean multicast) throws Exception {
         if(stats) {
@@ -1151,15 +1153,12 @@ public abstract class TP extends Protocol {
         else {
             Address physical_dest=getPhysicalAddressFromCache(dest);
             if(physical_dest == null) {
-                // todo: place msg on bounded buffer, send WHO-HAS event up. When result is received, send queued msgs
                 if(log.isWarnEnabled())
-                    log.warn("failed fetching physical address for " + dest + ", dropping message");
-
-                if(System.currentTimeMillis() - last_time >= 5000) { // send only every 5 secs tops
-                    up_prot.up(new Event(Event.GET_PHYSICAL_ADDRESS, local_addr));
-                    last_time=System.currentTimeMillis();
+                    log.warn("no physical address for " + dest + ", dropping message");
+                if(System.currentTimeMillis() - last_who_has_request >= 5000) { // send only every 5 secs max
+                    up_prot.up(new Event(Event.GET_PHYSICAL_ADDRESS, dest));
+                    last_who_has_request=System.currentTimeMillis();
                 }
-
                 return;
             }
             sendToSingleMember(physical_dest, buf.getBuf(), buf.getOffset(), buf.getLength());
@@ -1440,7 +1439,16 @@ public abstract class TP extends Protocol {
         if(logical_addr != null)
             logical_addr_cache.remove(logical_addr);
     }
+    
+    public void clearLogicalAddressCache() {
+        logical_addr_cache.clear();
+        Tuple<Address, Address> local_addr_info=getLogicalAndPhysicalAddress();
+        if(local_addr_info != null)
+            addPhysicalAddressToCache(local_addr_info.getVal1(), local_addr_info.getVal2());
+    }
 
+
+    protected abstract Tuple<Address,Address> getLogicalAndPhysicalAddress();
 
     /* ----------------------------- End of Private Methods ---------------------------------------- */
 

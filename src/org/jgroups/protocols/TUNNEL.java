@@ -1,4 +1,4 @@
-// $Id: TUNNEL.java,v 1.51 2008/10/31 08:38:44 belaban Exp $
+// $Id: TUNNEL.java,v 1.51.4.1 2009/02/20 09:41:44 belaban Exp $
 
 package org.jgroups.protocols;
 
@@ -10,6 +10,7 @@ import org.jgroups.annotations.Property;
 import org.jgroups.stack.RouterStub;
 import org.jgroups.stack.IpAddress;
 import org.jgroups.util.Util;
+import org.jgroups.util.Tuple;
 
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -281,5 +282,10 @@ public class TUNNEL extends TP {
 
     public void postUnmarshallingList(Message msg, Address dest, boolean multicast) {
         msg.setDest(dest);
+    }
+
+    // todo: implement
+    protected Tuple<Address, Address> getLogicalAndPhysicalAddress() {
+        throw new UnsupportedOperationException("not yet implemented");
     }
 }

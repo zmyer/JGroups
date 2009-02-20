@@ -10,6 +10,7 @@ import org.jgroups.stack.IpAddress;
 import org.jgroups.util.BoundedList;
 import org.jgroups.util.Util;
 import org.jgroups.util.UUID;
+import org.jgroups.util.Tuple;
 
 import java.io.IOException;
 import java.net.*;
@@ -43,7 +44,7 @@ import java.util.Map;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: UDP.java,v 1.196.2.3 2009/02/19 11:42:38 belaban Exp $
+ * @version $Id: UDP.java,v 1.196.2.4 2009/02/20 09:41:44 belaban Exp $
  */
 @DeprecatedProperty(names={"num_last_ports","null_src_addresses", "send_on_all_interfaces", "send_interfaces"})
 public class UDP extends TP {
@@ -439,10 +440,14 @@ public class UDP extends TP {
 
 
     protected Address createLocalAddress() {
-        return new IpAddress(sock.getLocalAddress(), sock.getLocalPort());
+        return sock != null? new IpAddress(sock.getLocalAddress(), sock.getLocalPort()) : null;
     }
 
 
+    protected Tuple<Address, Address> getLogicalAndPhysicalAddress() {
+        Address physical_addr=createLocalAddress();
+        return physical_addr != null? new Tuple<Address,Address>(local_addr, physical_addr) : null;
+    }
 
     /**
      *

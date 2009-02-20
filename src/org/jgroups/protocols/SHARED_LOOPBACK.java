@@ -3,6 +3,7 @@ package org.jgroups.protocols;
 import org.jgroups.Address;
 import org.jgroups.Event;
 import org.jgroups.Message;
+import org.jgroups.util.Tuple;
 import org.jgroups.stack.IpAddress;
 
 import java.util.Map;
@@ -13,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Loopback transport shared by all channels within the same VM. Property for testing is that no messages are lost. Allows
  * us to test various protocols (with ProtocolTester) at maximum speed.
  * @author Bela Ban
- * @version $Id: SHARED_LOOPBACK.java,v 1.5 2008/04/04 10:23:36 belaban Exp $
+ * @version $Id: SHARED_LOOPBACK.java,v 1.5.4.1 2009/02/20 09:41:44 belaban Exp $
  */
 public class SHARED_LOOPBACK extends TP {
     private static int next_port=10000;
@@ -78,20 +79,16 @@ public class SHARED_LOOPBACK extends TP {
         msg.setDest(dest);
     }
 
+    protected Tuple<Address, Address> getLogicalAndPhysicalAddress() {
+        return new Tuple<Address,Address>(local_addr, local_addr);
+    }
+
     /*------------------------------ Protocol interface ------------------------------ */
 
     public String getName() {
         return "SHARED_LOOPBACK";
     }
 
-//    public boolean setProperties(Properties props) {
-//        super.setProperties(props);
-//        if(!props.isEmpty()) {
-//            log.error("the following properties are not recognized: " + props);
-//            return false;
-//        }
-//        return true;
-//    }
 
 
     public void init() throws Exception {
@@ -125,7 +122,7 @@ public class SHARED_LOOPBACK extends TP {
         return retval;
     }
 
-    private void register(String channel_name, Address local_addr, SHARED_LOOPBACK shared_loopback) {
+    private static void register(String channel_name, Address local_addr, SHARED_LOOPBACK shared_loopback) {
         Map<Address,SHARED_LOOPBACK> map=routing_table.get(channel_name);
         if(map == null) {
             map=new ConcurrentHashMap<Address,SHARED_LOOPBACK>();
@@ -134,7 +131,7 @@ public class SHARED_LOOPBACK extends TP {
         map.put(local_addr, shared_loopback);
     }
 
-    private void unregister(String channel_name, Address local_addr) {
+    private static void unregister(String channel_name, Address local_addr) {
         Map<Address,SHARED_LOOPBACK> map=routing_table.get(channel_name);
         if(map != null) {
             map.remove(local_addr);
