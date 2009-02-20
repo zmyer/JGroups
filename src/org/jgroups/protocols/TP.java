@@ -45,7 +45,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * The {@link #receive(Address, Address, byte[], int, int)} method must
  * be called by subclasses when a unicast or multicast message has been received.
  * @author Bela Ban
- * @version $Id: TP.java,v 1.239.4.10 2009/02/20 12:19:20 belaban Exp $
+ * @version $Id: TP.java,v 1.239.4.11 2009/02/20 13:23:43 belaban Exp $
  */
 @MBean(description="Transport protocol")
 @DeprecatedProperty(names={"bind_to_all_interfaces", "use_incoming_packet_handler", "use_outgoing_packet_handler",
@@ -934,6 +934,10 @@ public abstract class TP extends Protocol {
         // If multicast message, loopback a copy directly to us (but still multicast). Once we receive this,
         // we will discard our own multicast message
         Address dest=msg.getDest();
+        if(dest instanceof PhysicalAddress) {
+            msg.setDest(null); // ????
+        }
+
         boolean multicast=dest == null || dest.isMulticastAddress();
         if(loopback && (multicast || dest.equals(local_addr))) {
 
@@ -1156,7 +1160,7 @@ public abstract class TP extends Protocol {
             sendToAllMembers(buf.getBuf(), buf.getOffset(), buf.getLength());
         }
         else {
-            Address physical_dest=getPhysicalAddressFromCache(dest);
+            Address physical_dest=dest instanceof PhysicalAddress? dest : getPhysicalAddressFromCache(dest);
             if(physical_dest == null) {
                 if(log.isWarnEnabled())
                     log.warn("no physical address for " + dest + ", dropping message");
@@ -1266,6 +1270,7 @@ public abstract class TP extends Protocol {
                     }
                 }
 
+                
                 List<Address> mbrs=new ArrayList<Address>(view.getMembers());
                 logical_addr_cache.keySet().retainAll(mbrs);
                 UUID.retainAll(mbrs);
