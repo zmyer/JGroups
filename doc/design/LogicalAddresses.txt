@@ -4,7 +4,7 @@ Logical addresses
 =================
 
 Author:  Bela Ban
-Version: $Id: LogicalAddresses.txt,v 1.12.2.9 2009/02/20 13:12:42 belaban Exp $
+Version: $Id: LogicalAddresses.txt,v 1.12.2.10 2009/02/20 13:15:45 belaban Exp $
 JIRA:    https://jira.jboss.org/jira/browse/JGRP-129
 
 The address chosen by each node is essentially the IP address and port of the receiver socket. However, for the
@@ -220,5 +220,7 @@ TODOs
     --> Looks like every channel on top of the same shared transport needs to have its *own* UUID. The shared transport
         merely provides (shared) sockets
         How is this solved today ? Doesn't reusing the shared transport's addess foster reincarnation ?
+    --> The *channel* needs to generate the UUID, *not* the transport ! After generation, add it to the
+        transport's cache !
 
 
