@@ -4,7 +4,7 @@ Logical addresses
 =================
 
 Author:  Bela Ban
-Version: $Id: LogicalAddresses.txt,v 1.12.2.7 2009/02/20 09:41:46 belaban Exp $
+Version: $Id: LogicalAddresses.txt,v 1.12.2.8 2009/02/20 10:46:31 belaban Exp $
 JIRA:    https://jira.jboss.org/jira/browse/JGRP-129
 
 The address chosen by each node is essentially the IP address and port of the receiver socket. However, for the
@@ -210,7 +210,6 @@ TODOs
   rather than the UUIDs around !
 - UDP.initial_hosts also needs to send to physical addresses
 - Implement getLogicalAndPhysicalAddress() in all transports
-- Remove UUID/logical name and UUID/physical address mappings from caches when a node left
 
 
 

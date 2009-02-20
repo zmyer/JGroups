@@ -6,6 +6,7 @@ import org.jgroups.Global;
 import java.io.*;
 import java.security.SecureRandom;
 import java.util.Map;
+import java.util.Collection;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -14,7 +15,7 @@ import java.util.concurrent.ConcurrentMap;
  * Copied from java.util.UUID, but unneeded fields from the latter have been removed. UUIDs needs to
  * have a small memory footprint.
  * @author Bela Ban
- * @version $Id: UUID.java,v 1.1.2.9 2009/02/19 12:54:37 belaban Exp $
+ * @version $Id: UUID.java,v 1.1.2.10 2009/02/20 10:46:33 belaban Exp $
  */
 public final class UUID implements Address, Streamable, Comparable<Address> {
     private long   mostSigBits;
@@ -81,6 +82,10 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
     public static void remove(UUID uuid) {
         if(uuid != null)
             cache.remove(uuid);
+    }
+
+    public static void retainAll(Collection<Address> logical_addrs) {
+        cache.keySet().retainAll(logical_addrs);
     }
 
     public static String printCache() {
