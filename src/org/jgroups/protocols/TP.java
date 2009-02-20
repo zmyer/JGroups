@@ -45,7 +45,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * The {@link #receive(Address, Address, byte[], int, int)} method must
  * be called by subclasses when a unicast or multicast message has been received.
  * @author Bela Ban
- * @version $Id: TP.java,v 1.239.4.9 2009/02/20 10:58:19 belaban Exp $
+ * @version $Id: TP.java,v 1.239.4.10 2009/02/20 12:19:20 belaban Exp $
  */
 @MBean(description="Transport protocol")
 @DeprecatedProperty(names={"bind_to_all_interfaces", "use_incoming_packet_handler", "use_outgoing_packet_handler",
@@ -374,7 +374,7 @@ public abstract class TP extends Protocol {
      * <br/>
      * The keys are logical addresses, the values physical addresses
      */
-    protected final ConcurrentMap<Address,Address> logical_addr_cache=new ConcurrentHashMap<Address,Address>();
+    protected final ConcurrentMap<Address,PhysicalAddress> logical_addr_cache=new ConcurrentHashMap<Address,PhysicalAddress>();
 
     /** Time when the last request for a physical address was sent. Used to prevent request floods */
     protected long last_who_has_request=System.currentTimeMillis();
@@ -519,6 +519,11 @@ public abstract class TP extends Protocol {
 
     @ManagedAttribute
     public String getLocalAddressAsString() {return local_addr != null? local_addr.toString() : "n/a";}
+
+    @ManagedAttribute(name="LocalAddress (UUID)")
+    public String getLocalAddressAsUUID() {
+        return (local_addr instanceof UUID)? ((UUID)local_addr).toStringLong() : null;
+    }
     
     @ManagedAttribute
     public boolean isOOBThreadPoolEnabled() { return oob_thread_pool_enabled; }
@@ -687,7 +692,7 @@ public abstract class TP extends Protocol {
         String tmp_logical_name;
         Address logical_addr;
         Address physical_addr;
-        for(Map.Entry<Address,Address> entry: logical_addr_cache.entrySet()) {
+        for(Map.Entry<Address,PhysicalAddress> entry: logical_addr_cache.entrySet()) {
             logical_addr=entry.getKey();
             physical_addr=entry.getValue();
             tmp_logical_name=UUID.get(logical_addr);
@@ -1304,7 +1309,7 @@ public abstract class TP extends Protocol {
                 return getPhysicalAddressFromCache((UUID)evt.getArg());
 
             case Event.SET_PHYSICAL_ADDRESS:
-                Tuple<UUID,Address> tuple=(Tuple<UUID,Address>)evt.getArg();
+                Tuple<UUID,PhysicalAddress> tuple=(Tuple<UUID,PhysicalAddress>)evt.getArg();
                 addPhysicalAddressToCache(tuple.getVal1(), tuple.getVal2());
                 break;
 
@@ -1430,12 +1435,12 @@ public abstract class TP extends Protocol {
         }
     }
 
-    protected void addPhysicalAddressToCache(Address logical_addr, Address physical_addr) {
+    protected void addPhysicalAddressToCache(Address logical_addr, PhysicalAddress physical_addr) {
         if(logical_addr != null && physical_addr != null)
             logical_addr_cache.put(logical_addr, physical_addr);
     }
 
-    protected Address getPhysicalAddressFromCache(Address logical_addr) {
+    protected PhysicalAddress getPhysicalAddressFromCache(Address logical_addr) {
         return logical_addr != null? logical_addr_cache.get(logical_addr) : null;
     }
 
@@ -1446,13 +1451,13 @@ public abstract class TP extends Protocol {
     
     public void clearLogicalAddressCache() {
         logical_addr_cache.clear();
-        Tuple<Address, Address> local_addr_info=getLogicalAndPhysicalAddress();
+        Tuple<Address, PhysicalAddress> local_addr_info=getLogicalAndPhysicalAddress();
         if(local_addr_info != null)
             addPhysicalAddressToCache(local_addr_info.getVal1(), local_addr_info.getVal2());
     }
 
 
-    protected abstract Tuple<Address,Address> getLogicalAndPhysicalAddress();
+    protected abstract Tuple<Address,PhysicalAddress> getLogicalAndPhysicalAddress();
 
     /* ----------------------------- End of Private Methods ---------------------------------------- */
 

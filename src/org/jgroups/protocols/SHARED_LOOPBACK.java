@@ -3,6 +3,7 @@ package org.jgroups.protocols;
 import org.jgroups.Address;
 import org.jgroups.Event;
 import org.jgroups.Message;
+import org.jgroups.PhysicalAddress;
 import org.jgroups.util.Tuple;
 import org.jgroups.stack.IpAddress;
 
@@ -14,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Loopback transport shared by all channels within the same VM. Property for testing is that no messages are lost. Allows
  * us to test various protocols (with ProtocolTester) at maximum speed.
  * @author Bela Ban
- * @version $Id: SHARED_LOOPBACK.java,v 1.5.4.1 2009/02/20 09:41:44 belaban Exp $
+ * @version $Id: SHARED_LOOPBACK.java,v 1.5.4.2 2009/02/20 12:19:14 belaban Exp $
  */
 public class SHARED_LOOPBACK extends TP {
     private static int next_port=10000;
@@ -79,8 +80,8 @@ public class SHARED_LOOPBACK extends TP {
         msg.setDest(dest);
     }
 
-    protected Tuple<Address, Address> getLogicalAndPhysicalAddress() {
-        return new Tuple<Address,Address>(local_addr, local_addr);
+    protected Tuple<Address, PhysicalAddress> getLogicalAndPhysicalAddress() {
+        return new Tuple<Address, PhysicalAddress>(local_addr, (PhysicalAddress)local_addr);
     }
 
     /*------------------------------ Protocol interface ------------------------------ */

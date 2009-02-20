@@ -28,7 +28,7 @@ import java.util.*;
 /**
  * Collection of various utility routines that can not be assigned to other classes.
  * @author Bela Ban
- * @version $Id: Util.java,v 1.187.2.3 2009/02/19 12:54:37 belaban Exp $
+ * @version $Id: Util.java,v 1.187.2.4 2009/02/20 12:19:28 belaban Exp $
  */
 public class Util {
 
@@ -800,7 +800,7 @@ public class Util {
      * @param out
      * @throws IOException
      */
-    public static void writeAddresses(Collection<Address> v, DataOutputStream out) throws IOException {
+    public static void writeAddresses(Collection<? extends Address> v, DataOutputStream out) throws IOException {
         if(v == null) {
             out.writeShort(-1);
             return;
@@ -820,7 +820,7 @@ public class Util {
      * @throws IllegalAccessException
      * @throws InstantiationException
      */
-    public static Collection<Address> readAddresses(DataInputStream in, Class cl) throws IOException, IllegalAccessException, InstantiationException {
+    public static Collection<? extends Address> readAddresses(DataInputStream in, Class cl) throws IOException, IllegalAccessException, InstantiationException {
         short length=in.readShort();
         if(length < 0) return null;
         Collection<Address> retval=(Collection<Address>)cl.newInstance();
@@ -839,7 +839,7 @@ public class Util {
      * @param addrs Collection<Address>
      * @return long size
      */
-    public static long size(Collection<Address> addrs) {
+    public static long size(Collection<? extends Address> addrs) {
         int retval=Global.SHORT_SIZE; // number of elements
         if(addrs != null && !addrs.isEmpty()) {
             Address addr=addrs.iterator().next();

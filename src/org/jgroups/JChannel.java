@@ -75,7 +75,7 @@ import java.util.concurrent.Exchanger;
  * the construction of the stack will be aborted.
  *
  * @author Bela Ban
- * @version $Id: JChannel.java,v 1.209.4.2 2009/02/19 12:54:34 belaban Exp $
+ * @version $Id: JChannel.java,v 1.209.4.3 2009/02/20 12:19:36 belaban Exp $
  */
 @MBean(description="JGroups channel")
 public class JChannel extends Channel {
@@ -790,6 +790,11 @@ public class JChannel extends Channel {
     @ManagedAttribute(name="LocalAddress")
     public String getLocalAddressAsString() {
         return local_addr != null? local_addr.toString() : "n/a";
+    }
+
+    @ManagedAttribute(name="LocalAddress (UUID)")
+    public String getLocalAddressAsUUID() {
+        return (local_addr instanceof UUID)? ((UUID)local_addr).toStringLong() : null;
     }
 
     @ManagedAttribute(writable=true)

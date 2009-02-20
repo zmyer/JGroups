@@ -339,7 +339,7 @@ public class FLUSH extends Protocol {
                     case FlushHeader.FLUSH_BYPASS:
                         return up_prot.up(evt);                     
                     case FlushHeader.START_FLUSH:
-                        Collection<Address> fp=fh.flushParticipants;
+                        Collection<? extends Address> fp=fh.flushParticipants;
                         boolean amIParticipant = (fp != null && fp.contains(localAddress)) || msg.getSrc().equals(localAddress);
                         if(amIParticipant){
                             handleStartFlush(msg, fh);
@@ -859,7 +859,7 @@ public class FLUSH extends Protocol {
 
         long viewID;
 
-        Collection<Address> flushParticipants;
+        Collection<? extends Address> flushParticipants;
 
         Digest digest = null;
         private static final long serialVersionUID=-6248843990215637687L;

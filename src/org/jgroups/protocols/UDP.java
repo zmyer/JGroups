@@ -1,10 +1,7 @@
 package org.jgroups.protocols;
 
 
-import org.jgroups.Address;
-import org.jgroups.Global;
-import org.jgroups.Message;
-import org.jgroups.Event;
+import org.jgroups.*;
 import org.jgroups.annotations.DeprecatedProperty;
 import org.jgroups.annotations.Property;
 import org.jgroups.stack.IpAddress;
@@ -45,7 +42,7 @@ import java.util.Map;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: UDP.java,v 1.196.2.5 2009/02/20 10:58:19 belaban Exp $
+ * @version $Id: UDP.java,v 1.196.2.6 2009/02/20 12:19:17 belaban Exp $
  */
 @DeprecatedProperty(names={"num_last_ports","null_src_addresses", "send_on_all_interfaces", "send_interfaces"})
 public class UDP extends TP {
@@ -451,14 +448,14 @@ public class UDP extends TP {
     }
 
 
-    protected Address createLocalAddress() {
+    protected IpAddress createLocalAddress() {
         return sock != null? new IpAddress(sock.getLocalAddress(), sock.getLocalPort()) : null;
     }
 
 
-    protected Tuple<Address, Address> getLogicalAndPhysicalAddress() {
-        Address physical_addr=createLocalAddress();
-        return physical_addr != null? new Tuple<Address,Address>(local_addr, physical_addr) : null;
+    protected Tuple<Address, PhysicalAddress> getLogicalAndPhysicalAddress() {
+        IpAddress physical_addr=createLocalAddress();
+        return physical_addr != null? new Tuple<Address,PhysicalAddress>(local_addr, physical_addr) : null;
     }
 
     /**

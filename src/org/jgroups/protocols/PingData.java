@@ -3,6 +3,7 @@ package org.jgroups.protocols;
 
 import org.jgroups.Address;
 import org.jgroups.Global;
+import org.jgroups.PhysicalAddress;
 import org.jgroups.util.Streamable;
 import org.jgroups.util.UUID;
 import org.jgroups.util.Util;
@@ -17,14 +18,14 @@ import java.util.ArrayList;
  * Encapsulates information about a cluster node, e.g. local address, coordinator's addresss, logical name and
  * physical address(es)
  * @author Bela Ban
- * @version $Id: PingData.java,v 1.1.2.4 2009/02/18 16:05:02 belaban Exp $
+ * @version $Id: PingData.java,v 1.1.2.5 2009/02/20 12:19:25 belaban Exp $
  */
 public class PingData implements Streamable {
     private Address own_addr=null;
     private Address coord_addr=null;
     private boolean is_server=false;
     private String logical_name=null;
-    private List<Address> physical_addrs=null;
+    private List<PhysicalAddress> physical_addrs=null;
 
 
     public PingData() {
@@ -38,11 +39,11 @@ public class PingData implements Streamable {
 
 
     public PingData(Address own_addr, Address coord_addr, boolean is_server,
-                    String logical_name, List<Address> physical_addrs) {
+                    String logical_name, List<PhysicalAddress> physical_addrs) {
         this(own_addr, coord_addr, is_server);
         this.logical_name=logical_name;
         if(physical_addrs != null) {
-            this.physical_addrs=new ArrayList<Address>(physical_addrs);
+            this.physical_addrs=new ArrayList<PhysicalAddress>(physical_addrs);
         }
     }
 
@@ -71,7 +72,7 @@ public class PingData implements Streamable {
         return logical_name;
     }
 
-    public List<Address> getPhysicalAddrs() {
+    public List<PhysicalAddress> getPhysicalAddrs() {
         return physical_addrs;
     }
 
@@ -115,7 +116,7 @@ public class PingData implements Streamable {
         coord_addr=Util.readAddress(instream);
         is_server=instream.readBoolean();
         logical_name=Util.readString(instream);
-        physical_addrs=(List<Address>)Util.readAddresses(instream, ArrayList.class);
+        physical_addrs=(List<PhysicalAddress>)Util.readAddresses(instream, ArrayList.class);
     }
 
     public int size() {
@@ -123,16 +124,6 @@ public class PingData implements Streamable {
 
         retval+=Util.size(own_addr);
         retval+=Util.size(coord_addr);
-
-//        if(own_addr != null) {
-//            retval+=Global.BYTE_SIZE; // 1 boolean for: IpAddress or other address ?
-//            retval+=Util.size(own_addr);
-//        }
-//        if(coord_addr != null) {
-//            retval+=Global.BYTE_SIZE; // 1 boolean for: IpAddress or other address ?
-//            retval+=Util.size(coord_addr);
-//        }
-
         retval+=Global.BYTE_SIZE;     // presence byte for logical_name
         if(logical_name != null)
             retval+=logical_name.length() +2;

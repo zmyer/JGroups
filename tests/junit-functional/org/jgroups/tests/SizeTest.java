@@ -21,7 +21,7 @@ import java.util.*;
 /**
  * Tests whether method size() of a header and its serialized size correspond
  * @author  Bela Ban
- * @version $Id: SizeTest.java,v 1.12.2.6 2009/02/18 16:05:05 belaban Exp $
+ * @version $Id: SizeTest.java,v 1.12.2.7 2009/02/20 12:19:49 belaban Exp $
  */
 @Test(groups=Global.FUNCTIONAL)
 public class SizeTest {
@@ -48,9 +48,9 @@ public class SizeTest {
         PingData data;
         final Address own=org.jgroups.util.UUID.randomUUID();
         final Address coord=org.jgroups.util.UUID.randomUUID();
-        final Address physical_addr_1=new IpAddress("127.0.0.1", 7500);
-        final Address physical_addr_2=new IpAddress("192.168.1.5", 6000);
-        final Address physical_addr_3=new IpAddress("192.134.2.1", 6655);
+        final PhysicalAddress physical_addr_1=new IpAddress("127.0.0.1", 7500);
+        final PhysicalAddress physical_addr_2=new IpAddress("192.168.1.5", 6000);
+        final PhysicalAddress physical_addr_3=new IpAddress("192.134.2.1", 6655);
 
 
         data=new PingData(null, null, false);
@@ -65,13 +65,13 @@ public class SizeTest {
         data=new PingData(own, coord, false, "node-1", null);
         _testSize(data);
 
-        data=new PingData(own, coord, false, "node-1", new ArrayList<Address>(7));
+        data=new PingData(own, coord, false, "node-1", new ArrayList<PhysicalAddress>(7));
         _testSize(data);
 
-        data=new PingData(null, null, false, "node-1", new ArrayList<Address>(7));
+        data=new PingData(null, null, false, "node-1", new ArrayList<PhysicalAddress>(7));
         _testSize(data);
 
-        List<Address> list=new ArrayList<Address>();
+        List<PhysicalAddress> list=new ArrayList<PhysicalAddress>();
         list.add(physical_addr_1);
         list.add(physical_addr_2);
         list.add(physical_addr_3);
@@ -556,7 +556,7 @@ public class SizeTest {
         System.out.println("\nlen=" + len + ", serialized length=" + buf.length);
         assert len == buf.length;
         DataInputStream in=new DataInputStream(new ByteArrayInputStream(buf));
-        Collection<Address> new_list=Util.readAddresses(in, ArrayList.class);
+        Collection<? extends Address> new_list=Util.readAddresses(in, ArrayList.class);
         System.out.println("old list=" + list + "\nnew list=" + new_list);
         assert list.equals(new_list);
     }

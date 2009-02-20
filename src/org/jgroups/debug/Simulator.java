@@ -1,10 +1,6 @@
 package org.jgroups.debug;
 
-import org.jgroups.Address;
-import org.jgroups.ChannelException;
-import org.jgroups.Event;
-import org.jgroups.Message;
-import org.jgroups.View;
+import org.jgroups.*;
 import org.jgroups.protocols.TP;
 import org.jgroups.stack.Protocol;
 import org.jgroups.stack.ProtocolStack;
@@ -21,7 +17,7 @@ import java.util.Set ;
 /**
  * Tests one or more protocols independently. Look at org.jgroups.tests.FCTest for an example of how to use it.
  * @author Bela Ban
- * @version $Id: Simulator.java,v 1.14.4.1 2009/02/20 09:41:47 belaban Exp $
+ * @version $Id: Simulator.java,v 1.14.4.2 2009/02/20 12:18:58 belaban Exp $
  */
 public class Simulator {
 	private Protocol[] protStack=null;
@@ -389,7 +385,7 @@ public class Simulator {
 		public void postUnmarshallingList(Message msg, Address dest, boolean multicast) {
 		}
 
-        protected Tuple<Address, Address> getLogicalAndPhysicalAddress() {
+        protected Tuple<Address, PhysicalAddress> getLogicalAndPhysicalAddress() {
             throw new UnsupportedOperationException("not implemented");
         }
 

@@ -1,4 +1,4 @@
-// $Id: LOOPBACK.java,v 1.28.4.1 2009/02/20 09:41:44 belaban Exp $
+// $Id: LOOPBACK.java,v 1.28.4.2 2009/02/20 12:19:12 belaban Exp $
 
 package org.jgroups.protocols;
 
@@ -6,6 +6,7 @@ package org.jgroups.protocols;
 import org.jgroups.Address;
 import org.jgroups.Event;
 import org.jgroups.Message;
+import org.jgroups.PhysicalAddress;
 import org.jgroups.stack.IpAddress;
 import org.jgroups.stack.Protocol;
 import org.jgroups.util.Util;
@@ -43,8 +44,8 @@ public class LOOPBACK extends TP {
     public void postUnmarshallingList(Message msg, Address dest, boolean multicast) {
     }
 
-    protected Tuple<Address, Address> getLogicalAndPhysicalAddress() {
-        return new Tuple<Address,Address>(local_addr, local_addr);
+    protected Tuple<Address, PhysicalAddress> getLogicalAndPhysicalAddress() {
+        return new Tuple<Address,PhysicalAddress>(local_addr, (PhysicalAddress)local_addr);
     }
 
     /*------------------------------ Protocol interface ------------------------------ */

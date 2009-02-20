@@ -38,7 +38,7 @@ import java.util.concurrent.TimeUnit;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: Discovery.java,v 1.52.4.4 2009/02/19 11:42:39 belaban Exp $
+ * @version $Id: Discovery.java,v 1.52.4.5 2009/02/20 12:19:14 belaban Exp $
  */
 @MBean
 public abstract class Discovery extends Protocol {   
@@ -264,10 +264,10 @@ public abstract class Discovery extends Protocol {
                     Address logical_addr=hdr.arg.getAddress();
                     if(logical_addr == null)
                         logical_addr=msg.getSrc();
-                    List<Address> physical_addrs=hdr.arg.getPhysicalAddrs();
-                    Address physical_addr=physical_addrs != null && !physical_addrs.isEmpty()? physical_addrs.get(0) : null;
+                    List<PhysicalAddress> physical_addrs=hdr.arg.getPhysicalAddrs();
+                    PhysicalAddress physical_addr=physical_addrs != null && !physical_addrs.isEmpty()? physical_addrs.get(0) : null;
                     if(logical_addr != null && physical_addr != null)
-                        down(new Event(Event.SET_PHYSICAL_ADDRESS, new Tuple<Address,Address>(logical_addr, physical_addr)));
+                        down(new Event(Event.SET_PHYSICAL_ADDRESS, new Tuple<Address,PhysicalAddress>(logical_addr, physical_addr)));
                     if(logical_addr != null && hdr.arg.getLogicalName() != null)
                         UUID.add((UUID)logical_addr, hdr.arg.getLogicalName());
                 }
@@ -276,8 +276,8 @@ public abstract class Discovery extends Protocol {
                     coord=!members.isEmpty()? members.firstElement() : local_addr;
                 }
 
-                Address physical_addr=(Address)down(new Event(Event.GET_PHYSICAL_ADDRESS, local_addr));
-                List<Address> physical_addrs=new ArrayList<Address>(1);
+                PhysicalAddress physical_addr=(PhysicalAddress)down(new Event(Event.GET_PHYSICAL_ADDRESS, local_addr));
+                List<PhysicalAddress> physical_addrs=new ArrayList<PhysicalAddress>(1);
                 physical_addrs.add(physical_addr);
                 PingData ping_rsp=new PingData(local_addr, coord, is_server, org.jgroups.util.UUID.get(local_addr), physical_addrs);
                 rsp_msg=new Message(msg.getSrc(), null, null);
@@ -303,7 +303,7 @@ public abstract class Discovery extends Protocol {
                     physical_addrs=rsp.getPhysicalAddrs();
                     physical_addr=physical_addrs != null && !physical_addrs.isEmpty()? physical_addrs.get(0) : null;
                     if(logical_addr != null && physical_addr != null)
-                        down(new Event(Event.SET_PHYSICAL_ADDRESS, new Tuple<Address,Address>(logical_addr, physical_addr)));
+                        down(new Event(Event.SET_PHYSICAL_ADDRESS, new Tuple<Address,PhysicalAddress>(logical_addr, physical_addr)));
                     if(logical_addr != null && rsp.getLogicalName() != null)
                         UUID.add((UUID)logical_addr, rsp.getLogicalName());
                 }

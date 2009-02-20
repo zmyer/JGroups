@@ -3,6 +3,7 @@ package org.jgroups.protocols;
 import org.jgroups.Address;
 import org.jgroups.Event;
 import org.jgroups.Message;
+import org.jgroups.PhysicalAddress;
 import org.jgroups.annotations.ManagedAttribute;
 import org.jgroups.annotations.Property;
 import org.jgroups.stack.Protocol;
@@ -170,7 +171,7 @@ public abstract class BasicTCP extends TP {
         postUnmarshalling(msg, dest, null, multicast);
     }
 
-    protected Tuple<Address, Address> getLogicalAndPhysicalAddress() {
+    protected Tuple<Address, PhysicalAddress> getLogicalAndPhysicalAddress() {
         throw new UnsupportedOperationException("not yet implemented");
     }
 
