@@ -4,6 +4,7 @@ package org.jgroups.protocols;
 import org.jgroups.Address;
 import org.jgroups.Global;
 import org.jgroups.Message;
+import org.jgroups.Event;
 import org.jgroups.annotations.DeprecatedProperty;
 import org.jgroups.annotations.Property;
 import org.jgroups.stack.IpAddress;
@@ -44,7 +45,7 @@ import java.util.Map;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: UDP.java,v 1.196.2.4 2009/02/20 09:41:44 belaban Exp $
+ * @version $Id: UDP.java,v 1.196.2.5 2009/02/20 10:58:19 belaban Exp $
  */
 @DeprecatedProperty(names={"num_last_ports","null_src_addresses", "send_on_all_interfaces", "send_interfaces"})
 public class UDP extends TP {
@@ -174,7 +175,18 @@ public class UDP extends TP {
                 mbrs=new ArrayList<Address>(members);
             }
             for(Address mbr: mbrs) {
-                _send(((IpAddress)mbr).getIpAddress(), ((IpAddress)mbr).getPort(), false, data, offset, length);
+                Address physical_dest=getPhysicalAddressFromCache(mbr);
+                if(physical_dest == null) {
+                    if(log.isWarnEnabled())
+                        log.warn("no physical address for " + mbr + ", dropping message");
+                    if(System.currentTimeMillis() - last_who_has_request >= 5000) { // send only every 5 secs max
+                        up_prot.up(new Event(Event.GET_PHYSICAL_ADDRESS, mbr));
+                        last_who_has_request=System.currentTimeMillis();
+                    }
+                    return;
+                }
+                _send(((IpAddress)physical_dest).getIpAddress(), ((IpAddress)physical_dest).getPort(),
+                      false, data, offset, length);
             }
         }
     }
