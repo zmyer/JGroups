@@ -45,7 +45,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * The {@link #receive(Address, Address, byte[], int, int)} method must
  * be called by subclasses when a unicast or multicast message has been received.
  * @author Bela Ban
- * @version $Id: TP.java,v 1.239.4.13 2009/02/23 11:46:52 belaban Exp $
+ * @version $Id: TP.java,v 1.239.4.14 2009/02/23 12:32:47 belaban Exp $
  */
 @MBean(description="Transport protocol")
 @DeprecatedProperty(names={"bind_to_all_interfaces", "use_incoming_packet_handler", "use_outgoing_packet_handler",
@@ -282,11 +282,6 @@ public abstract class TP extends Protocol {
     
     /** The address (host and port) of this member */
     protected Address local_addr=null;
-
-    @ManagedAttribute(writable=true, description="The logical name of this channel. Stays with the channel until " +
-            "the channel is closed")
-    @Property(description="The logical name of this channel. Stays with the channel until the channel is closed")
-    protected String local_name=null;
 
     /** The members of this group (updated when a member joins or leaves) */
     protected final HashSet<Address> members=new HashSet<Address>(11);
@@ -557,17 +552,8 @@ public abstract class TP extends Protocol {
 
     public Address getLocalAddress() {return local_addr;}
     public String getChannelName() {return channel_name;}
-    public String getLocalName() {return local_name;}
     public boolean isLoopback() {return loopback;}
     public void setLoopback(boolean b) {loopback=b;}
-
-    public void setLocalName(String name) {
-        if(name != null && name.length() > 0) {
-            this.local_name=name;
-            if(local_addr != null)
-                UUID.add((UUID)local_addr, name);
-        }
-    }
 
     /** @deprecated With the concurrent stack being the default, this property is ignored */
     public static boolean isUseIncomingPacketHandler() {return false;}
@@ -832,10 +818,6 @@ public abstract class TP extends Protocol {
      */
     public void start() throws Exception {
         local_addr=UUID.randomUUID();
-        if(local_name == null || local_name.length() == 0)
-            local_name=Util.generateLocalName();
-        if(local_name != null && local_name.length() > 0)
-            UUID.add((UUID)local_addr, local_name);
 
         if(timer == null)
             throw new Exception("timer is null");

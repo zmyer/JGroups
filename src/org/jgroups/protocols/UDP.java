@@ -41,7 +41,7 @@ import java.util.Map;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: UDP.java,v 1.196.2.7 2009/02/23 11:46:51 belaban Exp $
+ * @version $Id: UDP.java,v 1.196.2.8 2009/02/23 12:32:47 belaban Exp $
  */
 @DeprecatedProperty(names={"num_last_ports","null_src_addresses", "send_on_all_interfaces", "send_interfaces"})
 public class UDP extends TP {
@@ -237,6 +237,15 @@ public class UDP extends TP {
     public void init() throws Exception {
         super.init();
 
+        if(log.isDebugEnabled()) log.debug("creating sockets and starting threads");
+        try {
+            createSockets();
+        }
+        catch(Exception ex) {
+            String tmp="problem creating sockets (bind_addr=" + bind_addr + ", mcast_addr=" + mcast_addr + ")";
+            throw new Exception(tmp, ex);
+        }
+
         String str=Util.getProperty(new String[]{Global.UDP_MCAST_ADDR},
                                     null, "mcast_addr", false, null);
         if(str != null)
@@ -267,14 +276,7 @@ public class UDP extends TP {
     public void start() throws Exception {
         super.start();
 
-        if(log.isDebugEnabled()) log.debug("creating sockets and starting threads");
-        try {
-            createSockets();
-        }
-        catch(Exception ex) {
-            String tmp="problem creating sockets (bind_addr=" + bind_addr + ", mcast_addr=" + mcast_addr + ")";
-            throw new Exception(tmp, ex);
-        }
+
 
         ucast_receiver=new PacketReceiver(sock,
                                           local_addr,
@@ -395,9 +397,9 @@ public class UDP extends TP {
         if(sock == null)
             throw new Exception("socket is null");
 
-        if(local_addr == null)
-            throw new IllegalStateException("local_addr is null - cannot associate it with physical address");
-        addPhysicalAddressToCache(local_addr, createLocalAddress());
+        //if(local_addr == null)
+          //  throw new IllegalStateException("local_addr is null - cannot associate it with physical address");
+        // addPhysicalAddressToCache(local_addr, createLocalAddress());
 
         if(additional_data != null)
             ((IpAddress)local_addr).setAdditionalData(additional_data);

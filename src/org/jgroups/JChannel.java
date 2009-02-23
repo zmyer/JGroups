@@ -8,11 +8,10 @@ import org.jgroups.annotations.ManagedAttribute;
 import org.jgroups.annotations.ManagedOperation;
 import org.jgroups.conf.ConfiguratorFactory;
 import org.jgroups.conf.ProtocolStackConfigurator;
-import org.jgroups.stack.IpAddress;
+import org.jgroups.protocols.TP;
 import org.jgroups.stack.ProtocolStack;
 import org.jgroups.stack.StateTransferInfo;
 import org.jgroups.util.*;
-import org.jgroups.protocols.TP;
 import org.w3c.dom.Element;
 
 import java.io.File;
@@ -75,7 +74,7 @@ import java.util.concurrent.Exchanger;
  * the construction of the stack will be aborted.
  *
  * @author Bela Ban
- * @version $Id: JChannel.java,v 1.209.4.5 2009/02/23 11:46:57 belaban Exp $
+ * @version $Id: JChannel.java,v 1.209.4.6 2009/02/23 12:32:49 belaban Exp $
  */
 @MBean(description="JGroups channel")
 public class JChannel extends Channel {
@@ -165,7 +164,11 @@ public class JChannel extends Channel {
 
 
 
-    /** Used by subclass to create a JChannel without a protocol stack, don't use as application programmer */
+    /**
+     * Used by subclass to create a JChannel without a protocol stack, don't use as application programmer
+     * @deprecated Remove in 3.0 
+     */
+
     protected JChannel(boolean no_op) {
         ;
     }
@@ -1670,6 +1673,12 @@ public class JChannel extends Channel {
         if(local_addr != null)
             down(new Event(Event.REMOVE_ADDRESS, local_addr));
         local_addr=uuid;
+
+        if(name == null || name.length() == 0) // generate a logical name if not set
+            name=Util.generateLocalName();
+        if(name != null && name.length() > 0)
+            UUID.add(local_addr, name);
+
         Event evt=new Event(Event.SET_LOCAL_ADDRESS, local_addr);
         down(evt);
         if(up_handler != null)
