@@ -75,7 +75,7 @@ import java.util.concurrent.Exchanger;
  * the construction of the stack will be aborted.
  *
  * @author Bela Ban
- * @version $Id: JChannel.java,v 1.209.4.3 2009/02/20 12:19:36 belaban Exp $
+ * @version $Id: JChannel.java,v 1.209.4.4 2009/02/23 08:59:56 belaban Exp $
  */
 @MBean(description="JGroups channel")
 public class JChannel extends Channel {
@@ -87,6 +87,11 @@ public class JChannel extends Channel {
 
     /*the address of this JChannel instance*/
     private Address local_addr=null;
+
+    @ManagedAttribute(writable=true, description="The logical name of this channel. Stays with the channel until " +
+            "the channel is closed")
+    private String name=null;
+
     /*the channel (also know as group) name*/
     private String cluster_name=null;  // group name
     /*the latest view of the group membership*/
@@ -491,14 +496,14 @@ public class JChannel extends Channel {
                         // fetch state from target
                         stateTransferOk=getState(target, state_id, timeout, false);
                         if(!stateTransferOk) {
-                            throw new StateTransferException(getLocalAddress() + " could not fetch state "
+                            throw new StateTransferException(getAddress() + " could not fetch state "
                                     + state_id
                                     + " from "
                                     + target);
                         }
                     }
                     catch(Exception e) {
-                        throw new StateTransferException(getLocalAddress() + " could not fetch state "
+                        throw new StateTransferException(getAddress() + " could not fetch state "
                                 + state_id
                                 + " from "
                                 + target, e);
@@ -777,43 +782,46 @@ public class JChannel extends Channel {
     @ManagedAttribute
     public static String getVersion() {
         return Version.printDescription();
-    }  
+    }
+
+    public Address getLocalAddress() {
+        return getAddress();
+    }
 
     /**
-     * returns the local address of the channel
-     * returns null if the channel is closed
+     * Returns the local address of the channel (null if the channel is closed)
      */
-    public Address getLocalAddress() {
+    public Address getAddress() {
         return closed ? null : local_addr;
     }
 
-    @ManagedAttribute(name="LocalAddress")
-    public String getLocalAddressAsString() {
+    @ManagedAttribute(name="Address")
+    public String getAddressAsString() {
         return local_addr != null? local_addr.toString() : "n/a";
     }
 
-    @ManagedAttribute(name="LocalAddress (UUID)")
-    public String getLocalAddressAsUUID() {
+    @ManagedAttribute(name="Address (UUID)")
+    public String getAddressAsUUID() {
         return (local_addr instanceof UUID)? ((UUID)local_addr).toStringLong() : null;
     }
 
-    @ManagedAttribute(writable=true)
-    public String getLocalName() {
-        TP transport=prot_stack != null? prot_stack.getTransport() : null;
-        return transport != null? transport.getLocalName() : null;
+    public String getName() {
+        return name;
     }
 
     /**
      * Sets the logical name for the channel. The name will stay associated with this channel for the channel's
      * lifetime (until close() is called). This method should be called <em>before</em> calling connect().<br/>
-     * Note that this method should be called only once !
      * @param name
      */
     @ManagedAttribute(writable=true)
-    public void setLocalName(String name) {
-        TP transport=prot_stack != null? prot_stack.getTransport() : null;
-        if(transport != null && name != null && name.length() > 0)
-            transport.setLocalName(name);
+    public void setName(String name) {
+        if(name != null) {
+            this.name=name;
+            if(local_addr != null) {
+                UUID.add((UUID)local_addr, this.name);
+            }
+        }
     }
 
     /**
@@ -1906,7 +1914,7 @@ public class JChannel extends Channel {
             flush_unblock_promise.getResultWithTimeout(FLUSH_UNBLOCK_TIMEOUT);
         }
         catch(TimeoutException te) {
-            log.warn("Timeout waiting for UNBLOCK event at " + getLocalAddress());
+            log.warn("Timeout waiting for UNBLOCK event at " + getAddress());
         }
     }
 
@@ -1922,7 +1930,7 @@ public class JChannel extends Channel {
             flush_unblock_promise.getResultWithTimeout(FLUSH_UNBLOCK_TIMEOUT);
         }
         catch(TimeoutException te) {
-            log.warn("Timeout waiting for UNBLOCK event at " + getLocalAddress());
+            log.warn("Timeout waiting for UNBLOCK event at " + getAddress());
         }
     }
     
@@ -1988,7 +1996,7 @@ public class JChannel extends Channel {
                     local_addr.toString() + " [" + ((UUID)local_addr).toStringLong() + "]" 
                     : "null");
             map.put("cluster", getClusterName());
-            map.put("member", getLocalAddressAsString() + " (" + getClusterName() + ")");
+            map.put("member", getAddressAsString() + " (" + getClusterName() + ")");
             return map;
         }
 

@@ -9,7 +9,7 @@ import java.util.concurrent.CyclicBarrier;
 
 /**
  * @author Bela Ban
- * @version $Id: ConcurrentCloseTest.java,v 1.11 2008/08/08 17:07:12 vlada Exp $
+ * @version $Id: ConcurrentCloseTest.java,v 1.11.4.1 2009/02/23 08:59:50 belaban Exp $
  */
 @Test(groups=Global.STACK_DEPENDENT,sequential=true)
 public class ConcurrentCloseTest extends ChannelTestBase {
@@ -61,7 +61,7 @@ public class ConcurrentCloseTest extends ChannelTestBase {
         public void run() {
             try {
                 barrier.await();
-                System.out.println("closing channel for " + channel.getLocalAddress());
+                System.out.println("closing channel for " + channel.getAddress());
                 channel.close();
             }
             catch(Exception e) {

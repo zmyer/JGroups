@@ -28,7 +28,7 @@ import java.util.*;
 /**
  * Collection of various utility routines that can not be assigned to other classes.
  * @author Bela Ban
- * @version $Id: Util.java,v 1.187.2.4 2009/02/20 12:19:28 belaban Exp $
+ * @version $Id: Util.java,v 1.187.2.5 2009/02/23 08:59:55 belaban Exp $
  */
 public class Util {
 
@@ -2901,7 +2901,7 @@ public class Util {
         View view=ch.getView();
         if(view == null)
             return false;
-        Address local_addr=ch.getLocalAddress();
+        Address local_addr=ch.getAddress();
         if(local_addr == null)
             return false;
         Vector<Address> mbrs=view.getMembers();

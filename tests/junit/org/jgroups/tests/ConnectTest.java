@@ -13,7 +13,7 @@ import org.testng.annotations.Test;
 
 /**
  * Runs through multiple channel connect and disconnects, without closing the channel.
- * @version $Id: ConnectTest.java,v 1.20 2008/08/08 17:07:11 vlada Exp $
+ * @version $Id: ConnectTest.java,v 1.20.4.1 2009/02/23 08:59:50 belaban Exp $
  */
 @Test(groups=Global.STACK_DEPENDENT,sequential=true)
 public class ConnectTest extends ChannelTestBase {
@@ -48,7 +48,7 @@ public class ConnectTest extends ChannelTestBase {
         channel.connect("ConnectTest.testgroup-2");
         View view=channel.getView();
         assert view.size() == 1;
-        assert view.containsMember(channel.getLocalAddress());
+        assert view.containsMember(channel.getAddress());
     }
 
 
@@ -79,8 +79,8 @@ public class ConnectTest extends ChannelTestBase {
         System.out.println("-- view for channel: " + view);
 
         assert view.size() == 2;
-        assert view.containsMember(channel.getLocalAddress());
-        assert view.containsMember(coordinator.getLocalAddress());
+        assert view.containsMember(channel.getAddress());
+        assert view.containsMember(coordinator.getAddress());
     }
 
 

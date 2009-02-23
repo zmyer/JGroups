@@ -1,4 +1,4 @@
-// $Id: ReplicatedTree2.java,v 1.1 2008/11/10 15:31:33 belaban Exp $
+// $Id: ReplicatedTree2.java,v 1.1.4.1 2009/02/23 08:59:53 belaban Exp $
 
 package org.jgroups.blocks;
 
@@ -134,7 +134,7 @@ public class ReplicatedTree2 implements Runnable, MessageListener, MembershipLis
     }
 
     public Address getLocalAddress() {
-        return channel != null? channel.getLocalAddress() : null;
+        return channel != null? channel.getAddress() : null;
     }
 
     public Vector getMembers() {

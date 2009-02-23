@@ -12,7 +12,7 @@ import java.util.Vector;
 /**
  * Simple test fo primary partitions
  * @author Bela Ban
- * @version $Id: PrimaryPartitionTest.java,v 1.2 2007/08/27 12:35:14 belaban Exp $
+ * @version $Id: PrimaryPartitionTest.java,v 1.2.6.1 2009/02/23 08:59:54 belaban Exp $
  */
 public class PrimaryPartitionTest {
 
@@ -51,7 +51,7 @@ public class PrimaryPartitionTest {
         public void run() {
             Vector<View> subgroups=view.getSubgroups();
             View tmp_view=getPrimaryView(subgroups);
-            Address local_addr=ch.getLocalAddress();
+            Address local_addr=ch.getAddress();
             if(!tmp_view.getMembers().contains(local_addr)) {
                 System.out.println("I (" + local_addr + ") am not member of the new primary partition (" + tmp_view +
                         "), will re-acquire the state");

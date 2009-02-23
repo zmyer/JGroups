@@ -12,7 +12,7 @@ import java.util.Vector;
 /**
  * Sends num_msgs up the stack. Stack has to have DUMMY_TP transport and PERF_TP top protocol
  * @author Bela Ban Feb 24, 2004
- * @version $Id: SimplePerfTest.java,v 1.2 2005/04/18 13:55:57 belaban Exp $
+ * @version $Id: SimplePerfTest.java,v 1.2.24.1 2009/02/23 08:59:54 belaban Exp $
  */
 public class SimplePerfTest {
     JChannel ch=null;
@@ -66,7 +66,7 @@ public class SimplePerfTest {
 
         ch=new JChannel(props);
         ch.connect("demo");
-        local_addr=ch.getLocalAddress();
+        local_addr=ch.getAddress();
         Vector members=new Vector();
         members.add(local_addr);
         view=new View(local_addr, 0, members);

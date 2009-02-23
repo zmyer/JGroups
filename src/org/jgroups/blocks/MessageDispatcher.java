@@ -38,7 +38,7 @@ import java.util.Vector;
  * the application instead of protocol level.
  *
  * @author Bela Ban
- * @version $Id: MessageDispatcher.java,v 1.81 2008/12/05 14:59:40 belaban Exp $
+ * @version $Id: MessageDispatcher.java,v 1.81.4.1 2009/02/23 08:59:53 belaban Exp $
  */
 public class MessageDispatcher implements RequestHandler {
     protected Channel channel=null;
@@ -72,7 +72,7 @@ public class MessageDispatcher implements RequestHandler {
         this.channel=channel;
         prot_adapter=new ProtocolAdapter();
         if(channel != null) {
-            local_addr=channel.getLocalAddress();
+            local_addr=channel.getAddress();
         }
         setMessageListener(l);
         setMembershipListener(l2);
@@ -87,7 +87,7 @@ public class MessageDispatcher implements RequestHandler {
         this.channel=channel;
         prot_adapter=new ProtocolAdapter();
         if(channel != null) {
-            local_addr=channel.getLocalAddress();
+            local_addr=channel.getAddress();
         }
         setMessageListener(l);
         setMembershipListener(l2);
@@ -103,7 +103,7 @@ public class MessageDispatcher implements RequestHandler {
         this.concurrent_processing=concurrent_processing;
         prot_adapter=new ProtocolAdapter();
         if(channel != null) {
-            local_addr=channel.getLocalAddress();
+            local_addr=channel.getAddress();
         }
         setMessageListener(l);
         setMembershipListener(l2);
@@ -162,7 +162,7 @@ public class MessageDispatcher implements RequestHandler {
 
         Transport tp;
         if((tp=adapter.getTransport()) instanceof Channel) {
-            local_addr=((Channel) tp).getLocalAddress();
+            local_addr=((Channel) tp).getAddress();
         }
         start();
     }
@@ -200,7 +200,7 @@ public class MessageDispatcher implements RequestHandler {
 
         Transport tp;
         if((tp=adapter.getTransport()) instanceof Channel) {
-            local_addr=((Channel) tp).getLocalAddress(); // fixed bug #800774
+            local_addr=((Channel) tp).getAddress(); // fixed bug #800774
         }
 
         start();
@@ -229,7 +229,7 @@ public class MessageDispatcher implements RequestHandler {
 
         Transport tp;
         if((tp=adapter.getTransport()) instanceof Channel) {
-            local_addr=((Channel) tp).getLocalAddress(); // fixed bug #800774
+            local_addr=((Channel) tp).getAddress(); // fixed bug #800774
         }
 
         start();
@@ -349,7 +349,7 @@ public class MessageDispatcher implements RequestHandler {
         if(ch == null)
             return;
         this.channel=ch;
-        local_addr=channel.getLocalAddress();
+        local_addr=channel.getAddress();
         if(prot_adapter == null)
             prot_adapter=new ProtocolAdapter();
         channel.setUpHandler(prot_adapter);
@@ -440,7 +440,7 @@ public class MessageDispatcher implements RequestHandler {
 
         if(tmp != null && tmp.getOpt(Channel.LOCAL).equals(Boolean.FALSE)) {
             if(local_addr == null) {
-                local_addr=tmp.getLocalAddress();
+                local_addr=tmp.getAddress();
             }
             if(local_addr != null) {
                 real_dests.removeElement(local_addr);
@@ -523,7 +523,7 @@ public class MessageDispatcher implements RequestHandler {
 
         if(tmp != null && tmp.getOpt(Channel.LOCAL).equals(Boolean.FALSE)) {
             if(local_addr == null) {
-                local_addr=tmp.getLocalAddress();
+                local_addr=tmp.getAddress();
             }
             if(local_addr != null) {
                 real_dests.removeElement(local_addr);

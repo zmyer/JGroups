@@ -15,7 +15,7 @@ import java.util.List;
 /**
  * Tests sending of unicasts to members not in the group (http://jira.jboss.com/jira/browse/JGRP-357)
  * @author Bela Ban
- * @version $Id: UnicastEnableToTest.java,v 1.9 2008/08/08 17:07:11 vlada Exp $
+ * @version $Id: UnicastEnableToTest.java,v 1.9.4.1 2009/02/23 08:59:50 belaban Exp $
  */
 @Test(groups=Global.STACK_DEPENDENT,sequential=true)
 public class UnicastEnableToTest extends ChannelTestBase {
@@ -53,7 +53,7 @@ public class UnicastEnableToTest extends ChannelTestBase {
         Assert.assertEquals(2, c2.getView().size());
         MyReceiver receiver=new MyReceiver();
         c2.setReceiver(receiver);
-        Address dest=c2.getLocalAddress();
+        Address dest=c2.getAddress();
         c1.send(new Message(dest, null, "hello"));
         Util.sleep(500);
         List<Message> list=receiver.getMsgs();
@@ -67,7 +67,7 @@ public class UnicastEnableToTest extends ChannelTestBase {
         c2=createChannel(c1);
         c2.connect(GROUP);
         Assert.assertEquals(2, c2.getView().size());
-        Address dest=c2.getLocalAddress();
+        Address dest=c2.getAddress();
         c2.close();
         Util.sleep(100);
         try {
@@ -84,7 +84,7 @@ public class UnicastEnableToTest extends ChannelTestBase {
         c2=createChannel(c1);
         c2.connect(GROUP);
         Assert.assertEquals(2, c2.getView().size());
-        Address dest=c2.getLocalAddress();
+        Address dest=c2.getAddress();
         c2.close();
         Util.sleep(100);
         c1.down(new Event(Event.ENABLE_UNICASTS_TO, dest));

@@ -11,7 +11,7 @@ import java.util.List;
 /**
  * Test whether physical addresses are fetched correctly after the UUID-physical address cache has been cleared
  * @author Bela Ban
- * @version $Id: UUIDCacheClearTest.java,v 1.1.2.1 2009/02/20 09:40:28 belaban Exp $
+ * @version $Id: UUIDCacheClearTest.java,v 1.1.2.2 2009/02/23 08:59:50 belaban Exp $
  */
 @Test(groups=Global.STACK_DEPENDENT,sequential=true)
 public class UUIDCacheClearTest extends ChannelTestBase {
@@ -33,8 +33,8 @@ public class UUIDCacheClearTest extends ChannelTestBase {
 
             assert c2.getView().size() == 2 : "view is " + c2.getView();
 
-            c1_addr=c1.getLocalAddress();
-            c2_addr=c2.getLocalAddress();
+            c1_addr=c1.getAddress();
+            c2_addr=c2.getAddress();
 
             // send one unicast message from c1 to c2 and vice versa
             c1.send(c2_addr, null, "one");

@@ -1,4 +1,4 @@
-// $Id: CloseTest.java,v 1.23 2008/08/08 17:07:11 vlada Exp $
+// $Id: CloseTest.java,v 1.23.4.1 2009/02/23 08:59:50 belaban Exp $
 
 package org.jgroups.tests;
 
@@ -86,12 +86,12 @@ public class CloseTest extends ChannelTestBase {
         c1.get().connect(GROUP);
         Util.sleep(500); // time to receive its own view
         dumpMessages("c1", c1.get());
-        a1=c1.get().getLocalAddress();
+        a1=c1.get().getAddress();
         c2.set(createChannel(c1.get()));
         System.out.println("-- connecting c2");
         c2.get().connect(GROUP);
         Util.sleep(500); // time to receive its own view
-        a2=c2.get().getLocalAddress();
+        a2=c2.get().getAddress();
         dumpMessages("c2", c2.get());
 
         System.out.println("-- closing c2");
@@ -126,11 +126,11 @@ public class CloseTest extends ChannelTestBase {
         c1.get().connect(GROUP);
         Util.sleep(500); // time to receive its own view
         dumpMessages("c1", c1.get());
-        a1=c1.get().getLocalAddress();
+        a1=c1.get().getAddress();
         c2.set(createChannel(c1.get()));
         c2.get().connect(GROUP);
         Util.sleep(500); // time to receive its own view
-        a2=c2.get().getLocalAddress();
+        a2=c2.get().getAddress();
         v=(View)c2.get().receive(1);
         members=v.getMembers();
         Assert.assertEquals(2, members.size());

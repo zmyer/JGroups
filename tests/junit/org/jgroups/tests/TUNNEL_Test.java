@@ -4,7 +4,6 @@ package org.jgroups.tests;
 
 import org.jgroups.*;
 import org.jgroups.protocols.MERGE2;
-import org.jgroups.protocols.TUNNEL;
 import org.jgroups.stack.GossipRouter;
 import org.jgroups.stack.ProtocolStack;
 import org.jgroups.util.Promise;
@@ -21,7 +20,7 @@ import org.testng.annotations.Test;
  *
  * @author Ovidiu Feodorov <ovidiu@feodorov.com>
  * @author Bela Ban belaban@yahoo.com
- * @version $Id: TUNNEL_Test.java,v 1.2 2009/02/12 16:39:28 vlada Exp $
+ * @version $Id: TUNNEL_Test.java,v 1.2.2.1 2009/02/23 08:59:50 belaban Exp $
  **/
 @Test(groups=Global.STACK_INDEPENDENT,sequential=true)
 public class TUNNEL_Test extends ChannelTestBase{
@@ -56,9 +55,9 @@ public class TUNNEL_Test extends ChannelTestBase{
         channel = new JChannel(props);
         setProps(channel);
         channel.connect(GROUP);
-        assert channel.getLocalAddress() != null;
+        assert channel.getAddress() != null;
         channel.disconnect();
-        assert channel.getLocalAddress() == null;
+        assert channel.getAddress() == null;
     }
 
 
@@ -74,7 +73,7 @@ public class TUNNEL_Test extends ChannelTestBase{
         channel.connect("DisconnectTest.testgroup-2");
         View view=channel.getView();
         assert view.size() == 1;
-        assert view.containsMember(channel.getLocalAddress());
+        assert view.containsMember(channel.getAddress());
     }
 
 
@@ -95,8 +94,8 @@ public class TUNNEL_Test extends ChannelTestBase{
         channel.connect(GROUP);
         View view=channel.getView();
         assert view.size() == 2;
-        assert view.containsMember(channel.getLocalAddress());
-        assert view.containsMember(coordinator.getLocalAddress());
+        assert view.containsMember(channel.getAddress());
+        assert view.containsMember(coordinator.getAddress());
     }
 
 
@@ -141,7 +140,7 @@ public class TUNNEL_Test extends ChannelTestBase{
         channel.connect("DisconnectTest.testgroup-2");
         View view=channel.getView();
         assert view.size() == 1;
-        assert view.containsMember(channel.getLocalAddress());
+        assert view.containsMember(channel.getAddress());
     }
      
      public void testConnectThree() throws Exception {
@@ -160,8 +159,8 @@ public class TUNNEL_Test extends ChannelTestBase{
          View view=channel.getView();
          assert channel.getView().size() == 3;
          assert third.getView().size() == 3;
-         assert view.containsMember(channel.getLocalAddress());
-         assert view.containsMember(coordinator.getLocalAddress());
+         assert view.containsMember(channel.getAddress());
+         assert view.containsMember(coordinator.getAddress());
          
          Util.close(third);
      }
@@ -185,8 +184,8 @@ public class TUNNEL_Test extends ChannelTestBase{
 
          View view=channel.getView();
          assert view.size() == 2;
-         assert view.containsMember(channel.getLocalAddress());
-         assert view.containsMember(coordinator.getLocalAddress());
+         assert view.containsMember(channel.getAddress());
+         assert view.containsMember(coordinator.getAddress());
      }
 
 

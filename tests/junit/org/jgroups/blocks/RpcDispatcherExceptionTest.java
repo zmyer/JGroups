@@ -12,7 +12,7 @@ import java.io.NotSerializableException;
 
 /**
  * @author Bela Ban
- * @version $Id: RpcDispatcherExceptionTest.java,v 1.9 2008/08/08 17:07:30 vlada Exp $
+ * @version $Id: RpcDispatcherExceptionTest.java,v 1.9.4.1 2009/02/23 08:59:59 belaban Exp $
  */
 @Test(groups=Global.STACK_DEPENDENT,sequential=true)
 public class RpcDispatcherExceptionTest extends ChannelTestBase {
@@ -47,7 +47,7 @@ public class RpcDispatcherExceptionTest extends ChannelTestBase {
 
     @Test(expectedExceptions=NotSerializableException.class)
     public void testUnserializableValue2() throws Throwable {
-        disp.callRemoteMethod(channel.getLocalAddress(), "foo", new Object[]{new Pojo()}, new Class[]{Pojo.class},
+        disp.callRemoteMethod(channel.getAddress(), "foo", new Object[]{new Pojo()}, new Class[]{Pojo.class},
                               GroupRequest.GET_ALL, 5000);
     }
 

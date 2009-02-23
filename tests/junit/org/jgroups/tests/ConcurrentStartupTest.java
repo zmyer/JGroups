@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Tests concurrent startup with state transfer.
  * 
  * @author bela
- * @version $Id: ConcurrentStartupTest.java,v 1.48 2008/11/21 14:41:07 vlada Exp $
+ * @version $Id: ConcurrentStartupTest.java,v 1.48.4.1 2009/02/23 08:59:50 belaban Exp $
  */
 @Test(groups={Global.FLUSH},sequential=true)
 public class ConcurrentStartupTest extends ChannelTestBase {
@@ -205,7 +205,7 @@ public class ConcurrentStartupTest extends ChannelTestBase {
 
         public void useChannel() throws Exception {
             channel.connect("test", null, null, 25000);
-            channel.send(null, null, channel.getLocalAddress());
+            channel.send(null, null, channel.getAddress());
         }
 
         List<Address> getList() {
@@ -220,7 +220,7 @@ public class ConcurrentStartupTest extends ChannelTestBase {
             if(msg.getBuffer() == null)
                 return;
             Address obj = (Address)msg.getObject();
-            log.info("-- [#" + getName() + " (" + channel.getLocalAddress() + ")]: received " + obj);
+            log.info("-- [#" + getName() + " (" + channel.getAddress() + ")]: received " + obj);
             synchronized(this){
                 l.add(obj);
                 Integer key = new Integer(getMod());
@@ -245,7 +245,7 @@ public class ConcurrentStartupTest extends ChannelTestBase {
                     l.addAll(tmp);
                     log.info("-- [#" + getName()
                              + " ("
-                             + channel.getLocalAddress()
+                             + channel.getAddress()
                              + ")]: state is "
                              + l);
                     Integer key = new Integer(getMod());
@@ -299,7 +299,7 @@ public class ConcurrentStartupTest extends ChannelTestBase {
                     l.addAll(tmp);
                     log.info("-- [#" + getName()
                              + " ("
-                             + channel.getLocalAddress()
+                             + channel.getAddress()
                              + ")]: state is "
                              + l);
                     Integer key = new Integer(getMod());

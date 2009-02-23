@@ -19,7 +19,7 @@ import org.testng.annotations.Test;
 /**
  * 
  * @author Bela Ban
- * @version $Id: AddDataTest.java,v 1.21 2008/08/08 17:07:11 vlada Exp $
+ * @version $Id: AddDataTest.java,v 1.21.4.1 2009/02/23 08:59:50 belaban Exp $
  */
 @Test(groups={Global.STACK_DEPENDENT},sequential=false)
 public class AddDataTest extends ChannelTestBase {
@@ -34,7 +34,7 @@ public class AddDataTest extends ChannelTestBase {
                 m.put("additional_data", new byte[] { 'b', 'e', 'l', 'a' });
                 c.down(new Event(Event.CONFIG, m));
                 c.connect("AddDataTest.testadditionalData()");
-                IpAddress addr=(IpAddress)c.getLocalAddress();
+                IpAddress addr=(IpAddress)c.getAddress();
                 System.out.println("address is " + addr);
                 assert addr.getAdditionalData() != null;
                 assert addr.getAdditionalData()[0] == 'b';
@@ -76,7 +76,7 @@ public class AddDataTest extends ChannelTestBase {
             if(mcast)
                 ch1.send(new Message(null, null, buf));
             else {
-                Address dest=ch2.getLocalAddress();
+                Address dest=ch2.getAddress();
                 ch1.send(new Message(dest, null, buf));
             }
 
