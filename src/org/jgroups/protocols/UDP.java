@@ -7,7 +7,6 @@ import org.jgroups.annotations.Property;
 import org.jgroups.stack.IpAddress;
 import org.jgroups.util.BoundedList;
 import org.jgroups.util.Util;
-import org.jgroups.util.UUID;
 import org.jgroups.util.Tuple;
 
 import java.io.IOException;
@@ -42,7 +41,7 @@ import java.util.Map;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: UDP.java,v 1.196.2.6 2009/02/20 12:19:17 belaban Exp $
+ * @version $Id: UDP.java,v 1.196.2.7 2009/02/23 11:46:51 belaban Exp $
  */
 @DeprecatedProperty(names={"num_last_ports","null_src_addresses", "send_on_all_interfaces", "send_interfaces"})
 public class UDP extends TP {
@@ -453,9 +452,8 @@ public class UDP extends TP {
     }
 
 
-    protected Tuple<Address, PhysicalAddress> getLogicalAndPhysicalAddress() {
-        IpAddress physical_addr=createLocalAddress();
-        return physical_addr != null? new Tuple<Address,PhysicalAddress>(local_addr, physical_addr) : null;
+    protected PhysicalAddress getPhysicalAddress() {
+        return createLocalAddress();
     }
 
     /**

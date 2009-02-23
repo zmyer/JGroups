@@ -30,7 +30,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * stacks, and to destroy them again when not needed anymore
  * 
  * @author Bela Ban
- * @version $Id: ProtocolStack.java,v 1.92 2008/10/29 09:19:32 belaban Exp $
+ * @version $Id: ProtocolStack.java,v 1.92.4.1 2009/02/23 11:46:59 belaban Exp $
  */
 public class ProtocolStack extends Protocol implements Transport {
     public static final int ABOVE = 1; // used by insertProtocol()
@@ -725,8 +725,6 @@ public class ProtocolStack extends Protocol implements Transport {
                             ProtocolStack.RefCounter counter=val.getVal2();
                             short num_starts=counter.incrementStartCount();
                             if(num_starts >= 1) {
-                                if(above_prot != null)
-                                    above_prot.up(new Event(Event.SET_LOCAL_ADDRESS, transport.getLocalAddress()));
                                 continue;
                             }
                             else {

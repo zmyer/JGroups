@@ -30,7 +30,7 @@ import java.util.Vector;
  * property: gossip_host - if you are using GOSSIP then this defines the host of the GossipRouter, default is null
  * property: gossip_port - if you are using GOSSIP then this defines the port of the GossipRouter, default is null
  * @author Bela Ban
- * @version $Id: PING.java,v 1.52.2.3 2009/02/20 12:19:14 belaban Exp $
+ * @version $Id: PING.java,v 1.52.2.4 2009/02/23 11:46:51 belaban Exp $
  */
 public class PING extends Discovery {
     
@@ -174,19 +174,6 @@ public class PING extends Discovery {
         }
         discovery_reception.reset();
     }
-
-
-    public void localAddressSet(Address addr) {
-        // Add own address to initial_hosts if not present: we must always be able to ping ourself !
-//        if(initial_hosts != null && addr != null) {
-//            if(initial_hosts.contains(addr)) {
-//                initial_hosts.remove(addr);
-//                if(log.isDebugEnabled()) log.debug("[SET_LOCAL_ADDRESS]: removing my own address (" + addr +
-//                        ") from initial_hosts; initial_hosts=" + initial_hosts);
-//            }
-//        }
-    }
-
 
 
     public void handleConnect() {

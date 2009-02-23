@@ -38,7 +38,7 @@ import java.util.concurrent.TimeUnit;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: Discovery.java,v 1.52.4.5 2009/02/20 12:19:14 belaban Exp $
+ * @version $Id: Discovery.java,v 1.52.4.6 2009/02/23 11:46:51 belaban Exp $
  */
 @MBean
 public abstract class Discovery extends Protocol {   
@@ -97,10 +97,6 @@ public abstract class Discovery extends Protocol {
             throw new Exception("timer cannot be retrieved from protocol stack");
     }
 
-
-    /** Called after local_addr was set */
-    public void localAddressSet(Address addr) {
-    }
 
     public abstract void sendGetMembersRequest(String cluster_name);
 
@@ -319,11 +315,6 @@ public abstract class Discovery extends Protocol {
                 return null;
             }
 
-        case Event.SET_LOCAL_ADDRESS:
-            up_prot.up(evt);
-            local_addr=(Address)evt.getArg();
-            localAddressSet(local_addr);
-            break;
 
         case Event.GET_PHYSICAL_ADDRESS:
             sendGetMembersRequest(group_addr);
@@ -379,6 +370,10 @@ public abstract class Discovery extends Protocol {
             down_prot.down(evt);
             is_server=true;
             return null;
+
+        case Event.SET_LOCAL_ADDRESS:
+            local_addr=(Address)evt.getArg();
+            return down_prot.down(evt);
 
         case Event.CONNECT:
         case Event.CONNECT_WITH_STATE_TRANSFER:    

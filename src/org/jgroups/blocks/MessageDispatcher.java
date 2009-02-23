@@ -38,7 +38,7 @@ import java.util.Vector;
  * the application instead of protocol level.
  *
  * @author Bela Ban
- * @version $Id: MessageDispatcher.java,v 1.81.4.1 2009/02/23 08:59:53 belaban Exp $
+ * @version $Id: MessageDispatcher.java,v 1.81.4.2 2009/02/23 11:47:01 belaban Exp $
  */
 public class MessageDispatcher implements RequestHandler {
     protected Channel channel=null;
@@ -693,12 +693,12 @@ public class MessageDispatcher implements RequestHandler {
                         return new StateTransferInfo(null, os, sti.state_id);
                     }
                     else if(msg_listener instanceof MessageListener){
-                	if(log.isWarnEnabled()){
-                	    log.warn("Channel has STREAMING_STATE_TRANSFER, however,"
-                	             + " application does not implement ExtendedMessageListener. State is not transfered");
-                	    Util.close(os);
-                	}
-		    }
+                        if(log.isWarnEnabled()){
+                            log.warn("Channel has STREAMING_STATE_TRANSFER, however,"
+                                    + " application does not implement ExtendedMessageListener. State is not transfered");
+                            Util.close(os);
+                        }
+                    }
                     break;
 
                 case Event.STATE_TRANSFER_INPUTSTREAM:
@@ -713,12 +713,12 @@ public class MessageDispatcher implements RequestHandler {
                         }
                     }
                     else if(msg_listener instanceof MessageListener){
-                	if(log.isWarnEnabled()){
-                	    log.warn("Channel has STREAMING_STATE_TRANSFER, however,"
-                	             + " application does not implement ExtendedMessageListener. State is not transfered");
-                	    Util.close(is);
-                	}
-		    }                    
+                        if(log.isWarnEnabled()){
+                            log.warn("Channel has STREAMING_STATE_TRANSFER, however,"
+                                    + " application does not implement ExtendedMessageListener. State is not transfered");
+                            Util.close(is);
+                        }
+                    }
                     break;
 
                 case Event.VIEW_CHANGE:
@@ -749,10 +749,10 @@ public class MessageDispatcher implements RequestHandler {
                     channel.blockOk();
                     break;
                 case Event.UNBLOCK:
-                   if(membership_listener instanceof ExtendedMembershipListener) {
-                      ((ExtendedMembershipListener)membership_listener).unblock();
-                   }
-                   break;
+                    if(membership_listener instanceof ExtendedMembershipListener) {
+                        ((ExtendedMembershipListener)membership_listener).unblock();
+                    }
+                    break;
             }
 
             return null;

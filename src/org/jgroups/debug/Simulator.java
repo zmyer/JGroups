@@ -7,7 +7,6 @@ import org.jgroups.stack.ProtocolStack;
 import org.jgroups.util.Queue;
 import org.jgroups.util.QueueClosedException;
 import org.jgroups.util.TimeScheduler;
-import org.jgroups.util.Tuple;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -17,7 +16,7 @@ import java.util.Set ;
 /**
  * Tests one or more protocols independently. Look at org.jgroups.tests.FCTest for an example of how to use it.
  * @author Bela Ban
- * @version $Id: Simulator.java,v 1.14.4.2 2009/02/20 12:18:58 belaban Exp $
+ * @version $Id: Simulator.java,v 1.14.4.3 2009/02/23 11:46:46 belaban Exp $
  */
 public class Simulator {
 	private Protocol[] protStack=null;
@@ -153,7 +152,8 @@ public class Simulator {
 		}
 
 		// moved event processing to follow stack init (JGRP-843)
-		bottom.up(new Event(Event.SET_LOCAL_ADDRESS, local_addr));
+		// bottom.up(new Event(Event.SET_LOCAL_ADDRESS, local_addr));
+        prot_stack.down(new Event(Event.SET_LOCAL_ADDRESS, local_addr));
 		if(view != null) {
 			Event view_evt=new Event(Event.VIEW_CHANGE, view);
 			bottom.up(view_evt);
@@ -385,7 +385,7 @@ public class Simulator {
 		public void postUnmarshallingList(Message msg, Address dest, boolean multicast) {
 		}
 
-        protected Tuple<Address, PhysicalAddress> getLogicalAndPhysicalAddress() {
+        protected PhysicalAddress getPhysicalAddress() {
             throw new UnsupportedOperationException("not implemented");
         }
 

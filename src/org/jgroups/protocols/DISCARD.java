@@ -1,4 +1,4 @@
-// $Id: DISCARD.java,v 1.26 2008/11/27 15:42:02 vlada Exp $
+// $Id: DISCARD.java,v 1.26.4.1 2009/02/23 11:46:51 belaban Exp $
 
 package org.jgroups.protocols;
 
@@ -123,9 +123,6 @@ public class DISCARD extends Protocol {
         Message msg;
         double r;
 
-        if(evt.getType() == Event.SET_LOCAL_ADDRESS)
-            localAddress=(Address)evt.getArg();
-
         if(evt.getType() == Event.MSG) {
             msg=(Message)evt.getArg();
             Address sender=msg.getSrc();
@@ -214,6 +211,10 @@ public class DISCARD extends Protocol {
                     }
                 }
             }
+        }
+        else {
+            if(evt.getType() == Event.SET_LOCAL_ADDRESS)
+                localAddress=(Address)evt.getArg();
         }
 
         return down_prot.down(evt);

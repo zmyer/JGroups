@@ -42,7 +42,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * whenever a message is received: the new message is added and then we try to remove as many messages as
  * possible (until we stop at a gap, or there are no more messages).
  * @author Bela Ban
- * @version $Id: UNICAST.java,v 1.118 2008/10/21 08:19:08 vlada Exp $
+ * @version $Id: UNICAST.java,v 1.118.4.1 2009/02/23 11:46:51 belaban Exp $
  */
 @MBean(description="Reliable unicast layer")
 public class UNICAST extends Protocol implements AckSenderWindow.RetransmitCommand {
@@ -298,10 +298,6 @@ public class UNICAST extends Protocol implements AckSenderWindow.RetransmitComma
                 break;
             }
             return null;
-
-        case Event.SET_LOCAL_ADDRESS:
-            local_addr=(Address)evt.getArg();
-            break;
         }
 
         return up_prot.up(evt);   // Pass up to the layer above us
@@ -462,6 +458,10 @@ public class UNICAST extends Protocol implements AckSenderWindow.RetransmitComma
                 removeConnection(member);
                 enabled_members.remove(member);
                 previous_members.remove(member);
+                break;
+
+            case Event.SET_LOCAL_ADDRESS:
+                local_addr=(Address)evt.getArg();
                 break;
         }
 

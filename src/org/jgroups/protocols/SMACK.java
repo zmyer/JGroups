@@ -44,7 +44,7 @@ import java.util.*;
  * </ul>
  * Advantage of this protocol: no group membership necessary, fast.
  * @author Bela Ban Aug 2002
- * @version $Id: SMACK.java,v 1.30 2008/05/30 20:39:30 vlada Exp $
+ * @version $Id: SMACK.java,v 1.30.4.1 2009/02/23 11:46:51 belaban Exp $
  * <BR> Fix membershop bug: start a, b, kill b, restart b: b will be suspected by a.
  */
 @Experimental @Unsupported
@@ -93,16 +93,6 @@ public class SMACK extends Protocol implements AckMcastSenderWindow.RetransmitCo
         Address sender;
 
         switch(evt.getType()) {
-
-            case Event.SET_LOCAL_ADDRESS:
-                local_addr=(Address)evt.getArg();
-                addMember(local_addr);
-                if(print_local_addr) {
-                    System.out.println("\n-------------------------------------------------------\n" +
-                                       "GMS: address is " + local_addr +
-                                       "\n-------------------------------------------------------");
-                }
-                break;
 
             case Event.SUSPECT:
                 if(log.isInfoEnabled()) log.info("removing suspected member " + evt.getArg());
@@ -217,6 +207,16 @@ public class SMACK extends Protocol implements AckMcastSenderWindow.RetransmitCo
                     sender_win.add(seqno, msg, new Vector<Address>(members));
                     if(log.isTraceEnabled()) log.trace("sending mcast #" + seqno);
                     seqno++;
+                }
+                break;
+
+            case Event.SET_LOCAL_ADDRESS:
+                local_addr=(Address)evt.getArg();
+                addMember(local_addr);
+                if(print_local_addr) {
+                    System.out.println("\n-------------------------------------------------------\n" +
+                            "GMS: address is " + local_addr +
+                            "\n-------------------------------------------------------");
                 }
                 break;
         }

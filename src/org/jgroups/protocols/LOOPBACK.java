@@ -1,4 +1,4 @@
-// $Id: LOOPBACK.java,v 1.28.4.2 2009/02/20 12:19:12 belaban Exp $
+// $Id: LOOPBACK.java,v 1.28.4.3 2009/02/23 11:46:51 belaban Exp $
 
 package org.jgroups.protocols;
 
@@ -8,9 +8,7 @@ import org.jgroups.Event;
 import org.jgroups.Message;
 import org.jgroups.PhysicalAddress;
 import org.jgroups.stack.IpAddress;
-import org.jgroups.stack.Protocol;
 import org.jgroups.util.Util;
-import org.jgroups.util.TimeScheduler;
 import org.jgroups.util.Tuple;
 
 
@@ -19,6 +17,8 @@ import org.jgroups.util.Tuple;
  */
 public class LOOPBACK extends TP {
     private String group_addr=null;
+    private final PhysicalAddress physical_addr=new IpAddress(12345);
+    private Address local_addr=null;
 
     public LOOPBACK() {
     }
@@ -44,8 +44,8 @@ public class LOOPBACK extends TP {
     public void postUnmarshallingList(Message msg, Address dest, boolean multicast) {
     }
 
-    protected Tuple<Address, PhysicalAddress> getLogicalAndPhysicalAddress() {
-        return new Tuple<Address,PhysicalAddress>(local_addr, (PhysicalAddress)local_addr);
+    protected PhysicalAddress getPhysicalAddress() {
+        return physical_addr;
     }
 
     /*------------------------------ Protocol interface ------------------------------ */
@@ -55,21 +55,7 @@ public class LOOPBACK extends TP {
     }
 
 
-
-    public void init() throws Exception {
-        super.init();
-//        local_addr=new IpAddress("localhost", 10000) { // fake address
-//            public String toString() {
-//                return "<fake>";
-//            }
-//        };
-
-          //local_addr=new org.jgroups.stack.IpAddress("localhost", 10000); // fake address
-       local_addr = new IpAddress(12345);
-    }
-
     public void destroy() {
-        System.out.println("destroy();");
         try {
             timer.stop();
         }
@@ -78,9 +64,6 @@ public class LOOPBACK extends TP {
         }
     }
 
-    public void start() throws Exception {
-        up_prot.up(new Event(Event.SET_LOCAL_ADDRESS, local_addr));
-    }
 
 
     /**
@@ -106,6 +89,10 @@ public class LOOPBACK extends TP {
             //rsp.setDest(local_addr);
             //rsp.setSrc(dest_addr != null ? dest_addr : local_addr);
             up(new Event(Event.MSG, rsp));
+            break;
+
+        case Event.SET_LOCAL_ADDRESS:
+            local_addr=(Address)evt.getArg();
             break;
 
         case Event.CONNECT:

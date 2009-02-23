@@ -45,7 +45,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * The {@link #receive(Address, Address, byte[], int, int)} method must
  * be called by subclasses when a unicast or multicast message has been received.
  * @author Bela Ban
- * @version $Id: TP.java,v 1.239.4.12 2009/02/20 14:22:56 belaban Exp $
+ * @version $Id: TP.java,v 1.239.4.13 2009/02/23 11:46:52 belaban Exp $
  */
 @MBean(description="Transport protocol")
 @DeprecatedProperty(names={"bind_to_all_interfaces", "use_incoming_packet_handler", "use_outgoing_packet_handler",
@@ -853,7 +853,6 @@ public abstract class TP extends Protocol {
         }
 
         setInAllThreadFactories(channel_name, local_addr, thread_naming_pattern);
-        sendUpLocalAddressEvent();
     }
 
 
@@ -1319,8 +1318,14 @@ public abstract class TP extends Protocol {
                 addPhysicalAddressToCache(tuple.getVal1(), tuple.getVal2());
                 break;
 
-            case Event.REMOVE_PHYSICAL_ADDRESS:
+            case Event.REMOVE_ADDRESS:
                 removeLogicalAddressFromCache((UUID)evt.getArg());
+                break;
+
+            case Event.SET_LOCAL_ADDRESS:
+                PhysicalAddress physical_addr=getPhysicalAddress();
+                if(physical_addr != null)
+                    addPhysicalAddressToCache((Address)evt.getArg(), physical_addr);
                 break;
         }
         return null;
@@ -1427,19 +1432,7 @@ public abstract class TP extends Protocol {
         }
     }
 
-    protected void sendUpLocalAddressEvent() {
-        if(up_prot != null)
-            up(new Event(Event.SET_LOCAL_ADDRESS, local_addr));
-        else {
-            for(Map.Entry<String,Protocol> entry: up_prots.entrySet()) {
-                String tmp=entry.getKey();
-                if(tmp.startsWith(Global.DUMMY))
-                    continue;
-                Protocol prot=entry.getValue();
-                prot.up(new Event(Event.SET_LOCAL_ADDRESS, local_addr));
-            }
-        }
-    }
+  
 
     protected void addPhysicalAddressToCache(Address logical_addr, PhysicalAddress physical_addr) {
         if(logical_addr != null && physical_addr != null)
@@ -1457,13 +1450,10 @@ public abstract class TP extends Protocol {
     
     public void clearLogicalAddressCache() {
         logical_addr_cache.clear();
-        Tuple<Address, PhysicalAddress> local_addr_info=getLogicalAndPhysicalAddress();
-        if(local_addr_info != null)
-            addPhysicalAddressToCache(local_addr_info.getVal1(), local_addr_info.getVal2());
     }
 
 
-    protected abstract Tuple<Address,PhysicalAddress> getLogicalAndPhysicalAddress();
+    protected abstract PhysicalAddress getPhysicalAddress();
 
     /* ----------------------------- End of Private Methods ---------------------------------------- */
 
@@ -1934,19 +1924,13 @@ public abstract class TP extends Protocol {
                 case Event.CONNECT_WITH_STATE_TRANSFER:
                     factory.setClusterName((String)evt.getArg());
                     break;
-            }
-            return down_prot.down(evt);
-        }
-
-        public Object up(Event evt) {
-            switch(evt.getType()) {
                 case Event.SET_LOCAL_ADDRESS:
                     Address addr=(Address)evt.getArg();
                     if(addr != null)
                         factory.setAddress(addr.toString());
                     break;
             }
-            return up_prot.up(evt);
+            return down_prot.down(evt);
         }
 
         public String getName() {

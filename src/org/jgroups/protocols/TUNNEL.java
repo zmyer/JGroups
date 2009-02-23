@@ -1,4 +1,4 @@
-// $Id: TUNNEL.java,v 1.51.4.2 2009/02/20 12:19:13 belaban Exp $
+// $Id: TUNNEL.java,v 1.51.4.3 2009/02/23 11:46:51 belaban Exp $
 
 package org.jgroups.protocols;
 
@@ -11,7 +11,6 @@ import org.jgroups.annotations.Property;
 import org.jgroups.stack.RouterStub;
 import org.jgroups.stack.IpAddress;
 import org.jgroups.util.Util;
-import org.jgroups.util.Tuple;
 
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -286,7 +285,7 @@ public class TUNNEL extends TP {
     }
 
     // todo: implement
-    protected Tuple<Address, PhysicalAddress> getLogicalAndPhysicalAddress() {
+    protected PhysicalAddress getPhysicalAddress() {
         throw new UnsupportedOperationException("not yet implemented");
     }
 }

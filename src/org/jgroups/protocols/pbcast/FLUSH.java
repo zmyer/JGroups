@@ -289,6 +289,10 @@ public class FLUSH extends Protocol {
         case Event.RESUME:
             onResume(evt);
             return null;
+
+        case Event.SET_LOCAL_ADDRESS:
+            localAddress = (Address) evt.getArg();
+            break;
         }
         return down_prot.down(evt);
     }
@@ -425,10 +429,6 @@ public class FLUSH extends Protocol {
             if(!tmpView.containsMember(localAddress)){
                 onViewChange(tmpView);
             }
-            break;
-
-        case Event.SET_LOCAL_ADDRESS:
-            localAddress = (Address) evt.getArg();
             break;
 
         case Event.SUSPECT:

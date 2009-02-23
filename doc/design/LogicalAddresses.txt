@@ -4,7 +4,7 @@ Logical addresses
 =================
 
 Author:  Bela Ban
-Version: $Id: LogicalAddresses.txt,v 1.12.2.13 2009/02/20 14:22:49 belaban Exp $
+Version: $Id: LogicalAddresses.txt,v 1.12.2.14 2009/02/23 11:46:56 belaban Exp $
 JIRA:    https://jira.jboss.org/jira/browse/JGRP-129
 
 The address chosen by each node is essentially the IP address and port of the receiver socket. However, for the
@@ -225,5 +225,7 @@ TODOs
         --> local_addr needs to move from TP to JChannel !!!
         *** Do we need to move local_name from TP into the JChannel, too ? YES
         --> Move setSourceAddress() from TP to JChannel ?
-
+  - Check whether thread names in a shared transport are still correct.
+  - Do thread names use the logical or UUID name of a channel ?
+  - Is Global.DUMMY still needed when we set the local address top down ?
 

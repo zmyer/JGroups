@@ -1,4 +1,4 @@
-// $Id: MERGE2.java,v 1.53.2.1 2009/02/18 07:46:50 belaban Exp $
+// $Id: MERGE2.java,v 1.53.2.2 2009/02/23 11:46:51 belaban Exp $
 
 package org.jgroups.protocols;
 
@@ -126,20 +126,6 @@ public class MERGE2 extends Protocol {
     }
 
 
-
-    public Object up(Event evt) {
-        switch(evt.getType()) {
-
-            case Event.SET_LOCAL_ADDRESS:
-                local_addr=(Address)evt.getArg();
-                return up_prot.up(evt);
-
-            default:
-                return up_prot.up(evt);            // Pass up to the layer above us
-        }
-    }
-
-
     public Object down(Event evt) {
         switch(evt.getType()) {
         
@@ -164,6 +150,10 @@ public class MERGE2 extends Protocol {
                     task.stop();
                 }
                 return ret;
+
+            case Event.SET_LOCAL_ADDRESS:
+                local_addr=(Address)evt.getArg();
+                return down_prot.down(evt);
 
             default:
                 return down_prot.down(evt);          // Pass on to the layer below us

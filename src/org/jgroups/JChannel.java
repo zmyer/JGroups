@@ -75,7 +75,7 @@ import java.util.concurrent.Exchanger;
  * the construction of the stack will be aborted.
  *
  * @author Bela Ban
- * @version $Id: JChannel.java,v 1.209.4.4 2009/02/23 08:59:56 belaban Exp $
+ * @version $Id: JChannel.java,v 1.209.4.5 2009/02/23 11:46:57 belaban Exp $
  */
 @MBean(description="JGroups channel")
 public class JChannel extends Channel {
@@ -86,7 +86,7 @@ public class JChannel extends Channel {
     protected String properties=null;
 
     /*the address of this JChannel instance*/
-    private Address local_addr=null;
+    private UUID local_addr=null;
 
     @ManagedAttribute(writable=true, description="The logical name of this channel. Stays with the channel until " +
             "the channel is closed")
@@ -104,17 +104,12 @@ public class JChannel extends Channel {
     /** Thread responsible for closing a channel and potentially reconnecting to it (e.g., when shunned). */
     protected CloserThread closer=null;
 
-    /** To wait until a local address has been assigned */
-    private final Promise<Address> local_addr_promise=new Promise<Address>();
-
     private final Promise<Boolean> state_promise=new Promise<Boolean>();
 
     private final Exchanger<StateTransferInfo> applstate_exchanger=new Exchanger<StateTransferInfo>();
 
     private final Promise<Boolean> flush_unblock_promise=new Promise<Boolean>();
 
-    /** wait until we have a non-null local_addr */
-    private long LOCAL_ADDR_TIMEOUT=30000; //=Long.parseLong(System.getProperty("local_addr.timeout", "30000"));
     /*if the states is fetched automatically, this is the default timeout, 5 secs*/
     private static final long GET_STATE_DEFAULT_TIMEOUT=5000;
     /*if FLUSH is used channel waits for UNBLOCK event, this is the default timeout, 5 secs*/
@@ -404,6 +399,7 @@ public class JChannel extends Channel {
             return;
         }
 
+        setAddress();
         startStack(cluster_name);
 
         if(cluster_name != null) {    // only connect if we are not a unicast channel
@@ -468,6 +464,7 @@ public class JChannel extends Channel {
             return;
         }
 
+        setAddress();
         startStack(cluster_name);
 
         boolean stateTransferOk=false;
@@ -802,7 +799,7 @@ public class JChannel extends Channel {
 
     @ManagedAttribute(name="Address (UUID)")
     public String getAddressAsUUID() {
-        return (local_addr instanceof UUID)? ((UUID)local_addr).toStringLong() : null;
+        return local_addr != null? local_addr.toStringLong() : null;
     }
 
     public String getName() {
@@ -819,7 +816,7 @@ public class JChannel extends Channel {
         if(name != null) {
             this.name=name;
             if(local_addr != null) {
-                UUID.add((UUID)local_addr, this.name);
+                UUID.add(local_addr, this.name);
             }
         }
     }
@@ -1248,15 +1245,15 @@ public class JChannel extends Channel {
                 break;
 
             case Event.CONFIG:
-                Map<String,Object> config=(Map<String,Object>)evt.getArg();
-                if(config != null) {
-                    if(config.containsKey("state_transfer")) {
-                        state_transfer_supported=((Boolean)config.get("state_transfer")).booleanValue();
+                Map<String,Object> cfg=(Map<String,Object>)evt.getArg();
+                if(cfg != null) {
+                    if(cfg.containsKey("state_transfer")) {
+                        state_transfer_supported=((Boolean)cfg.get("state_transfer")).booleanValue();
                     }
-                    if(config.containsKey("flush_supported")) {
-                        flush_supported=((Boolean)config.get("flush_supported")).booleanValue();
+                    if(cfg.containsKey("flush_supported")) {
+                        flush_supported=((Boolean)cfg.get("flush_supported")).booleanValue();
                     }
-                    config.putAll(config);
+                    cfg.putAll(cfg);
                 }
                 break;
                 
@@ -1338,10 +1335,6 @@ public class JChannel extends Channel {
                         }
                     }
                 }
-                break;
-
-            case Event.SET_LOCAL_ADDRESS:
-                local_addr_promise.setResult((Address)evt.getArg());
                 break;
 
             case Event.EXIT:
@@ -1522,8 +1515,8 @@ public class JChannel extends Channel {
                         additional_data.putAll(m);
                         if(m.containsKey("additional_data")) {
                             byte[] tmp=(byte[])m.get("additional_data");
-                            if(local_addr instanceof IpAddress)
-                                ((IpAddress)local_addr).setAdditionalData(tmp);
+                            if(local_addr != null)
+                                local_addr.setAdditionalData(tmp);
                         }
                     }
                 }
@@ -1548,8 +1541,8 @@ public class JChannel extends Channel {
                         additional_data.putAll(m);
                         if(m.containsKey("additional_data")) {
                             byte[] tmp=(byte[])m.get("additional_data");
-                            if(local_addr instanceof IpAddress)
-                                ((IpAddress)local_addr).setAdditionalData(tmp);
+                            if(local_addr != null)
+                                local_addr.setAdditionalData(tmp);
                         }
                     }
                 }
@@ -1628,6 +1621,8 @@ public class JChannel extends Channel {
      * to be ready for new <tt>connect()</tt>
      */
     private void init() {
+        if(local_addr != null)
+            down(new Event(Event.REMOVE_ADDRESS, local_addr));
         local_addr=null;
         cluster_name=null;
         my_view=null;
@@ -1657,17 +1652,6 @@ public class JChannel extends Channel {
             throw new ChannelException("failed to start protocol stack", e);
         }
 
-        String tmp=Util.getProperty(new String[]{Global.CHANNEL_LOCAL_ADDR_TIMEOUT, "local_addr.timeout"},
-                                    null, null, false, "30000");
-        LOCAL_ADDR_TIMEOUT=Long.parseLong(tmp);
-
-        /* Wait LOCAL_ADDR_TIMEOUT milliseconds for local_addr to have a non-null value (set by SET_LOCAL_ADDRESS) */
-        local_addr=local_addr_promise.getResult(LOCAL_ADDR_TIMEOUT);
-        if(local_addr == null) {
-            log.fatal("local_addr is null; cannot connect");
-            throw new ChannelException("local_addr is null");
-        }
-
         /*create a temporary view, assume this channel is the only member and is the coordinator*/
         Vector<Address> t=new Vector<Address>(1);
         t.addElement(local_addr);
@@ -1677,6 +1661,20 @@ public class JChannel extends Channel {
         transport.registerProbeHandler(probe_handler);
     }
 
+    /**
+     * Generates new UUID and sets local address. Sends down a REMOVE_ADDRESS (if existing address was present) and
+     * a SET_LOCAL_ADDRESS
+     */
+    private void setAddress() {
+        UUID uuid=UUID.randomUUID();
+        if(local_addr != null)
+            down(new Event(Event.REMOVE_ADDRESS, local_addr));
+        local_addr=uuid;
+        Event evt=new Event(Event.SET_LOCAL_ADDRESS, local_addr);
+        down(evt);
+        if(up_handler != null)
+            up_handler.up(evt);
+    }
 
 
     /**
@@ -1763,6 +1761,7 @@ public class JChannel extends Channel {
      * </ol>
      */
     protected void _close(boolean disconnect, boolean close_mq) {
+        UUID old_addr=local_addr;
         if(closed)
             return;
 
@@ -1777,6 +1776,8 @@ public class JChannel extends Channel {
         connected=false;
         notifyChannelClosed(this);
         init(); // sets local_addr=null; changed March 18 2003 (bela) -- prevented successful rejoining
+        if(old_addr != null)
+            UUID.remove(old_addr);
     }
 
     protected void stopStack(boolean stop, boolean destroy) {
@@ -1992,8 +1993,7 @@ public class JChannel extends Channel {
             map.put("version", Version.description + ", cvs=\"" +  Version.cvs + "\"");
             if(my_view != null && !map.containsKey("view"))
                 map.put("view", my_view.toString());
-            map.put("local_addr", local_addr != null?
-                    local_addr.toString() + " [" + ((UUID)local_addr).toStringLong() + "]" 
+            map.put("local_addr", local_addr != null? local_addr.toString() + " [" + local_addr.toStringLong() + "]"
                     : "null");
             map.put("cluster", getClusterName());
             map.put("member", getAddressAsString() + " (" + getClusterName() + ")");

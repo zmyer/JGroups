@@ -1,4 +1,4 @@
-// $Id: Event.java,v 1.63.4.4 2009/02/20 12:19:34 belaban Exp $
+// $Id: Event.java,v 1.63.4.5 2009/02/23 11:46:57 belaban Exp $
 
 package org.jgroups;
 
@@ -47,12 +47,10 @@ public class Event {
     public static final int SHUTDOWN                           = 79;  // arg = null (shutdown without closing sockets or cleaning up)
     public static final int CONNECT_WITH_STATE_TRANSFER        = 80;  // arg = cluster name (string)
     public static final int DISABLE_UNICASTS_TO                = 81;  // arg = Address (member)
-    public static final int START_PARTITION                    = 82;  // arg = null;
-    public static final int STOP_PARTITION                     = 83;  // arg = null; 
     public static final int PREPARE_VIEW                       = 86;  // arg = View
-    public static final int GET_PHYSICAL_ADDRESS               = 87;  // arg = UUID
-    public static final int SET_PHYSICAL_ADDRESS               = 88;  // arg = Tuple<UUID,PhysicalAddress>
-    public static final int REMOVE_PHYSICAL_ADDRESS            = 89;  // arg = UUID
+    public static final int GET_PHYSICAL_ADDRESS               = 87;  // arg = Address --> PhysicalAddress
+    public static final int SET_PHYSICAL_ADDRESS               = 88;  // arg = Tuple<Address,PhysicalAddress>
+    public static final int REMOVE_ADDRESS                     = 89;  // arg = Address
 
     public static final int USER_DEFINED                       = 1000; // arg = <user def., e.g. evt type + data>
 
@@ -134,12 +132,10 @@ public class Event {
             case SHUTDOWN:               return "SHUTDOWN";
             case CONNECT_WITH_STATE_TRANSFER:    return "CONNECT_WITH_STATE_TRANSFER";
             case DISABLE_UNICASTS_TO:    return "DISABLE_UNICASTS_TO";
-            case START_PARTITION:        return "START_PARTITION";
-            case STOP_PARTITION:         return "STOP_PARTITION";            
             case PREPARE_VIEW:           return "PREPARE_VIEW";
             case GET_PHYSICAL_ADDRESS:   return "GET_PHYSICAL_ADDRESS";
             case SET_PHYSICAL_ADDRESS:   return "SET_PHYSICAL_ADDRESS";
-            case REMOVE_PHYSICAL_ADDRESS: return "REMOVE_PHYSICAL_ADDRESS";
+            case REMOVE_ADDRESS:         return "REMOVE_ADDRESS";
 
             case USER_DEFINED:           return "USER_DEFINED";
             default:                     return "UNDEFINED(" + t + ")";

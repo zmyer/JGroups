@@ -15,10 +15,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * Loopback transport shared by all channels within the same VM. Property for testing is that no messages are lost. Allows
  * us to test various protocols (with ProtocolTester) at maximum speed.
  * @author Bela Ban
- * @version $Id: SHARED_LOOPBACK.java,v 1.5.4.2 2009/02/20 12:19:14 belaban Exp $
+ * @version $Id: SHARED_LOOPBACK.java,v 1.5.4.3 2009/02/23 11:46:51 belaban Exp $
  */
 public class SHARED_LOOPBACK extends TP {
     private static int next_port=10000;
+
+    private PhysicalAddress physical_addr=null;
+    private Address local_addr=null;
 
     /** Map of cluster names and address-protocol mappings. Used for routing messages to all or single members */
     private static final Map<String,Map<Address,SHARED_LOOPBACK>> routing_table=new ConcurrentHashMap<String,Map<Address,SHARED_LOOPBACK>>();
@@ -80,8 +83,8 @@ public class SHARED_LOOPBACK extends TP {
         msg.setDest(dest);
     }
 
-    protected Tuple<Address, PhysicalAddress> getLogicalAndPhysicalAddress() {
-        return new Tuple<Address, PhysicalAddress>(local_addr, (PhysicalAddress)local_addr);
+    protected PhysicalAddress getPhysicalAddress() {
+        return physical_addr;
     }
 
     /*------------------------------ Protocol interface ------------------------------ */
@@ -113,6 +116,10 @@ public class SHARED_LOOPBACK extends TP {
             case Event.CONNECT:
             case Event.CONNECT_WITH_STATE_TRANSFER:   
                 register(channel_name, local_addr, this);
+                break;
+
+            case Event.SET_LOCAL_ADDRESS:
+                local_addr=(Address)evt.getArg();
                 break;
 
             case Event.DISCONNECT:

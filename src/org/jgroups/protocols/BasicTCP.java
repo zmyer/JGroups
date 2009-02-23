@@ -9,7 +9,6 @@ import org.jgroups.annotations.Property;
 import org.jgroups.stack.Protocol;
 import org.jgroups.util.BoundedList;
 import org.jgroups.util.Util;
-import org.jgroups.util.Tuple;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -171,7 +170,7 @@ public abstract class BasicTCP extends TP {
         postUnmarshalling(msg, dest, null, multicast);
     }
 
-    protected Tuple<Address, PhysicalAddress> getLogicalAndPhysicalAddress() {
+    protected PhysicalAddress getPhysicalAddress() {
         throw new UnsupportedOperationException("not yet implemented");
     }
 
