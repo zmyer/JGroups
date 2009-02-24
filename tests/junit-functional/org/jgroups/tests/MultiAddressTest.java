@@ -6,13 +6,11 @@ import org.jgroups.MultiAddress;
 import org.jgroups.Address;
 import org.jgroups.util.UUID;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Collections;
+import java.util.*;
 
 /**
  * @author Bela Ban
- * @version $Id: MultiAddressTest.java,v 1.1.2.1 2009/02/24 12:20:23 belaban Exp $
+ * @version $Id: MultiAddressTest.java,v 1.1.2.2 2009/02/24 12:23:21 belaban Exp $
  */
 @Test(groups=Global.FUNCTIONAL,sequential=false)
 public class MultiAddressTest {
@@ -42,8 +40,22 @@ public class MultiAddressTest {
         a1=new MultiAddress(l1, "cluster");
         a2=new MultiAddress(l2, "cluster");
         assert a1.hashCode() == a2.hashCode();
+        Map<Address,Integer> map=new HashMap<Address,Integer>();
+        map.put(a1, 1);
+        map.put(a2, 2);
+        System.out.println("map = " + map);
+        assert map.size() == 1;
+        assert map.get(a1) == 2;
 
         a2=new MultiAddress(l2, "cluster-2");
         assert a1.hashCode() != a2.hashCode();
+
+        map.clear();
+        map.put(a1, 1);
+        map.put(a2, 2);
+        System.out.println("map = " + map);
+        assert map.size() == 2;
+        assert map.get(a1) == 1;
+        assert map.get(a2) == 2;
     }
 }

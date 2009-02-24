@@ -15,7 +15,7 @@ import java.io.*;
  * the message is sent to P. Note that msg.dest == null 
  * </ul>
  * @author Bela Ban
- * @version $Id: MultiAddress.java,v 1.1.2.2 2009/02/24 11:53:21 belaban Exp $
+ * @version $Id: MultiAddress.java,v 1.1.2.3 2009/02/24 12:23:22 belaban Exp $
  */
 public class MultiAddress implements Address {
     private static final long serialVersionUID=7187294882574443042L;
@@ -103,11 +103,14 @@ public class MultiAddress implements Address {
     }
 
     public int hashCode() {
-        return super.hashCode();
+        return name.hashCode();
     }
 
     public boolean equals(Object obj) {
-        return super.equals(obj);
+        if(!(obj instanceof MultiAddress))
+            throw new IllegalArgumentException(obj + " is not of type MultiAddress");
+        MultiAddress other=(MultiAddress)obj;
+        return name.equals(other.name);
     }
 
     public String toString() {
@@ -119,6 +122,7 @@ public class MultiAddress implements Address {
     }
 
     public int compareTo(Address o) {
-        return 0;
+        MultiAddress other=(MultiAddress)o;
+        return name.compareTo(other.name);
     }
 }
