@@ -16,7 +16,7 @@ import java.util.Set ;
 /**
  * Tests one or more protocols independently. Look at org.jgroups.tests.FCTest for an example of how to use it.
  * @author Bela Ban
- * @version $Id: Simulator.java,v 1.14.4.3 2009/02/23 11:46:46 belaban Exp $
+ * @version $Id: Simulator.java,v 1.14.4.4 2009/02/24 15:15:51 belaban Exp $
  */
 public class Simulator {
 	private Protocol[] protStack=null;
@@ -369,10 +369,10 @@ public class Simulator {
 			return "ProtocolAdapter";
 		}
 
-		public void sendToAllMembers(byte[] data, int offset, int length) throws Exception {
+		public void sendMulticast(byte[] data, int offset, int length) throws Exception {
 		}
 
-		public void sendToSingleMember(Address dest, byte[] data, int offset, int length) throws Exception {
+		public void sendUnicast(PhysicalAddress dest, byte[] data, int offset, int length) throws Exception {
 		}
 
 		public String getInfo() {
@@ -408,7 +408,7 @@ public class Simulator {
 			}
 			return null;
 		}
-	}
+    }
 
 	class SendThread extends Thread {
 

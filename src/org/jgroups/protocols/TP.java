@@ -33,8 +33,8 @@ import java.util.concurrent.locks.ReentrantLock;
  * </ul>
  * A subclass has to override
  * <ul>
- * <li>{@link #sendToAllMembers(byte[], int, int)}
- * <li>{@link #sendToSingleMember(org.jgroups.Address, byte[], int, int)}
+ * <li>{@link #sendMulticast(byte[], int, int)}
+ * <li>{@link #sendUnicast(org.jgroups.PhysicalAddress, byte[], int, int)}
  * <li>{@link #init()}
  * <li>{@link #start()}: subclasses <em>must</em> call super.start() <em>after</em> they initialize themselves
  * (e.g., created their sockets).
@@ -45,7 +45,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * The {@link #receive(Address, Address, byte[], int, int)} method must
  * be called by subclasses when a unicast or multicast message has been received.
  * @author Bela Ban
- * @version $Id: TP.java,v 1.239.4.14 2009/02/23 12:32:47 belaban Exp $
+ * @version $Id: TP.java,v 1.239.4.15 2009/02/24 15:15:48 belaban Exp $
  */
 @MBean(description="Transport protocol")
 @DeprecatedProperty(names={"bind_to_all_interfaces", "use_incoming_packet_handler", "use_outgoing_packet_handler",
@@ -284,7 +284,7 @@ public abstract class TP extends Protocol {
     protected Address local_addr=null;
 
     /** The members of this group (updated when a member joins or leaves) */
-    protected final HashSet<Address> members=new HashSet<Address>(11);
+    protected final Set<Address> members=new CopyOnWriteArraySet<Address>();
 
     protected View view=null;
 
@@ -698,18 +698,17 @@ public abstract class TP extends Protocol {
      * @param length
      * @throws Exception
      */
-    public abstract void sendToAllMembers(byte[] data, int offset, int length) throws Exception;
+    public abstract void sendMulticast(byte[] data, int offset, int length) throws Exception;
 
     /**
-     * Send to all members in the group. UDP would use an IP multicast message, whereas TCP would send N
-     * messages, one for each member
+     * Send a unicast to 1 member. Note that the destination address is a *physical*, not a logical address
      * @param dest Must be a non-null unicast address
      * @param data The data to be sent. This is not a copy, so don't modify it
      * @param offset
      * @param length
      * @throws Exception
      */
-    public abstract void sendToSingleMember(Address dest, byte[] data, int offset, int length) throws Exception;
+    public abstract void sendUnicast(PhysicalAddress dest, byte[] data, int offset, int length) throws Exception;
 
     public abstract String getInfo();
 
@@ -916,7 +915,10 @@ public abstract class TP extends Protocol {
         // we will discard our own multicast message
         Address dest=msg.getDest();
         if(dest instanceof PhysicalAddress) {
-            msg.setDest(null); // ????
+            // We can modify the message because it won't get retransmitted. The only time we have a physical address
+            // as dest is when TCPPING sends the initial discovery requests to initial_hosts: this is below UNICAST,
+            // so no retransmission
+            msg.setDest(null);
         }
 
         boolean multicast=dest == null || dest.isMulticastAddress();
@@ -1130,32 +1132,41 @@ public abstract class TP extends Protocol {
     }
 
 
-
-
     private void doSend(Buffer buf, Address dest, boolean multicast) throws Exception {
         if(stats) {
             num_msgs_sent++;
             num_bytes_sent+=buf.getLength();
         }
         if(multicast) {
-            sendToAllMembers(buf.getBuf(), buf.getOffset(), buf.getLength());
+            sendMulticast(buf.getBuf(), buf.getOffset(), buf.getLength());
         }
         else {
-            Address physical_dest=dest instanceof PhysicalAddress? dest : getPhysicalAddressFromCache(dest);
-            if(physical_dest == null) {
-                if(log.isWarnEnabled())
-                    log.warn("no physical address for " + dest + ", dropping message");
-                if(System.currentTimeMillis() - last_who_has_request >= 5000) { // send only every 5 secs max
-                    up_prot.up(new Event(Event.GET_PHYSICAL_ADDRESS, dest));
-                    last_who_has_request=System.currentTimeMillis();
-                }
-                return;
-            }
-            sendToSingleMember(physical_dest, buf.getBuf(), buf.getOffset(), buf.getLength());
+            sendToSingleMember(dest, buf.getBuf(), buf.getOffset(), buf.getLength());
         }
     }
 
 
+    protected void sendToSingleMember(Address dest, byte[] buf, int offset, int length) throws Exception {
+        PhysicalAddress physical_dest=dest instanceof PhysicalAddress? (PhysicalAddress)dest : getPhysicalAddressFromCache(dest);
+        if(physical_dest == null) {
+            if(log.isWarnEnabled())
+                log.warn("no physical address for " + dest + ", dropping message");
+            if(System.currentTimeMillis() - last_who_has_request >= 5000) { // send only every 5 secs max
+                up_prot.up(new Event(Event.GET_PHYSICAL_ADDRESS, dest));
+                last_who_has_request=System.currentTimeMillis();
+            }
+            return;
+        }
+        sendUnicast(physical_dest, buf, offset, length);
+    }
+
+
+    protected void sendToAllPhysicalAddresses(byte[] buf, int offset, int length) throws Exception {
+        Set<PhysicalAddress> dests=new HashSet<PhysicalAddress>(logical_addr_cache.values());
+        for(PhysicalAddress dest: dests) {
+            sendUnicast(dest, buf, offset, length);
+        }
+    }
 
     /**
      * This method needs to be synchronized on out_stream when it is called
@@ -1244,7 +1255,7 @@ public abstract class TP extends Protocol {
                         for(Protocol prot: up_prots.values()) {
                             if(prot instanceof ProtocolAdapter) {
                                 ProtocolAdapter ad=(ProtocolAdapter)prot;
-                                List<Address> tmp=ad.getMembers();
+                                Set<Address> tmp=ad.getMembers();
                                 members.addAll(tmp);
                             }
                         }
@@ -1857,10 +1868,10 @@ public abstract class TP extends Protocol {
         final String cluster_name;
         final String transport_name;
         final TpHeader header;
-        final List<Address> members=new CopyOnWriteArrayList<Address>();
+        final Set<Address> members=new CopyOnWriteArraySet<Address>();
         final ThreadFactory factory;
 
-        public ProtocolAdapter(String cluster_name, String transport_name, Protocol up, Protocol down, String pattern, Address addr) {
+        public ProtocolAdapter(String cluster_name, String transport_name, Protocol up, Protocol down, String pattern) {
             this.cluster_name=cluster_name;
             this.transport_name=transport_name;
             this.up_prot=up;
@@ -1868,8 +1879,6 @@ public abstract class TP extends Protocol {
             this.header=new TpHeader(cluster_name);
             this.factory=new DefaultThreadFactory(Util.getGlobalThreadGroup(), "", false);
             factory.setPattern(pattern);
-            if(addr != null)
-                factory.setAddress(addr.toString());
         }
 
         @ManagedAttribute(description="Name of the cluster to which this adapter proxies")
@@ -1882,8 +1891,8 @@ public abstract class TP extends Protocol {
             return transport_name;
         }
 
-        public List<Address> getMembers() {
-            return Collections.unmodifiableList(members);
+        public Set<Address> getMembers() {
+            return Collections.unmodifiableSet(members);
         }
 
         public ThreadFactory getThreadFactory() {

@@ -14,6 +14,7 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Collection;
 import java.util.Set;
+import java.util.Collections;
 
 /**
  * Shared base class for tcpip protocols
@@ -117,18 +118,22 @@ public abstract class BasicTCP extends TP {
 
 
 
-    public void sendToAllMembers(byte[] data, int offset, int length) throws Exception {
-        Set<Address> mbrs;
+    public void sendMulticast(byte[] data, int offset, int length) throws Exception {
+        sendToAllPhysicalAddresses(data, offset, length);
 
-        synchronized(members) {
-            mbrs=(Set<Address>)members.clone();
-        }
-        for(Address dest: mbrs) {
-            sendToSingleMember(dest, data, offset, length);
-        }
+
+//        Set<Address> mbrs;
+//
+//        synchronized(members) {
+//            mbrs=Collections.unmodifiableSet(members);
+//        }
+//        for(Address dest: mbrs) {
+//            sendToSingleLogicalMember(dest, data, offset, length);
+//            // sendToSingleMember(dest, data, offset, length);
+//        }
     }
 
-    public void sendToSingleMember(Address dest, byte[] data, int offset, int length) throws Exception {
+    public void sendUnicast(PhysicalAddress dest, byte[] data, int offset, int length) throws Exception {
         if(log.isTraceEnabled()) log.trace("dest=" + dest + " (" + length + " bytes)");
         if(skip_suspected_members) {
             if(suspected_mbrs.contains(dest)) {

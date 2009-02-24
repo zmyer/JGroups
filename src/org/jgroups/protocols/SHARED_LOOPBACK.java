@@ -4,7 +4,6 @@ import org.jgroups.Address;
 import org.jgroups.Event;
 import org.jgroups.Message;
 import org.jgroups.PhysicalAddress;
-import org.jgroups.util.Tuple;
 import org.jgroups.stack.IpAddress;
 
 import java.util.Map;
@@ -15,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Loopback transport shared by all channels within the same VM. Property for testing is that no messages are lost. Allows
  * us to test various protocols (with ProtocolTester) at maximum speed.
  * @author Bela Ban
- * @version $Id: SHARED_LOOPBACK.java,v 1.5.4.3 2009/02/23 11:46:51 belaban Exp $
+ * @version $Id: SHARED_LOOPBACK.java,v 1.5.4.4 2009/02/24 15:15:48 belaban Exp $
  */
 public class SHARED_LOOPBACK extends TP {
     private static int next_port=10000;
@@ -36,7 +35,7 @@ public class SHARED_LOOPBACK extends TP {
         return "SHARED_LOOPBACK(local address: " + local_addr + ')';
     }
 
-    public void sendToAllMembers(byte[] data, int offset, int length) throws Exception {
+    public void sendMulticast(byte[] data, int offset, int length) throws Exception {
         Map<Address,SHARED_LOOPBACK> dests=routing_table.get(channel_name);
         if(dests == null) {
             if(log.isWarnEnabled())
@@ -55,7 +54,7 @@ public class SHARED_LOOPBACK extends TP {
         }
     }
 
-    public void sendToSingleMember(Address dest, byte[] data, int offset, int length) throws Exception {
+    public void sendUnicast(PhysicalAddress dest, byte[] data, int offset, int length) throws Exception {
         Map<Address,SHARED_LOOPBACK> dests=routing_table.get(channel_name);
         if(dests == null) {
             if(log.isWarnEnabled())

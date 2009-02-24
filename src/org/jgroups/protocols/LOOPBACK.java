@@ -1,4 +1,4 @@
-// $Id: LOOPBACK.java,v 1.28.4.3 2009/02/23 11:46:51 belaban Exp $
+// $Id: LOOPBACK.java,v 1.28.4.4 2009/02/24 15:15:48 belaban Exp $
 
 package org.jgroups.protocols;
 
@@ -28,10 +28,10 @@ public class LOOPBACK extends TP {
         return "LOOPBACK(local address: " + local_addr + ')';
     }
 
-    public void sendToAllMembers(byte[] data, int offset, int length) throws Exception {
+    public void sendMulticast(byte[] data, int offset, int length) throws Exception {
     }
 
-    public void sendToSingleMember(Address dest, byte[] data, int offset, int length) throws Exception {
+    public void sendUnicast(PhysicalAddress dest, byte[] data, int offset, int length) throws Exception {
     }
 
     public String getInfo() {

@@ -1,4 +1,4 @@
-// $Id: TUNNEL.java,v 1.51.4.3 2009/02/23 11:46:51 belaban Exp $
+// $Id: TUNNEL.java,v 1.51.4.4 2009/02/24 15:15:48 belaban Exp $
 
 package org.jgroups.protocols;
 
@@ -261,11 +261,11 @@ public class TUNNEL extends TP {
         }
     }
 
-    public void sendToAllMembers(byte[] data, int offset, int length) throws Exception {
+    public void sendMulticast(byte[] data, int offset, int length) throws Exception {
         stub.sendToAllMembers(data, offset, length);
     }
 
-    public void sendToSingleMember(Address dest, byte[] data, int offset, int length) throws Exception {
+    public void sendUnicast(PhysicalAddress dest, byte[] data, int offset, int length) throws Exception {
         stub.sendToSingleMember(dest, data, offset, length);
     }
 

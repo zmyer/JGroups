@@ -1,7 +1,10 @@
 package org.jgroups.protocols;
 
 
-import org.jgroups.*;
+import org.jgroups.Address;
+import org.jgroups.Global;
+import org.jgroups.Message;
+import org.jgroups.PhysicalAddress;
 import org.jgroups.annotations.DeprecatedProperty;
 import org.jgroups.annotations.Property;
 import org.jgroups.stack.IpAddress;
@@ -10,7 +13,6 @@ import org.jgroups.util.Util;
 
 import java.io.IOException;
 import java.net.*;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -40,7 +42,7 @@ import java.util.Map;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: UDP.java,v 1.196.2.9 2009/02/24 13:37:07 belaban Exp $
+ * @version $Id: UDP.java,v 1.196.2.10 2009/02/24 15:15:48 belaban Exp $
  */
 @DeprecatedProperty(names={"num_last_ports","null_src_addresses", "send_on_all_interfaces", "send_interfaces"})
 public class UDP extends TP {
@@ -160,33 +162,34 @@ public class UDP extends TP {
         return sb.toString();
     }
 
-    public void sendToAllMembers(byte[] data, int offset, int length) throws Exception {
+    public void sendMulticast(byte[] data, int offset, int length) throws Exception {
         if(ip_mcast && mcast_addr != null) {
             _send(mcast_addr.getIpAddress(), mcast_addr.getPort(), true, data, offset, length);
         }
         else {
-            List<Address> mbrs;
-            synchronized(members) {
-                mbrs=new ArrayList<Address>(members);
-            }
-            for(Address mbr: mbrs) {
-                Address physical_dest=getPhysicalAddressFromCache(mbr);
-                if(physical_dest == null) {
-                    if(log.isWarnEnabled())
-                        log.warn("no physical address for " + mbr + ", dropping message");
-                    if(System.currentTimeMillis() - last_who_has_request >= 5000) { // send only every 5 secs max
-                        up_prot.up(new Event(Event.GET_PHYSICAL_ADDRESS, mbr));
-                        last_who_has_request=System.currentTimeMillis();
-                    }
-                    return;
-                }
-                _send(((IpAddress)physical_dest).getIpAddress(), ((IpAddress)physical_dest).getPort(),
-                      false, data, offset, length);
-            }
+            sendToAllPhysicalAddresses(data, offset, length);
+//            List<Address> mbrs;
+//            synchronized(members) {
+//                mbrs=new ArrayList<Address>(members);
+//            }
+//            for(Address mbr: mbrs) {
+//                Address physical_dest=getPhysicalAddressFromCache(mbr);
+//                if(physical_dest == null) {
+//                    if(log.isWarnEnabled())
+//                        log.warn("no physical address for " + mbr + ", dropping message");
+//                    if(System.currentTimeMillis() - last_who_has_request >= 5000) { // send only every 5 secs max
+//                        up_prot.up(new Event(Event.GET_PHYSICAL_ADDRESS, mbr));
+//                        last_who_has_request=System.currentTimeMillis();
+//                    }
+//                    return;
+//                }
+//                _send(((IpAddress)physical_dest).getIpAddress(), ((IpAddress)physical_dest).getPort(),
+//                      false, data, offset, length);
+//            }
         }
     }
 
-    public void sendToSingleMember(Address dest, byte[] data, int offset, int length) throws Exception {
+    public void sendUnicast(PhysicalAddress dest, byte[] data, int offset, int length) throws Exception {
         _send(((IpAddress)dest).getIpAddress(), ((IpAddress)dest).getPort(), false, data, offset, length);
     }
 
