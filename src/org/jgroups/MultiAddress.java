@@ -15,7 +15,7 @@ import java.io.*;
  * the message is sent to P. Note that msg.dest == null 
  * </ul>
  * @author Bela Ban
- * @version $Id: MultiAddress.java,v 1.1.2.1 2009/02/24 11:44:39 belaban Exp $
+ * @version $Id: MultiAddress.java,v 1.1.2.2 2009/02/24 11:53:21 belaban Exp $
  */
 public class MultiAddress implements Address {
     private static final long serialVersionUID=7187294882574443042L;
@@ -57,9 +57,6 @@ public class MultiAddress implements Address {
         return name;
     }
 
-    public int size() {
-        return 0;
-    }
 
     public void writeExternal(ObjectOutput out) throws IOException {
         out.writeObject(addresses);
@@ -89,6 +86,20 @@ public class MultiAddress implements Address {
             }
         }
         name=Util.readString(in);
+    }
+
+    public int size() {
+        int retval=Global.SHORT_SIZE  // length of addresses
+                + Global.BYTE_SIZE;   // presence byte for string
+        if(addresses != null) {
+            for(Address addr: addresses)
+                retval+=Util.size(addr);
+        }
+
+        if(name != null)
+            retval+=name.length() + 2;
+
+        return retval;
     }
 
     public int hashCode() {
