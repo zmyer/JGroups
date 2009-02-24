@@ -7,7 +7,6 @@ import org.jgroups.annotations.Property;
 import org.jgroups.stack.IpAddress;
 import org.jgroups.util.BoundedList;
 import org.jgroups.util.Util;
-import org.jgroups.util.Tuple;
 
 import java.io.IOException;
 import java.net.*;
@@ -41,7 +40,7 @@ import java.util.Map;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: UDP.java,v 1.196.2.8 2009/02/23 12:32:47 belaban Exp $
+ * @version $Id: UDP.java,v 1.196.2.9 2009/02/24 13:37:07 belaban Exp $
  */
 @DeprecatedProperty(names={"num_last_ports","null_src_addresses", "send_on_all_interfaces", "send_interfaces"})
 public class UDP extends TP {
