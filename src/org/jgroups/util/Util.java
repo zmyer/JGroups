@@ -28,7 +28,7 @@ import java.util.*;
 /**
  * Collection of various utility routines that can not be assigned to other classes.
  * @author Bela Ban
- * @version $Id: Util.java,v 1.187.2.5 2009/02/23 08:59:55 belaban Exp $
+ * @version $Id: Util.java,v 1.187.2.6 2009/02/24 11:53:47 belaban Exp $
  */
 public class Util {
 
@@ -1798,14 +1798,7 @@ public class Util {
     }
 
     public static String array2String(Object[] array) {
-        StringBuilder ret=new StringBuilder("[");
-
-        if(array != null) {
-            for(int i=0; i < array.length; i++)
-                ret.append(array[i]).append(" ");
-        }
-        ret.append(']');
-        return ret.toString();
+        return Arrays.toString(array);
     }
 
     /** Returns true if all elements of c match obj */
