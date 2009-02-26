@@ -25,7 +25,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * expired members, and suspect those.
  * 
  * @author Bela Ban
- * @version $Id: FD_ALL.java,v 1.25.4.1 2009/02/23 11:46:51 belaban Exp $
+ * @version $Id: FD_ALL.java,v 1.25.4.2 2009/02/26 11:59:51 belaban Exp $
  */
 @MBean(description="Failure detection based on simple heartbeat protocol")
 public class FD_ALL extends Protocol {
@@ -158,10 +158,10 @@ public class FD_ALL extends Protocol {
     public Object up(Event evt) {
         Message msg;
         Header  hdr;
-        Address sender = null;
 
         switch(evt.getType()) {
             case Event.MSG:
+                Address sender=null;
                 msg=(Message)evt.getArg();
                 hdr=(Header)msg.getHeader(getName());
                 if(msg_counts_as_heartbeat)

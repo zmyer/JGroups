@@ -38,7 +38,7 @@ import java.util.concurrent.TimeUnit;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: Discovery.java,v 1.52.4.6 2009/02/23 11:46:51 belaban Exp $
+ * @version $Id: Discovery.java,v 1.52.4.7 2009/02/26 11:59:52 belaban Exp $
  */
 @MBean
 public abstract class Discovery extends Protocol {   
@@ -228,9 +228,8 @@ public abstract class Discovery extends Protocol {
         case Event.MSG:
             msg=(Message)evt.getArg();
             PingHeader hdr=(PingHeader)msg.getHeader(getName());
-            if(hdr == null) {
+            if(hdr == null)
                 return up_prot.up(evt);
-            }
 
             switch(hdr.type) {
 
@@ -318,14 +317,10 @@ public abstract class Discovery extends Protocol {
 
         case Event.GET_PHYSICAL_ADDRESS:
             sendGetMembersRequest(group_addr);
-            break;
-
-        default:
-            up_prot.up(evt);            // Pass up to the layer above us
-            break;
+            return null;
         }
 
-        return null;
+        return up_prot.up(evt);
     }
 
 
