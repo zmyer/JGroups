@@ -1,4 +1,4 @@
-// $Id: Event.java,v 1.63.4.5 2009/02/23 11:46:57 belaban Exp $
+// $Id: Event.java,v 1.63.4.6 2009/02/26 15:46:02 belaban Exp $
 
 package org.jgroups;
 
@@ -51,6 +51,7 @@ public class Event {
     public static final int GET_PHYSICAL_ADDRESS               = 87;  // arg = Address --> PhysicalAddress
     public static final int SET_PHYSICAL_ADDRESS               = 88;  // arg = Tuple<Address,PhysicalAddress>
     public static final int REMOVE_ADDRESS                     = 89;  // arg = Address
+    public static final int GET_LOCAL_ADDRESS                  = 90;  // arg = null --> UUID (local_addr)
 
     public static final int USER_DEFINED                       = 1000; // arg = <user def., e.g. evt type + data>
 
@@ -136,6 +137,7 @@ public class Event {
             case GET_PHYSICAL_ADDRESS:   return "GET_PHYSICAL_ADDRESS";
             case SET_PHYSICAL_ADDRESS:   return "SET_PHYSICAL_ADDRESS";
             case REMOVE_ADDRESS:         return "REMOVE_ADDRESS";
+            case GET_LOCAL_ADDRESS:      return "GET_LOCAL_ADDRESS";
 
             case USER_DEFINED:           return "USER_DEFINED";
             default:                     return "UNDEFINED(" + t + ")";

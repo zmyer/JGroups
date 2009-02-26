@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
  * sure new members don't receive any messages until they are members
  * 
  * @author Bela Ban
- * @version $Id: GMS.java,v 1.154.4.1 2009/02/23 11:46:53 belaban Exp $
+ * @version $Id: GMS.java,v 1.154.4.2 2009/02/26 15:46:00 belaban Exp $
  */
 @MBean(description="Group membership protocol")
 @DeprecatedProperty(names={"join_retry_timeout","digest_timeout","use_flush","flush_timeout"})
@@ -395,7 +395,10 @@ public class GMS extends Protocol {
             tmp_mbrs.remove(old_mbrs);
             tmp_mbrs.add(new_mbrs);
             mbrs=tmp_mbrs.getMembers();
-            v=new View(local_addr, vid, mbrs);
+            Address new_coord=local_addr;
+            if(!mbrs.isEmpty())
+                new_coord=mbrs.firstElement();
+            v=new View(new_coord, vid, mbrs);
 
             // Update membership (see DESIGN for explanation):
             tmp_members.set(mbrs);
@@ -436,7 +439,7 @@ public class GMS extends Protocol {
      * @param digest
      * @param newMembers
      */
-    public void castViewChangeWithDest(View new_view, Digest digest, JoinRsp jr, Collection <Address> newMembers) {           
+    public void castViewChangeWithDest(View new_view, Digest digest, JoinRsp jr, Collection <Address> newMembers) {
         if(log.isTraceEnabled())
             log.trace("mcasting view {" + new_view + "} (" + new_view.size() + " mbrs)\n");
        
@@ -449,7 +452,8 @@ public class GMS extends Protocol {
         if(newMembers != null && !newMembers.isEmpty()) {
             ackMembers.removeAll(newMembers);
         }
-        ack_collector.reset(new_view.getVid(), ackMembers);   
+        if(!ackMembers.isEmpty())
+            ack_collector.reset(ackMembers);
                
         
         // Send down a local TMP_VIEW event. This is needed by certain layers (e.g. NAKACK) to compute correct digest
@@ -460,15 +464,16 @@ public class GMS extends Protocol {
         down_prot.down(new Event(Event.MSG, view_change_msg));
         
         try {
-            ack_collector.waitForAllAcks(view_ack_collection_timeout);
-            if(log.isTraceEnabled())
-                log.trace("received all ACKs (" + ack_collector.size()
-                          + ") for "
-                          + new_view.getVid());
+            if(!ackMembers.isEmpty()) {
+                ack_collector.waitForAllAcks(view_ack_collection_timeout);
+                if(log.isTraceEnabled())
+                    log.trace("received all ACKs (" + ack_collector.expectedAcks() + ") from existing members for view " +
+                            new_view.getVid());
+            }
         }
         catch(TimeoutException e) {
             if(log_collect_msgs && log.isWarnEnabled()) {
-                log.warn(local_addr + " failed to collect all ACKs (" + ack_collector.size()
+                log.warn(local_addr + " failed to collect all ACKs (expected=" + ack_collector.expectedAcks()
                         + ") for view "
                         + new_view
                         + " after "
@@ -483,20 +488,19 @@ public class GMS extends Protocol {
         }   
         
         if(jr != null && (newMembers != null && !newMembers.isEmpty())) {
-            ack_collector.reset(new_view.getVid(), new ArrayList<Address>(newMembers));
-            for(Address joiner:newMembers) {
+            ack_collector.reset(new ArrayList<Address>(newMembers));
+            for(Address joiner: newMembers) {
                 sendJoinResponse(jr, joiner);
             }
             try {
                 ack_collector.waitForAllAcks(view_ack_collection_timeout);
                 if(log.isTraceEnabled())
-                    log.trace("received all ACKs (" + ack_collector.size()
-                              + ") for "
-                              + new_view.getVid());
+                    log.trace("received all ACKs (" + ack_collector.receivedAcks()
+                              + ") from joiners for view " + new_view.getVid());
             }
             catch(TimeoutException e) {
                 if(log_collect_msgs && log.isWarnEnabled()) {
-                    log.warn(local_addr + " failed to collect all ACKs (" + ack_collector.size()
+                    log.warn(local_addr + " failed to collect all ACKs (expected=" + ack_collector.expectedAcks()
                             + ") for unicasted view "
                             + new_view
                             + " after "
@@ -1171,7 +1175,7 @@ public class GMS extends Protocol {
     /**
      * Class which processes JOIN, LEAVE and MERGE requests. Requests are queued and processed in FIFO order
      * @author Bela Ban
-     * @version $Id: GMS.java,v 1.154.4.1 2009/02/23 11:46:53 belaban Exp $
+     * @version $Id: GMS.java,v 1.154.4.2 2009/02/26 15:46:00 belaban Exp $
      */
     class ViewHandler implements Runnable {
         volatile Thread                    thread;

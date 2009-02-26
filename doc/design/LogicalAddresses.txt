@@ -4,7 +4,7 @@ Logical addresses
 =================
 
 Author:  Bela Ban
-Version: $Id: LogicalAddresses.txt,v 1.12.2.18 2009/02/26 07:54:26 belaban Exp $
+Version: $Id: LogicalAddresses.txt,v 1.12.2.19 2009/02/26 15:46:05 belaban Exp $
 JIRA:    https://jira.jboss.org/jira/browse/JGRP-129
 
 The address chosen by each node is essentially the IP address and port of the receiver socket. However, for the
@@ -17,17 +17,17 @@ following reasons, this is not good enough:
 - NIC failover: a NIC goes down, we want to continue sending/receiving on a different NIC
 
 - The sender sends on all available NICs (send_on_all_interfaces="true"). This means that -if we take the receiver's
-datagram packet's address to be the identity of the sender - we get N different identities; 1 for each interface
-the message is sent on
+  datagram packet's address to be the identity of the sender - we get N different identities; 1 for each interface
+  the message is sent on
 
 - Network Address Translation: the sender's address might get changed by the NAT
 
 DESIGN:
 
 - A logical address consists of a unique identifier (UUID) and a logical name. The name is passed to JGroups when a
- channel is created (new JChannel(String logical_name, String props)). If logical_name is null, JGroups picks a
- logical name (which is not guaranteed to be unique though). The logical name stays with the channel until the latter
- is destroyed
+  channel is created (new JChannel(String logical_name, String props)). If logical_name is null, JGroups picks a
+  logical name (which is not guaranteed to be unique though). The logical name stays with the channel until the latter
+  is destroyed
 
 - A UUID is represented by org.jgroups.util.UUID, which is a subclass of Address and consists of the least and
   most significant bits variables copied from java.util.UUID. All other instance variables are omitted.

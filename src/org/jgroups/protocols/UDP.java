@@ -40,7 +40,7 @@ import java.util.Map;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: UDP.java,v 1.196.2.11 2009/02/26 07:54:18 belaban Exp $
+ * @version $Id: UDP.java,v 1.196.2.12 2009/02/26 15:46:03 belaban Exp $
  */
 @DeprecatedProperty(names={"num_last_ports","null_src_addresses", "send_on_all_interfaces", "send_interfaces"})
 public class UDP extends TP {
@@ -196,11 +196,11 @@ public class UDP extends TP {
         DatagramPacket packet=new DatagramPacket(data, offset, length, dest, port);
         try {
             if(mcast) {
-                if(mcast_sock != null)
+                if(mcast_sock != null && !mcast_sock.isClosed())
                     mcast_sock.send(packet);
             }
             else {
-                if(sock != null)
+                if(sock != null && !sock.isClosed())
                     sock.send(packet);
             }
         }
@@ -222,15 +222,6 @@ public class UDP extends TP {
 
     public void init() throws Exception {
         super.init();
-
-        if(log.isDebugEnabled()) log.debug("creating sockets and starting threads");
-        try {
-            createSockets();
-        }
-        catch(Exception ex) {
-            String tmp="problem creating sockets (bind_addr=" + bind_addr + ", mcast_addr=" + mcast_addr + ")";
-            throw new Exception(tmp, ex);
-        }
 
         String str=Util.getProperty(new String[]{Global.UDP_MCAST_ADDR},
                                     null, "mcast_addr", false, null);
@@ -260,9 +251,16 @@ public class UDP extends TP {
      * Creates the unicast and multicast sockets and starts the unicast and multicast receiver threads
      */
     public void start() throws Exception {
+        if(log.isDebugEnabled()) log.debug("creating sockets");
+        try {
+            createSockets();
+        }
+        catch(Exception ex) {
+            String tmp="problem creating sockets (bind_addr=" + bind_addr + ", mcast_addr=" + mcast_addr + ")";
+            throw new Exception(tmp, ex);
+        }
+
         super.start();
-
-
 
         ucast_receiver=new PacketReceiver(sock,
                                           "unicast receiver",
@@ -289,6 +287,10 @@ public class UDP extends TP {
         super.stop();
     }
 
+    public void destroy() {
+        super.destroy();
+        destroySockets();
+    }
 
     protected void handleConnect() throws Exception {
         if(isSingleton()) {
@@ -416,8 +418,13 @@ public class UDP extends TP {
     }
 
 
+    protected void destroySockets() {
+        closeMulticastSocket();
+        closeUnicastSocket();
+    }
+
     protected IpAddress createLocalAddress() {
-        return sock != null? new IpAddress(sock.getLocalAddress(), sock.getLocalPort()) : null;
+        return sock != null && !sock.isClosed()? new IpAddress(sock.getLocalAddress(), sock.getLocalPort()) : null;
     }
 
 

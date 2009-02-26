@@ -36,7 +36,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @author Bela Ban, Vladimir Blagojevic
  * @see MuxChannel
  * @see Channel
- * @version $Id: Multiplexer.java,v 1.105.4.2 2009/02/23 11:47:00 belaban Exp $
+ * @version $Id: Multiplexer.java,v 1.105.4.3 2009/02/26 15:46:01 belaban Exp $
  */
 @Experimental(comment="because of impedance mismatches between a MuxChannel and JChannel, this might get deprecated " +
         "in the future. The replacement would be a shared transport (see the documentation for details)")
@@ -638,7 +638,7 @@ public class Multiplexer implements UpHandler {
             }
 
             //initialize collector and ...
-            service_ack_collector.reset(null, muxChannels);
+            service_ack_collector.reset(muxChannels);
             int size=service_ack_collector.size();            
 
             //then send a message

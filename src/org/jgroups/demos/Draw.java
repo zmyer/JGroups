@@ -1,4 +1,4 @@
-// $Id: Draw.java,v 1.56.4.1 2009/02/23 09:00:01 belaban Exp $
+// $Id: Draw.java,v 1.56.4.2 2009/02/26 15:45:59 belaban Exp $
 
 
 package org.jgroups.demos;
@@ -261,6 +261,7 @@ public class Draw extends ExtendedReceiverAdapter implements ActionListener, Cha
             System.out.println("** MergeView=" + v);
         else
             System.out.println("** View=" + v);
+
         member_size=v.size();
         if(mainFrame != null)
             setTitle();

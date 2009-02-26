@@ -74,7 +74,7 @@ import java.util.concurrent.Exchanger;
  * the construction of the stack will be aborted.
  *
  * @author Bela Ban
- * @version $Id: JChannel.java,v 1.209.4.7 2009/02/26 07:54:25 belaban Exp $
+ * @version $Id: JChannel.java,v 1.209.4.8 2009/02/26 15:46:02 belaban Exp $
  */
 @MBean(description="JGroups channel")
 public class JChannel extends Channel {
@@ -87,8 +87,6 @@ public class JChannel extends Channel {
     /*the address of this JChannel instance*/
     private UUID local_addr=null;
 
-    @ManagedAttribute(writable=true, description="The logical name of this channel. Stays with the channel until " +
-            "the channel is closed")
     private String name=null;
 
     /*the channel (also know as group) name*/
@@ -814,7 +812,8 @@ public class JChannel extends Channel {
      * lifetime (until close() is called). This method should be called <em>before</em> calling connect().<br/>
      * @param name
      */
-    @ManagedAttribute(writable=true)
+    @ManagedAttribute(writable=true, description="The logical name of this channel. Stays with the channel until " +
+            "the channel is closed")
     public void setName(String name) {
         if(name != null) {
             this.name=name;
@@ -1339,6 +1338,9 @@ public class JChannel extends Channel {
                     }
                 }
                 break;
+
+            case Event.GET_LOCAL_ADDRESS:
+                return local_addr;
 
             case Event.EXIT:
                 handleExit(evt);

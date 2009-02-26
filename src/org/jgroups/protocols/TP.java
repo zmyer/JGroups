@@ -44,7 +44,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * The {@link #receive(Address, byte[], int, int)} method must
  * be called by subclasses when a unicast or multicast message has been received.
  * @author Bela Ban
- * @version $Id: TP.java,v 1.239.4.17 2009/02/26 08:31:13 belaban Exp $
+ * @version $Id: TP.java,v 1.239.4.18 2009/02/26 15:46:04 belaban Exp $
  */
 @MBean(description="Transport protocol")
 @DeprecatedProperty(names={"bind_to_all_interfaces", "use_incoming_packet_handler", "use_outgoing_packet_handler",
@@ -376,6 +376,8 @@ public abstract class TP extends Protocol {
     /** Time when the last request for a physical address was sent. Used to prevent request floods */
     protected long last_who_has_request=System.currentTimeMillis();
 
+
+    
     /**
      * Creates the TP protocol, and initializes the state variables, does
      * however not start any sockets or threads.
@@ -807,6 +809,8 @@ public abstract class TP extends Protocol {
      * Creates the unicast and multicast sockets and starts the unicast and multicast receiver threads
      */
     public void start() throws Exception {
+        fetchLocalAddresses();
+
         if(timer == null)
             throw new Exception("timer is null");
 
@@ -1290,15 +1294,44 @@ public abstract class TP extends Protocol {
             case Event.SET_LOCAL_ADDRESS:
                 if(!isSingleton())
                     local_addr=(Address)evt.getArg();
-                PhysicalAddress physical_addr=getPhysicalAddress();
-                if(physical_addr != null)
-                    addPhysicalAddressToCache((Address)evt.getArg(), physical_addr);
+                registerLocalAddress((Address)evt.getArg());
                 break;
         }
         return null;
     }
 
+    /**
+     * Associates the address with the physical address fetched from the cache
+     * @param addr
+     * @return true if registered successfully, otherwise false (e.g. physical addr could not be fetched)
+     */
+    protected void registerLocalAddress(Address addr) {
+        PhysicalAddress physical_addr=getPhysicalAddress();
+        if(physical_addr != null && addr != null)
+            addPhysicalAddressToCache(addr, physical_addr);
+    }
 
+    /**
+     * Grabs the local address (or addresses in the shared transport case) and registers them with the physical address
+     * in the transport's cache
+     */
+    protected void fetchLocalAddresses() {
+        if(!isSingleton()) {
+            if(local_addr != null) {
+                registerLocalAddress(local_addr);
+            }
+            else {
+                Address addr=(Address)up_prot.up(new Event(Event.GET_LOCAL_ADDRESS));
+                registerLocalAddress(addr);
+            }
+        }
+        else {
+            for(Protocol prot: up_prots.values()) {
+                Address addr=(Address)prot.up(new Event(Event.GET_LOCAL_ADDRESS));
+                registerLocalAddress(addr);
+            }
+        }
+    }
 
 
     protected void setThreadNames() {              
