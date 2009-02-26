@@ -21,7 +21,7 @@ import java.util.*;
 /**
  * Tests whether method size() of a header and its serialized size correspond
  * @author  Bela Ban
- * @version $Id: SizeTest.java,v 1.12.2.8 2009/02/24 11:53:18 belaban Exp $
+ * @version $Id: SizeTest.java,v 1.12.2.9 2009/02/26 07:54:17 belaban Exp $
  */
 @Test(groups=Global.FUNCTIONAL)
 public class SizeTest {
@@ -495,18 +495,7 @@ public class SizeTest {
         _testSize(addr);
     }
 
-    public static void testMultiAddress() throws Exception {
-        List<Address> list=new ArrayList<Address>();
-        Collections.addAll(list, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
-        _testSize(new MultiAddress(list, "test"));
-        _testSize(new MultiAddress(list, null));
-
-        list.clear();
-        _testSize(new MultiAddress(list, null));
-        _testSize(new MultiAddress(null, null));
-        _testSize(new MultiAddress(null, "bla"));
-    }
-
+   
     public static void testWriteAddress() throws IOException, IllegalAccessException, InstantiationException {
         UUID uuid=UUID.randomUUID();
         _testWriteAddress(uuid);

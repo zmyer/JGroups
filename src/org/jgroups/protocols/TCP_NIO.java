@@ -1,13 +1,12 @@
 package org.jgroups.protocols;
 
 import org.jgroups.Address;
+import org.jgroups.PhysicalAddress;
+import org.jgroups.annotations.Experimental;
 import org.jgroups.annotations.ManagedAttribute;
 import org.jgroups.annotations.Property;
-import org.jgroups.annotations.Experimental;
 import org.jgroups.blocks.BasicConnectionTable;
 import org.jgroups.blocks.ConnectionTableNIO;
-import org.jgroups.stack.IpAddress;
-import org.jgroups.util.PortsManager;
 
 import java.net.InetAddress;
 import java.util.Collection;
@@ -17,7 +16,7 @@ import java.util.Collection;
  * @author Scott Marlow
  * @author Alex Fu
  * @author Bela Ban
- * @version $Id: TCP_NIO.java,v 1.25 2008/10/21 15:58:04 belaban Exp $
+ * @version $Id: TCP_NIO.java,v 1.25.4.1 2009/02/26 07:54:19 belaban Exp $
  */
 @Experimental
 public class TCP_NIO extends BasicTCP implements BasicConnectionTable.Receiver
@@ -30,10 +29,10 @@ public class TCP_NIO extends BasicTCP implements BasicConnectionTable.Receiver
    */
    protected ConnectionTableNIO getConnectionTable(long ri, long cet,
                                                    InetAddress b_addr, InetAddress bc_addr,
-                                                   int s_port, int e_port, PortsManager pm) throws Exception {
+                                                   int s_port, int e_port) throws Exception {
        ConnectionTableNIO retval=null;
        if (ri == 0 && cet == 0) {
-           retval = new ConnectionTableNIO(this, b_addr, bc_addr, s_port, e_port, pm, false );
+           retval = new ConnectionTableNIO(this, b_addr, bc_addr, s_port, e_port, false );
        }
        else {
            if (ri == 0) {
@@ -44,7 +43,7 @@ public class TCP_NIO extends BasicTCP implements BasicConnectionTable.Receiver
                cet = 1000 * 60 * 5;
                if(log.isWarnEnabled()) log.warn("conn_expire_time was 0, set it to " + cet);
            }
-           retval = new ConnectionTableNIO(this, b_addr, bc_addr, s_port, e_port, pm, ri, cet, false);
+           retval = new ConnectionTableNIO(this, b_addr, bc_addr, s_port, e_port, ri, cet, false);
        }
        retval.setThreadFactory(getThreadFactory());
        retval.setProcessorMaxThreads(getProcessorMaxThreads());
@@ -58,12 +57,16 @@ public class TCP_NIO extends BasicTCP implements BasicConnectionTable.Receiver
 
     public String printConnections()     {return ct.toString();}
 
+    protected PhysicalAddress getPhysicalAddress() {
+        return (PhysicalAddress)ct.getLocalAddress();
+    }
+
    public void send(Address dest, byte[] data, int offset, int length) throws Exception {
       ct.send(dest, data, offset, length);
    }
 
    public void start() throws Exception {
-       ct=getConnectionTable(reaper_interval,conn_expire_time,bind_addr,external_addr,bind_port,bind_port+port_range,pm);
+       ct=getConnectionTable(reaper_interval,conn_expire_time,bind_addr,external_addr,bind_port,bind_port+port_range);
        ct.setUseSendQueues(use_send_queues);
        // ct.addConnectionListener(this);
        ct.setReceiveBufferSize(recv_buf_size);
@@ -72,9 +75,6 @@ public class TCP_NIO extends BasicTCP implements BasicConnectionTable.Receiver
        ct.setPeerAddressReadTimeout(peer_addr_read_timeout);
        ct.setTcpNodelay(tcp_nodelay);
        ct.setLinger(linger);
-       local_addr=ct.getLocalAddress();
-       if(additional_data != null && local_addr instanceof IpAddress)
-           ((IpAddress)local_addr).setAdditionalData(additional_data);
        super.start();
    }
 

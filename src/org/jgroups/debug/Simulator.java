@@ -16,7 +16,7 @@ import java.util.Set ;
 /**
  * Tests one or more protocols independently. Look at org.jgroups.tests.FCTest for an example of how to use it.
  * @author Bela Ban
- * @version $Id: Simulator.java,v 1.14.4.4 2009/02/24 15:15:51 belaban Exp $
+ * @version $Id: Simulator.java,v 1.14.4.5 2009/02/26 07:54:13 belaban Exp $
  */
 public class Simulator {
 	private Protocol[] protStack=null;
@@ -377,12 +377,6 @@ public class Simulator {
 
 		public String getInfo() {
 			return null;
-		}
-
-		public void postUnmarshalling(Message msg, Address dest, Address src, boolean multicast) {
-		}
-
-		public void postUnmarshallingList(Message msg, Address dest, boolean multicast) {
 		}
 
         protected PhysicalAddress getPhysicalAddress() {

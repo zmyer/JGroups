@@ -13,8 +13,6 @@ import org.jgroups.util.Util;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Collection;
-import java.util.Set;
-import java.util.Collections;
 
 /**
  * Shared base class for tcpip protocols
@@ -120,17 +118,6 @@ public abstract class BasicTCP extends TP {
 
     public void sendMulticast(byte[] data, int offset, int length) throws Exception {
         sendToAllPhysicalAddresses(data, offset, length);
-
-
-//        Set<Address> mbrs;
-//
-//        synchronized(members) {
-//            mbrs=Collections.unmodifiableSet(members);
-//        }
-//        for(Address dest: mbrs) {
-//            sendToSingleLogicalMember(dest, data, offset, length);
-//            // sendToSingleMember(dest, data, offset, length);
-//        }
     }
 
     public void sendUnicast(PhysicalAddress dest, byte[] data, int offset, int length) throws Exception {
@@ -164,20 +151,6 @@ public abstract class BasicTCP extends TP {
         return sb.toString();
     }
 
-    public void postUnmarshalling(Message msg, Address dest, Address src, boolean multicast) {
-        if(multicast)
-            msg.setDest(null);
-        else
-            msg.setDest(dest);
-    }
-
-    public void postUnmarshallingList(Message msg, Address dest, boolean multicast) {
-        postUnmarshalling(msg, dest, null, multicast);
-    }
-
-    protected PhysicalAddress getPhysicalAddress() {
-        throw new UnsupportedOperationException("not yet implemented");
-    }
 
     public abstract String printConnections();
 
@@ -185,9 +158,9 @@ public abstract class BasicTCP extends TP {
 
     public abstract void retainAll(Collection<Address> members);
 
-    /** ConnectionTable.Receiver interface */
+    /** ConnectionMap.Receiver interface */
     public void receive(Address sender, byte[] data, int offset, int length) {
-        receive(local_addr, sender, data, offset, length);
+        super.receive(sender, data, offset, length);
     }
 
     protected Object handleDownEvent(Event evt) {

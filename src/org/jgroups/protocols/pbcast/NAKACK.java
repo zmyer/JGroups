@@ -31,7 +31,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * instead of the requester by setting use_mcast_xmit to true.
  *
  * @author Bela Ban
- * @version $Id: NAKACK.java,v 1.209.4.1 2009/02/23 11:46:54 belaban Exp $
+ * @version $Id: NAKACK.java,v 1.209.4.2 2009/02/26 07:54:23 belaban Exp $
  */
 @MBean(description="Reliable transmission multipoint FIFO protocol")
 @DeprecatedProperty(names={"max_xmit_size"})
@@ -1015,8 +1015,8 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
         try {
             buf=Util.messageToByteBuffer(msg);
             Message xmit_msg=new Message(dest, null, buf.getBuf(), buf.getOffset(), buf.getLength());
-            // changed Bela Jan 4 2007: we should not use OOB for retransmitted messages, otherwise we tax the OOB thread pool
-            // too much
+            // changed Bela Jan 4 2007: we should not use OOB for retransmitted messages, otherwise we tax the
+            // OOB thread pool too much
             // msg.setFlag(Message.OOB);
             xmit_msg.putHeader(name, new NakAckHeader(NakAckHeader.XMIT_RSP, seqno));
             down_prot.down(new Event(Event.MSG, xmit_msg));

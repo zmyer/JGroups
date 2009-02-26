@@ -1,15 +1,14 @@
-// $Id: TUNNEL.java,v 1.51.4.4 2009/02/24 15:15:48 belaban Exp $
+// $Id: TUNNEL.java,v 1.51.4.5 2009/02/26 07:54:18 belaban Exp $
 
 package org.jgroups.protocols;
 
 import org.jgroups.Address;
 import org.jgroups.Event;
-import org.jgroups.Message;
 import org.jgroups.PhysicalAddress;
 import org.jgroups.annotations.GuardedBy;
 import org.jgroups.annotations.Property;
-import org.jgroups.stack.RouterStub;
 import org.jgroups.stack.IpAddress;
+import org.jgroups.stack.RouterStub;
 import org.jgroups.util.Util;
 
 import java.io.DataInputStream;
@@ -73,7 +72,12 @@ public class TUNNEL extends TP {
     public TUNNEL(){}
 
     public String toString() {
-        return "Protocol TUNNEL(local_addr=" + local_addr + ')';
+        try {
+            return "TUNNEL(local_addr=" + stub.getLocalAddress() + ')';
+        }
+        catch(SocketException e) {
+            return "TUNNEL";
+        }
     }
 
     public String getRouterHost() {
@@ -127,16 +131,12 @@ public class TUNNEL extends TP {
 
         stub = new RouterStub(router_host, router_port, bind_addr);
         stub.setConnectionListener(new StubConnectionListener());
-        local_addr = stub.getLocalAddress();
-        if(additional_data != null && local_addr instanceof IpAddress)
-            ((IpAddress) local_addr).setAdditionalData(additional_data);
         super.start();
     }
 
     public void stop() {        
         teardownTunnel();
         super.stop();        
-        local_addr = null;
     }
 
     /** Tears the TCP connection to the router down */
@@ -178,8 +178,7 @@ public class TUNNEL extends TP {
                         try{
                             if(!intentionallyTornDown){
                                 if(log.isDebugEnabled()){
-                                    log.debug("Reconnecting " + getLocalAddress()
-                                              + " to router at "
+                                    log.debug("Reconnecting to router at "
                                               + router_host
                                               + ":"
                                               + router_port);
@@ -245,7 +244,7 @@ public class TUNNEL extends TP {
                     if(len > 0){
                         data = new byte[len];
                         input.readFully(data, 0, len);                        
-                        receive(dest, null/*src will be read from data*/, data, 0, len);
+                        receive(null/*src will be read from data*/, data, 0, len);
                     }
                 }catch(SocketException se){
                     // if(log.isWarnEnabled()) log.warn("failure in TUNNEL
@@ -276,16 +275,12 @@ public class TUNNEL extends TP {
             return "RouterStub not yet initialized";
     }
 
-    public void postUnmarshalling(Message msg, Address dest, Address src, boolean multicast) {
-        msg.setDest(dest);
-    }
-
-    public void postUnmarshallingList(Message msg, Address dest, boolean multicast) {
-        msg.setDest(dest);
-    }
-
-    // todo: implement
     protected PhysicalAddress getPhysicalAddress() {
-        throw new UnsupportedOperationException("not yet implemented");
+        try {
+            return (PhysicalAddress)stub.getLocalAddress();
+        }
+        catch(SocketException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

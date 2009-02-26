@@ -1,9 +1,7 @@
 package org.jgroups.protocols;
 
 
-import org.jgroups.Address;
 import org.jgroups.Global;
-import org.jgroups.Message;
 import org.jgroups.PhysicalAddress;
 import org.jgroups.annotations.DeprecatedProperty;
 import org.jgroups.annotations.Property;
@@ -42,7 +40,7 @@ import java.util.Map;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: UDP.java,v 1.196.2.10 2009/02/24 15:15:48 belaban Exp $
+ * @version $Id: UDP.java,v 1.196.2.11 2009/02/26 07:54:18 belaban Exp $
  */
 @DeprecatedProperty(names={"num_last_ports","null_src_addresses", "send_on_all_interfaces", "send_interfaces"})
 public class UDP extends TP {
@@ -194,20 +192,6 @@ public class UDP extends TP {
     }
 
 
-    public void postUnmarshalling(Message msg, Address dest, Address src, boolean multicast) {
-         if(multicast)
-            msg.setDest(null);
-        else
-            msg.setDest(dest);
-    }
-
-    public void postUnmarshallingList(Message msg, Address dest, boolean multicast) {
-         if(multicast)
-            msg.setDest(null);
-        else
-            msg.setDest(dest);
-    }
-
     private void _send(InetAddress dest, int port, boolean mcast, byte[] data, int offset, int length) throws Exception {
         DatagramPacket packet=new DatagramPacket(data, offset, length, dest, port);
         try {
@@ -281,7 +265,6 @@ public class UDP extends TP {
 
 
         ucast_receiver=new PacketReceiver(sock,
-                                          local_addr,
                                           "unicast receiver",
                                           new Runnable() {
                                               public void run() {
@@ -291,7 +274,6 @@ public class UDP extends TP {
 
         if(ip_mcast)
             mcast_receiver=new PacketReceiver(mcast_sock,
-                                              mcast_addr,
                                               "multicast receiver",
                                               new Runnable() {
                                                   public void run() {
@@ -374,16 +356,7 @@ public class UDP extends TP {
             sock=createDatagramSocketWithBindPort();
         }
         else {
-            DatagramSocket tmp_sock=null;
-            if(prevent_port_reuse) {
-                tmp_sock=new DatagramSocket(0, bind_addr);
-            }
-            try {
-                sock=createEphemeralDatagramSocket();
-            }
-            finally {
-                Util.close(tmp_sock);
-            }
+            sock=createEphemeralDatagramSocket();
         }
         if(tos > 0) {
             try {
@@ -398,14 +371,6 @@ public class UDP extends TP {
 
         if(sock == null)
             throw new Exception("socket is null");
-
-        //if(local_addr == null)
-          //  throw new IllegalStateException("local_addr is null - cannot associate it with physical address");
-        // addPhysicalAddressToCache(local_addr, createLocalAddress());
-
-        if(additional_data != null)
-            ((IpAddress)local_addr).setAdditionalData(additional_data);
-
 
         // 3. Create socket for receiving IP multicast packets
         if(ip_mcast) {
@@ -531,9 +496,6 @@ public class UDP extends TP {
         DatagramSocket tmp=null;
         // 27-6-2003 bgooren, find available port in range (start_port, start_port+port_range)
         int rcv_port=bind_port, max_port=bind_port + port_range;
-        if(pm != null && bind_port > 0) {
-            rcv_port=pm.getNextAvailablePort(rcv_port);
-        }
         while(rcv_port <= max_port) {
             try {
                 tmp=new DatagramSocket(rcv_port, bind_addr);
@@ -557,7 +519,8 @@ public class UDP extends TP {
 
     private String dumpSocketInfo() throws Exception {
         StringBuilder sb=new StringBuilder(128);
-        sb.append("local_addr=").append(local_addr);
+        if(!isSingleton())
+            sb.append("local_addr=").append(local_addr);
         sb.append(", mcast_addr=").append(mcast_addr);
         sb.append(", bind_addr=").append(bind_addr);
         sb.append(", ttl=").append(ip_ttl);
@@ -637,17 +600,8 @@ public class UDP extends TP {
 
 
     private void closeUnicastSocket() {
-        if(sock != null) {
-            if(pm != null && bind_port > 0) {
-                int port=local_addr != null? ((IpAddress)local_addr).getPort() : sock.getLocalPort();
-                pm.updatePort(port);
-            }
-            sock.close();
-            sock=null;
-            if(log.isDebugEnabled()) log.debug("socket closed");
-        }
+        Util.close(sock);
     }
-
 
 
 
@@ -673,7 +627,6 @@ public class UDP extends TP {
 
     protected void handleConfigEvent(Map<String,Object> map) {
         boolean set_buffers=false;
-        super.handleConfigEvent(map);
         if(map == null) return;
 
         if(map.containsKey("send_buf_size")) {
@@ -700,13 +653,11 @@ public class UDP extends TP {
     public class PacketReceiver implements Runnable {
         private       Thread         thread=null;
         private final DatagramSocket receiver_socket;
-        private final Address        dest;
         private final String         name;
         private final Runnable       close_strategy;
 
-        public PacketReceiver(DatagramSocket socket, Address dest, String name, Runnable close_strategy) {
+        public PacketReceiver(DatagramSocket socket, String name, Runnable close_strategy) {
             this.receiver_socket=socket;
-            this.dest=dest;
             this.name=name;
             this.close_strategy=close_strategy;
         }
@@ -760,19 +711,18 @@ public class UDP extends TP {
                                       "Use the FRAG2 protocol and make its frag_size lower than " + receive_buf.length);
                     }
 
-                    receive(dest,
-                            new IpAddress(packet.getAddress(), packet.getPort()),
+                    receive(new IpAddress(packet.getAddress(), packet.getPort()),
                             receive_buf,
                             packet.getOffset(),
                             len);
                 }
                 catch(SocketException sock_ex) {
-                    if(log.isDebugEnabled()) log.debug("unicast receiver socket is closed, exception=" + sock_ex);
+                    if(log.isDebugEnabled()) log.debug("receiver socket is closed, exception=" + sock_ex);
                     break;
                 }
                 catch(Throwable ex) {
                     if(log.isErrorEnabled())
-                        log.error("[" + local_addr + "] failed receiving unicast packet", ex);
+                        log.error("failed receiving packet", ex);
                 }
             }
             if(log.isDebugEnabled()) log.debug(name + " thread terminated");

@@ -4,7 +4,7 @@ Logical addresses
 =================
 
 Author:  Bela Ban
-Version: $Id: LogicalAddresses.txt,v 1.12.2.17 2009/02/24 15:15:50 belaban Exp $
+Version: $Id: LogicalAddresses.txt,v 1.12.2.18 2009/02/26 07:54:26 belaban Exp $
 JIRA:    https://jira.jboss.org/jira/browse/JGRP-129
 
 The address chosen by each node is essentially the IP address and port of the receiver socket. However, for the
@@ -234,9 +234,10 @@ TODOs
   - Check whether thread names in a shared transport are still correct.
   - Do thread names use the logical or UUID name of a channel ?
   - Is Global.DUMMY still needed when we set the local address top down ?
-  --> The 'members' variable remains in TP, but is only used when the transport is non-shared. Otherwise,
-      views for different clusters will overwrite this variable ! We cannot use this var to send individual
-      multicasts !
+  - The 'members' variable in TP is a union of all memberships in the shared transport case
+    - In BasicTCP, we need to change retainAll() to use physical addresses rather than UUIDs stored ib TP.members
+    - Dito for suspected_mbrs
+    - In general, change all addresses in TCP to PhysicalAddresses. Or should we use logical addresses ?
   
         
 

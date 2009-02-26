@@ -74,7 +74,7 @@ import java.util.concurrent.Exchanger;
  * the construction of the stack will be aborted.
  *
  * @author Bela Ban
- * @version $Id: JChannel.java,v 1.209.4.6 2009/02/23 12:32:49 belaban Exp $
+ * @version $Id: JChannel.java,v 1.209.4.7 2009/02/26 07:54:25 belaban Exp $
  */
 @MBean(description="JGroups channel")
 public class JChannel extends Channel {
@@ -1669,11 +1669,10 @@ public class JChannel extends Channel {
      * a SET_LOCAL_ADDRESS
      */
     private void setAddress() {
-        UUID uuid=UUID.randomUUID();
-        if(local_addr != null)
-            down(new Event(Event.REMOVE_ADDRESS, local_addr));
-        local_addr=uuid;
-
+        UUID old_addr=local_addr;
+        local_addr=UUID.randomUUID();
+        if(old_addr != null)
+            down(new Event(Event.REMOVE_ADDRESS, old_addr));
         if(name == null || name.length() == 0) // generate a logical name if not set
             name=Util.generateLocalName();
         if(name != null && name.length() > 0)
