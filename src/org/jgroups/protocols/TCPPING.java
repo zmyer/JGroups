@@ -5,11 +5,13 @@ package org.jgroups.protocols;
 import org.jgroups.Address;
 import org.jgroups.Event;
 import org.jgroups.Message;
+import org.jgroups.PhysicalAddress;
 import org.jgroups.annotations.Property;
 import org.jgroups.stack.IpAddress;
 import org.jgroups.util.Util;
+import org.jgroups.util.UUID;
 
-import java.util.List;
+import java.util.*;
 
 
 /**
@@ -31,7 +33,7 @@ import java.util.List;
  * membership.
  * 
  * @author Bela Ban
- * @version $Id: TCPPING.java,v 1.41 2008/10/21 12:47:04 vlada Exp $
+ * @version $Id: TCPPING.java,v 1.41.4.1 2009/02/27 12:43:21 belaban Exp $
  */
 public class TCPPING extends Discovery {
     
@@ -48,7 +50,9 @@ public class TCPPING extends Discovery {
     
     /* --------------------------------------------- Fields ------------------------------------------------------ */
 
-    
+    /**
+     * List of PhysicalAddresses
+     */
     private List<IpAddress> initial_hosts;
 
 
@@ -87,13 +91,30 @@ public class TCPPING extends Discovery {
     }
     
     public void sendGetMembersRequest(String cluster_name) {
-        for(final Address addr: initial_hosts) {
-            if(addr.equals(local_addr))
+        Set<PhysicalAddress> target_addrs=new HashSet<PhysicalAddress>();
+
+        if(initial_hosts != null)
+            target_addrs.addAll(initial_hosts);
+
+        // Now add the current membership as well: if we only had A and B listed (initial_hosts="A[7800],B[7800]),
+        // but the actual membership is {A,B,C,D,E}, we'd never get UUID/PhysicalAddress mappings for C, D and E !
+//        synchronized(members) {
+//            for(Address mbr: members) {
+//
+//            }
+//        }
+
+
+
+        PhysicalAddress physical_addr=(PhysicalAddress)down_prot.down(new Event(Event.GET_PHYSICAL_ADDRESS, local_addr));
+        PingData data=new PingData(local_addr, null, false, UUID.get(local_addr), Arrays.asList(physical_addr));
+        PingHeader hdr=new PingHeader(PingHeader.GET_MBRS_REQ, data, cluster_name);
+        for(final Address addr: target_addrs) {
+            if(addr.equals(physical_addr))
                 continue;
             final Message msg = new Message(addr, null, null);
             msg.setFlag(Message.OOB);
-            msg.putHeader(NAME, new PingHeader(PingHeader.GET_MBRS_REQ, cluster_name));
-
+            msg.putHeader(NAME, hdr);
             if(log.isTraceEnabled())
                 log.trace("[FIND_INITIAL_MBRS] sending PING request to " + msg.getDest());                      
             timer.submit(new Runnable() {

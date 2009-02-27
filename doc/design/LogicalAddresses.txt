@@ -4,7 +4,7 @@ Logical addresses
 =================
 
 Author:  Bela Ban
-Version: $Id: LogicalAddresses.txt,v 1.12.2.19 2009/02/26 15:46:05 belaban Exp $
+Version: $Id: LogicalAddresses.txt,v 1.12.2.20 2009/02/27 12:43:10 belaban Exp $
 JIRA:    https://jira.jboss.org/jira/browse/JGRP-129
 
 The address chosen by each node is essentially the IP address and port of the receiver socket. However, for the
@@ -227,6 +227,7 @@ TODOs
   --> The semantics of retainAll() have to be inspected: do we handle UUIDs or PhysicalAddresses ?
   --> Should we switch to a model where ConnectionTable never reaps connections based on view changes, but based on
       idle time ? Ie. reap a connection that hasn't been used for more than 30 seconds
+- TCPPING.initial_hosts="A,B": how will we find out about C, D and E ?
 
 
 - Shared transport

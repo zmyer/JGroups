@@ -16,7 +16,7 @@ import java.util.Collection;
  * @author Scott Marlow
  * @author Alex Fu
  * @author Bela Ban
- * @version $Id: TCP_NIO.java,v 1.25.4.1 2009/02/26 07:54:19 belaban Exp $
+ * @version $Id: TCP_NIO.java,v 1.25.4.2 2009/02/27 12:43:17 belaban Exp $
  */
 @Experimental
 public class TCP_NIO extends BasicTCP implements BasicConnectionTable.Receiver
@@ -58,7 +58,7 @@ public class TCP_NIO extends BasicTCP implements BasicConnectionTable.Receiver
     public String printConnections()     {return ct.toString();}
 
     protected PhysicalAddress getPhysicalAddress() {
-        return (PhysicalAddress)ct.getLocalAddress();
+        return ct != null? (PhysicalAddress)ct.getLocalAddress() : null;
     }
 
    public void send(Address dest, byte[] data, int offset, int length) throws Exception {

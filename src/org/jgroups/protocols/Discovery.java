@@ -38,7 +38,7 @@ import java.util.concurrent.TimeUnit;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: Discovery.java,v 1.52.4.7 2009/02/26 11:59:52 belaban Exp $
+ * @version $Id: Discovery.java,v 1.52.4.8 2009/02/27 12:43:20 belaban Exp $
  */
 @MBean
 public abstract class Discovery extends Protocol {   
@@ -83,7 +83,7 @@ public abstract class Discovery extends Protocol {
     private volatile boolean is_server=false;
     protected TimeScheduler timer=null;
 
-    private final Vector<Address> members=new Vector<Address>(11);
+    protected final Vector<Address> members=new Vector<Address>(11);
     protected Address local_addr=null;
     protected String group_addr=null;
     private final Set<Responses> ping_responses=new HashSet<Responses>();
@@ -272,9 +272,8 @@ public abstract class Discovery extends Protocol {
                 }
 
                 PhysicalAddress physical_addr=(PhysicalAddress)down(new Event(Event.GET_PHYSICAL_ADDRESS, local_addr));
-                List<PhysicalAddress> physical_addrs=new ArrayList<PhysicalAddress>(1);
-                physical_addrs.add(physical_addr);
-                PingData ping_rsp=new PingData(local_addr, coord, is_server, org.jgroups.util.UUID.get(local_addr), physical_addrs);
+                PingData ping_rsp=new PingData(local_addr, coord, is_server, org.jgroups.util.UUID.get(local_addr),
+                                               Arrays.asList(physical_addr));
                 rsp_msg=new Message(msg.getSrc(), null, null);
                 rsp_msg.setFlag(Message.OOB);
                 rsp_hdr=new PingHeader(PingHeader.GET_MBRS_RSP, ping_rsp);
@@ -295,7 +294,7 @@ public abstract class Discovery extends Protocol {
                     Address logical_addr=rsp.getAddress();
                     if(logical_addr == null)
                         logical_addr=msg.getSrc();
-                    physical_addrs=rsp.getPhysicalAddrs();
+                    List<PhysicalAddress> physical_addrs=rsp.getPhysicalAddrs();
                     physical_addr=physical_addrs != null && !physical_addrs.isEmpty()? physical_addrs.get(0) : null;
                     if(logical_addr != null && physical_addr != null)
                         down(new Event(Event.SET_PHYSICAL_ADDRESS, new Tuple<Address,PhysicalAddress>(logical_addr, physical_addr)));

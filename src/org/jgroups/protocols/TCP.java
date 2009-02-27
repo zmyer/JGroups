@@ -1,4 +1,4 @@
-// $Id: TCP.java,v 1.57.4.1 2009/02/26 07:54:18 belaban Exp $
+// $Id: TCP.java,v 1.57.4.2 2009/02/27 12:43:21 belaban Exp $
 
 package org.jgroups.protocols;
 
@@ -157,6 +157,6 @@ public class TCP extends BasicTCP implements TCPConnectionMap.Receiver {
     }
 
     protected PhysicalAddress getPhysicalAddress() {
-        return (PhysicalAddress)ct.getLocalAddress();
+        return ct != null? (PhysicalAddress)ct.getLocalAddress() : null;
     }
 }

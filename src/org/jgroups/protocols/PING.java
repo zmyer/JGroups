@@ -11,10 +11,7 @@ import org.jgroups.util.UUID;
 
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Vector;
+import java.util.*;
 
 
 /**
@@ -30,7 +27,7 @@ import java.util.Vector;
  * property: gossip_host - if you are using GOSSIP then this defines the host of the GossipRouter, default is null
  * property: gossip_port - if you are using GOSSIP then this defines the port of the GossipRouter, default is null
  * @author Bela Ban
- * @version $Id: PING.java,v 1.52.2.4 2009/02/23 11:46:51 belaban Exp $
+ * @version $Id: PING.java,v 1.52.2.5 2009/02/27 12:43:19 belaban Exp $
  */
 public class PING extends Discovery {
     
@@ -253,8 +250,7 @@ public class PING extends Discovery {
             else {
                 // 1. Mcast GET_MBRS_REQ message
                 PhysicalAddress physical_addr=(PhysicalAddress)down(new Event(Event.GET_PHYSICAL_ADDRESS, local_addr));
-                List<PhysicalAddress> physical_addrs=new ArrayList<PhysicalAddress>(1);
-                physical_addrs.add(physical_addr);
+                List<PhysicalAddress> physical_addrs=Arrays.asList(physical_addr);
                 PingData data=new PingData(local_addr, null, false, UUID.get(local_addr), physical_addrs);
                 hdr=new PingHeader(PingHeader.GET_MBRS_REQ, data, cluster_name);
                 msg=new Message(null);  // mcast msg
