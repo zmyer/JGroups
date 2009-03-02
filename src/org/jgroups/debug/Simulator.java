@@ -16,7 +16,7 @@ import java.util.Set ;
 /**
  * Tests one or more protocols independently. Look at org.jgroups.tests.FCTest for an example of how to use it.
  * @author Bela Ban
- * @version $Id: Simulator.java,v 1.14.4.5 2009/02/26 07:54:13 belaban Exp $
+ * @version $Id: Simulator.java,v 1.14.4.6 2009/03/02 12:08:13 belaban Exp $
  */
 public class Simulator {
 	private Protocol[] protStack=null;
@@ -146,14 +146,16 @@ public class Simulator {
 			p.init();
 		}
 
+        // bottom.up(new Event(Event.SET_LOCAL_ADDRESS, local_addr));
+        prot_stack.down(new Event(Event.SET_LOCAL_ADDRESS, local_addr));
+
 		for(int i=0; i < protStack.length; i++) {
 			Protocol p=protStack[i];
 			p.start();
 		}
 
 		// moved event processing to follow stack init (JGRP-843)
-		// bottom.up(new Event(Event.SET_LOCAL_ADDRESS, local_addr));
-        prot_stack.down(new Event(Event.SET_LOCAL_ADDRESS, local_addr));
+
 		if(view != null) {
 			Event view_evt=new Event(Event.VIEW_CHANGE, view);
 			bottom.up(view_evt);
