@@ -14,12 +14,13 @@ import org.jgroups.Message;
 import org.jgroups.ReceiverAdapter;
 import org.jgroups.stack.IpAddress;
 import org.jgroups.util.Util;
+import org.jgroups.util.UUID;
 import org.testng.annotations.Test;
 
 /**
  * 
  * @author Bela Ban
- * @version $Id: AddDataTest.java,v 1.21.4.1 2009/02/23 08:59:50 belaban Exp $
+ * @version $Id: AddDataTest.java,v 1.21.4.2 2009/03/02 11:37:15 belaban Exp $
  */
 @Test(groups={Global.STACK_DEPENDENT},sequential=false)
 public class AddDataTest extends ChannelTestBase {
@@ -34,7 +35,7 @@ public class AddDataTest extends ChannelTestBase {
                 m.put("additional_data", new byte[] { 'b', 'e', 'l', 'a' });
                 c.down(new Event(Event.CONFIG, m));
                 c.connect("AddDataTest.testadditionalData()");
-                IpAddress addr=(IpAddress)c.getAddress();
+                UUID addr=(UUID)c.getAddress();
                 System.out.println("address is " + addr);
                 assert addr.getAdditionalData() != null;
                 assert addr.getAdditionalData()[0] == 'b';
@@ -84,7 +85,7 @@ public class AddDataTest extends ChannelTestBase {
             List<Message> list=receiver.getMsgs();
             assert !list.isEmpty();
             Message msg=list.get(0);
-            IpAddress src=(IpAddress)msg.getSrc();
+            UUID src=(UUID)msg.getSrc();
             assert src != null;
             assert src.getAdditionalData() != null;
             assert src.getAdditionalData().length == 4;
