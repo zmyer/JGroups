@@ -28,7 +28,7 @@ import java.util.*;
 /**
  * Collection of various utility routines that can not be assigned to other classes.
  * @author Bela Ban
- * @version $Id: Util.java,v 1.187.2.6 2009/02/24 11:53:47 belaban Exp $
+ * @version $Id: Util.java,v 1.187.2.7 2009/03/04 11:13:39 belaban Exp $
  */
 public class Util {
 
@@ -1825,7 +1825,7 @@ public class Util {
         return retval;
     }
 
-    public static List<Address> leftMembers(List<Address> old_list, List<Address> new_list) {
+    public static List<Address> leftMembers(Collection<Address> old_list, Collection<Address> new_list) {
         if(old_list == null || new_list == null)
             return null;
         List<Address> retval=new ArrayList<Address>(old_list);

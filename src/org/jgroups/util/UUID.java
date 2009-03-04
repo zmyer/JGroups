@@ -2,22 +2,20 @@ package org.jgroups.util;
 
 import org.jgroups.Address;
 import org.jgroups.Global;
+import org.jgroups.blocks.LazyRemovalCache;
 
 import java.io.*;
 import java.security.SecureRandom;
-import java.util.Map;
 import java.util.Collection;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 /** Logical address which is unique over space and time.
  * <br/>
  * Copied from java.util.UUID, but unneeded fields from the latter have been removed. UUIDs needs to
  * have a small memory footprint.
  * @author Bela Ban
- * @version $Id: UUID.java,v 1.1.2.11 2009/02/26 07:54:22 belaban Exp $
+ * @version $Id: UUID.java,v 1.1.2.12 2009/03/04 11:13:57 belaban Exp $
  */
-public final class UUID implements Address, Streamable, Comparable<Address> {
+public class UUID implements Address, Streamable, Comparable<Address> {
     private long   mostSigBits;
     private long   leastSigBits;
     private byte[] additional_data;
@@ -26,7 +24,7 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
     private static volatile SecureRandom numberGenerator=null;
 
     /** Keeps track of associations between logical addresses (UUIDs) and logical names */
-    private static ConcurrentMap<Address,String> cache=new ConcurrentHashMap<Address,String>();
+    private static LazyRemovalCache<Address,String> cache;
 
     private static final long serialVersionUID=3972962439975931228L;
 
@@ -34,12 +32,42 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
 
     private static final int SIZE=Global.LONG_SIZE * 2 + Global.BYTE_SIZE;
 
+    private static final LazyRemovalCache.Printable<UUID,String> print_function=new LazyRemovalCache.Printable<UUID,String>() {
+        public java.lang.String print(UUID key, java.lang.String val) {
+            return val + ": " + key.toStringLong() + "\n";
+        }
+    };
+    
 
     static {
+        String tmp;
+
+        int max_elements=500;
+        long max_age=5000L;
+
+        try {
+            tmp=Util.getProperty(new String[]{Global.UUID_CACHE_MAX_ELEMENTS}, null, null, false, "500");
+            if(tmp != null)
+                max_elements=Integer.valueOf(tmp);
+        }
+        catch(Throwable t) {
+        }
+
+        try {
+            tmp=Util.getProperty(new String[]{Global.UUID_CACHE_MAX_AGE}, null, null, false, "5000");
+            if(tmp != null)
+                max_age=Long.valueOf(tmp);
+        }
+        catch(Throwable t) {
+        }
+
+        cache=new LazyRemovalCache<Address,String>(max_elements, max_age);
+
+
         /* Trying to get value of jgroups.print_uuids. PropertyPermission not granted if
         * running in an untrusted environment with JNLP */
         try {
-            String tmp=Util.getProperty(new String[]{Global.PRINT_UUIDS}, null, null, false, "false");
+            tmp=Util.getProperty(new String[]{Global.PRINT_UUIDS}, null, null, false, "false");
             print_uuids=Boolean.valueOf(tmp).booleanValue();
         }
         catch (SecurityException ex){
@@ -71,29 +99,27 @@ public final class UUID implements Address, Streamable, Comparable<Address> {
 
 
     public static void add(UUID uuid, String logical_name) {
-        if(uuid != null && logical_name != null)
-            cache.put(uuid, logical_name); // overwrite existing entry
+        cache.add(uuid, logical_name); // overwrite existing entry
     }
 
     public static String get(Address logical_addr) {
-        return logical_addr != null? cache.get(logical_addr) : null;
+        return cache.get(logical_addr);
     }
 
     public static void remove(UUID uuid) {
-        if(uuid != null)
-            cache.remove(uuid);
+        cache.remove(uuid);
+    }
+
+    public static void removeAll(Collection<Address> mbrs) {
+        cache.removeAll(mbrs);
     }
 
     public static void retainAll(Collection<Address> logical_addrs) {
-        cache.keySet().retainAll(logical_addrs);
+        cache.retainAll(logical_addrs);
     }
 
     public static String printCache() {
-        StringBuilder sb=new StringBuilder();
-        for(Map.Entry<Address,String> entry: cache.entrySet()) {
-            sb.append(entry.getValue() + ": " + ((UUID)entry.getKey()).toStringLong() + "\n");
-        }
-        return sb.toString();
+        return cache.printCache(print_function);
     }
 
     /**

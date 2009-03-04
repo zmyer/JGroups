@@ -1,8 +1,8 @@
 package org.jgroups.blocks;
 
 import java.util.Collection;
-import java.util.Map;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentMap;
  * configurable time are evicted. Elements are marked as removable by remove(), removeAll() and retainAll(). When
  * an elements is marked as removable, but later reinserted, the mark is removed.
  * @author Bela Ban
- * @version $Id: LazyRemovalCache.java,v 1.1.2.1 2009/03/04 10:04:38 belaban Exp $
+ * @version $Id: LazyRemovalCache.java,v 1.1.2.2 2009/03/04 11:13:58 belaban Exp $
  */
 public class LazyRemovalCache<K,V> {
     private final ConcurrentMap<K,Entry<V>> map=new ConcurrentHashMap<K,Entry<V>>();
@@ -21,6 +21,11 @@ public class LazyRemovalCache<K,V> {
     private final int max_elements;
 
     private final long max_age;
+
+
+    public interface Printable<K,V> {
+        String print(K key,V val);
+    }
 
 
     public LazyRemovalCache() {
@@ -45,6 +50,10 @@ public class LazyRemovalCache<K,V> {
         return entry != null? entry.val : null;
     }
 
+    //public Set<Map.Entry<K,Entry<V>>> entrySet() {
+      //  return map.entrySet();
+    //}
+
     public void remove(K key) {
         remove(key, false);
     }
@@ -58,6 +67,7 @@ public class LazyRemovalCache<K,V> {
             Entry<V> entry=map.get(key);
             entry.removable=true;
         }
+        checkMaxSizeExceeded();
     }
 
     public void removeAll(Collection<K> keys) {
@@ -75,6 +85,7 @@ public class LazyRemovalCache<K,V> {
                 entry.removable=true;
             }
         }
+        checkMaxSizeExceeded();
     }
 
     public void retainAll(Collection<K> keys) {
@@ -93,6 +104,7 @@ public class LazyRemovalCache<K,V> {
                 }
             }
         }
+        checkMaxSizeExceeded();
     }
 
     public int size() {
@@ -107,13 +119,23 @@ public class LazyRemovalCache<K,V> {
         return sb.toString();
     }
 
+    public String printCache(Printable print_function) {
+        StringBuilder sb=new StringBuilder();
+        for(Map.Entry<K,Entry<V>> entry: map.entrySet()) {
+            K key=entry.getKey();
+            V val=entry.getValue().val;
+            sb.append(print_function.print(key, val));
+        }
+        return sb.toString();
+    }
+
     public String toString() {
         return printCache();
     }
 
 
     private void checkMaxSizeExceeded() {
-        if(map.size() >= max_elements) {
+        if(map.size() > max_elements) {
             removeMarkedElements();
         }
     }
@@ -122,10 +144,11 @@ public class LazyRemovalCache<K,V> {
      * Removes elements marked as removable
      */
     public void removeMarkedElements() {
+        long curr_time=System.currentTimeMillis();
         for(Iterator<Map.Entry<K,Entry<V>>> it=map.entrySet().iterator(); it.hasNext();) {
             Map.Entry<K, Entry<V>> entry=it.next();
             Entry<V> tmp=entry.getValue();
-            if(tmp.removable) {
+            if(tmp.removable && (curr_time - tmp.timestamp) >= max_age) {
                 it.remove();
             }
         }
