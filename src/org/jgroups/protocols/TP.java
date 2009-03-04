@@ -44,7 +44,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * The {@link #receive(Address, byte[], int, int)} method must
  * be called by subclasses when a unicast or multicast message has been received.
  * @author Bela Ban
- * @version $Id: TP.java,v 1.239.4.18 2009/02/26 15:46:04 belaban Exp $
+ * @version $Id: TP.java,v 1.239.4.19 2009/03/04 11:23:44 belaban Exp $
  */
 @MBean(description="Transport protocol")
 @DeprecatedProperty(names={"bind_to_all_interfaces", "use_incoming_packet_handler", "use_outgoing_packet_handler",
@@ -670,8 +670,8 @@ public abstract class TP extends Protocol {
     }
 
     @ManagedOperation(description="Dumps the contents of the logical address cache")
-    public String printUUIDCache() {
-        StringBuilder sb=new StringBuilder("\n");
+    public String printLogicalAddressCache() {
+        StringBuilder sb=new StringBuilder();
         String tmp_logical_name;
         Address logical_addr;
         Address physical_addr;
@@ -1220,8 +1220,10 @@ public abstract class TP extends Protocol {
 
             case Event.TMP_VIEW:
             case Event.VIEW_CHANGE:
+                Set<Address> old_mbrs;
                 synchronized(members) {
                     view=(View)evt.getArg();
+                    old_mbrs=new HashSet<Address>(members);
                     members.clear();
 
                     if(!isSingleton()) {
@@ -1241,9 +1243,12 @@ public abstract class TP extends Protocol {
                 }
 
                 if(evt.getType() == Event.VIEW_CHANGE) {
-                    List<Address> mbrs=new ArrayList<Address>(view.getMembers());
-                    logical_addr_cache.keySet().retainAll(mbrs);
-                    UUID.retainAll(mbrs);
+                    // fix for https://jira.jboss.org/jira/browse/JGRP-918
+                    List<Address> left_mbrs=Util.leftMembers(old_mbrs, members);
+                    if(left_mbrs != null) {
+                        logical_addr_cache.keySet().removeAll(left_mbrs);
+                        UUID.removeAll(left_mbrs);
+                    }
                 }
                 break;
 
@@ -1731,7 +1736,7 @@ public abstract class TP extends Protocol {
                             continue;
                         }
                         if(key.equals("uuids")) {
-                            retval.put("uuids", printUUIDCache());
+                            retval.put("uuids", printLogicalAddressCache());
                             continue;
                         }
                         if(key.equals("keys")) {
