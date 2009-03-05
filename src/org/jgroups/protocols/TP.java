@@ -44,7 +44,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * The {@link #receive(Address, byte[], int, int)} method must
  * be called by subclasses when a unicast or multicast message has been received.
  * @author Bela Ban
- * @version $Id: TP.java,v 1.239.4.19 2009/03/04 11:23:44 belaban Exp $
+ * @version $Id: TP.java,v 1.239.4.20 2009/03/05 10:37:48 belaban Exp $
  */
 @MBean(description="Transport protocol")
 @DeprecatedProperty(names={"bind_to_all_interfaces", "use_incoming_packet_handler", "use_outgoing_packet_handler",
@@ -1009,8 +1009,8 @@ public abstract class TP extends Protocol {
             // Discard if message's group name is not the same as our group name
             if(perform_cluster_name_matching && channel_name != null && !channel_name.equals(ch_name)) {
                 if(log.isWarnEnabled() && log_discard_msgs)
-                    log.warn(new StringBuilder("discarded message from different group \"").append(ch_name).
-                            append("\" (our group is \"").append(channel_name).append("\"). Sender was ").append(msg.getSrc()));
+                    log.warn(new StringBuilder("discarded message from different cluster \"").append(ch_name).
+                            append("\" (our cluster is \"").append(channel_name).append("\"). Sender was ").append(msg.getSrc()));
             }
             else {
                 Event evt=new Event(Event.MSG, msg);
@@ -1173,10 +1173,8 @@ public abstract class TP extends Protocol {
 
 
     private static void writeMessageList(List<Message> msgs, DataOutputStream dos, boolean multicast) throws Exception {
-        Address src;
         byte flags=0;
         int len=msgs != null? msgs.size() : 0;
-        boolean src_written=false;
 
         dos.writeShort(Version.version);
         flags+=LIST;
@@ -1186,11 +1184,6 @@ public abstract class TP extends Protocol {
         dos.writeInt(len);
         if(msgs != null) {
             for(Message msg: msgs) {
-                src=msg.getSrc();
-                if(!src_written) {
-                    Util.writeAddress(src, dos);
-                    src_written=true;
-                }
                 msg.writeTo(dos);
             }
         }
@@ -1199,15 +1192,12 @@ public abstract class TP extends Protocol {
     private static List<Message> readMessageList(DataInputStream instream) throws Exception {
         int           len;
         Message       msg;
-        Address       src;
 
         len=instream.readInt();
         List<Message> list=new ArrayList<Message>(len);
-        src=Util.readAddress(instream);
         for(int i=0; i < len; i++) {
             msg=new Message(false); // don't create headers, readFrom() will do this
             msg.readFrom(instream);
-            msg.setSrc(src);
             list.add(msg);
         }
         return list;
@@ -1863,30 +1853,40 @@ public abstract class TP extends Protocol {
     }
 
     public static class ProtocolAdapter extends Protocol {
-        final String cluster_name;
+        String cluster_name;
         final String transport_name;
-        final TpHeader header;
+        TpHeader header;
         final Set<Address> members=new CopyOnWriteArraySet<Address>();
         final ThreadFactory factory;
         Address local_addr;
 
-        public ProtocolAdapter(String cluster_name, String transport_name, Protocol up, Protocol down, String pattern) {
+        public ProtocolAdapter(String cluster_name, Address local_addr, String transport_name, Protocol up, Protocol down, String pattern) {
             this.cluster_name=cluster_name;
+            this.local_addr=local_addr;
             this.transport_name=transport_name;
             this.up_prot=up;
             this.down_prot=down;
             this.header=new TpHeader(cluster_name);
             this.factory=new DefaultThreadFactory(Util.getGlobalThreadGroup(), "", false);
             factory.setPattern(pattern);
+            if(local_addr != null)
+                factory.setAddress(local_addr.toString());
+            if(cluster_name != null)
+                factory.setClusterName(cluster_name);
         }
 
         @ManagedAttribute(description="Name of the cluster to which this adapter proxies")
-        public String getCluster_name() {
+        public String getClusterName() {
             return cluster_name;
         }
 
+        @ManagedAttribute(description="local address")
+        public Address getAddress() {
+            return local_addr;
+        }
+
         @ManagedAttribute(description="Name of the transport")
-        public String getTransport_name() {
+        public String getTransportName() {
             return transport_name;
         }
 
@@ -1914,7 +1914,9 @@ public abstract class TP extends Protocol {
                     break;
                 case Event.CONNECT:
                 case Event.CONNECT_WITH_STATE_TRANSFER:
-                    factory.setClusterName((String)evt.getArg());
+                    cluster_name=(String)evt.getArg();
+                    factory.setClusterName(cluster_name);
+                    this.header=new TpHeader(cluster_name);
                     break;
                 case Event.SET_LOCAL_ADDRESS:
                     Address addr=(Address)evt.getArg();
