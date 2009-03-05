@@ -40,7 +40,7 @@ import java.util.Map;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: UDP.java,v 1.196.2.12 2009/02/26 15:46:03 belaban Exp $
+ * @version $Id: UDP.java,v 1.196.2.13 2009/03/05 12:32:03 belaban Exp $
  */
 @DeprecatedProperty(names={"num_last_ports","null_src_addresses", "send_on_all_interfaces", "send_interfaces"})
 public class UDP extends TP {
@@ -526,8 +526,6 @@ public class UDP extends TP {
 
     private String dumpSocketInfo() throws Exception {
         StringBuilder sb=new StringBuilder(128);
-        if(!isSingleton())
-            sb.append("local_addr=").append(local_addr);
         sb.append(", mcast_addr=").append(mcast_addr);
         sb.append(", bind_addr=").append(bind_addr);
         sb.append(", ttl=").append(ip_ttl);

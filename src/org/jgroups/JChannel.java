@@ -74,7 +74,7 @@ import java.util.concurrent.Exchanger;
  * the construction of the stack will be aborted.
  *
  * @author Bela Ban
- * @version $Id: JChannel.java,v 1.209.4.10 2009/03/05 10:33:39 belaban Exp $
+ * @version $Id: JChannel.java,v 1.209.4.11 2009/03/05 12:31:53 belaban Exp $
  */
 @MBean(description="JGroups channel")
 public class JChannel extends Channel {
@@ -2008,10 +2008,8 @@ public class JChannel extends Channel {
             map.put("version", Version.description + ", cvs=\"" +  Version.cvs + "\"");
             if(my_view != null && !map.containsKey("view"))
                 map.put("view", my_view.toString());
-            map.put("local_addr", local_addr != null? local_addr.toString() + " [" + local_addr.toStringLong() + "]"
-                    : "null");
+            map.put("local_addr", getAddressAsString() + " [" + getAddressAsUUID() + "]");
             map.put("cluster", getClusterName());
-            map.put("member", getAddressAsString() + " (" + getClusterName() + ")");
             return map;
         }
 

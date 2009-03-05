@@ -44,7 +44,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * The {@link #receive(Address, byte[], int, int)} method must
  * be called by subclasses when a unicast or multicast message has been received.
  * @author Bela Ban
- * @version $Id: TP.java,v 1.239.4.20 2009/03/05 10:37:48 belaban Exp $
+ * @version $Id: TP.java,v 1.239.4.21 2009/03/05 12:33:11 belaban Exp $
  */
 @MBean(description="Transport protocol")
 @DeprecatedProperty(names={"bind_to_all_interfaces", "use_incoming_packet_handler", "use_outgoing_packet_handler",
@@ -291,7 +291,7 @@ public abstract class TP extends Protocol {
 
     
     
-    /** The address (host and port) of this member. Not used with a shared transport */
+    /** The address (host and port) of this member. Null by default when a shared transport is used */
     protected Address local_addr=null;
 
     /** The members of this group (updated when a member joins or leaves). Not used with shared transport */
@@ -360,6 +360,8 @@ public abstract class TP extends Protocol {
      */
     private final ConcurrentMap<String,Protocol> up_prots=new ConcurrentHashMap<String,Protocol>();
 
+    /** The header including the cluster name, sent with each message. Not used with a shared transport (instead
+     * TP.ProtocolAdapter attaches the header to the message */
     protected TpHeader header;
 
     protected final String name=getName();
@@ -392,7 +394,7 @@ public abstract class TP extends Protocol {
         if(!isSingleton())
             return local_addr != null? name + "(local address: " + local_addr + ')' : name;
         else
-            return name;
+            return name + " (singleton=" + singleton_name + ")";
     }
     
     public void resetStats() {
@@ -733,10 +735,8 @@ public abstract class TP extends Protocol {
         
         oob_thread_factory=new DefaultThreadFactory(pool_thread_group, "OOB", false, true);
 
-        if(isSingleton())
-            setInAllThreadFactories(channel_name, null, thread_naming_pattern);
-        else
-            setInAllThreadFactories(channel_name, local_addr, thread_naming_pattern);
+        // local_addr is null when shared transport, channel_name is not used
+        setInAllThreadFactories(channel_name, local_addr, thread_naming_pattern);
 
         timer=new TimeScheduler(timer_thread_factory, num_timer_threads);
 
@@ -826,10 +826,8 @@ public abstract class TP extends Protocol {
             bundler=new Bundler();
         }
 
-        if(isSingleton())
-            setInAllThreadFactories(channel_name, null, thread_naming_pattern);
-        else
-            setInAllThreadFactories(channel_name, local_addr, thread_naming_pattern);
+        // local_addr is null when shared transport
+        setInAllThreadFactories(channel_name, local_addr, thread_naming_pattern);
     }
 
 
@@ -960,7 +958,7 @@ public abstract class TP extends Protocol {
      * have to return all unstable messages with the FLUSH_OK response.
      */
     private void setSourceAddress(Message msg) {
-        if(msg.getSrc() == null)
+        if(msg.getSrc() == null && local_addr != null) // should already be set by TP.ProtocolAdapter in shared transport case !
             msg.setSrc(local_addr);
     }
 
@@ -1246,10 +1244,9 @@ public abstract class TP extends Protocol {
             case Event.CONNECT_WITH_STATE_TRANSFER:
                 channel_name=(String)evt.getArg();
                 header=new TpHeader(channel_name);
-                if(isSingleton())
-                    setInAllThreadFactories(channel_name, null, thread_naming_pattern);
-                else
-                    setInAllThreadFactories(channel_name, local_addr, thread_naming_pattern);
+
+                // local_addr is null when shared transport
+                setInAllThreadFactories(channel_name, local_addr, thread_naming_pattern);
                 setThreadNames();
                 connectLock.lock();
                 try {
@@ -1317,6 +1314,7 @@ public abstract class TP extends Protocol {
             }
             else {
                 Address addr=(Address)up_prot.up(new Event(Event.GET_LOCAL_ADDRESS));
+                local_addr=addr;
                 registerLocalAddress(addr);
             }
         }
@@ -1740,12 +1738,17 @@ public abstract class TP extends Protocol {
                             }
                             retval.put("keys", sb.toString());
                         }
+                        if(key.equals("info")) {
+                            if(singleton_name != null && singleton_name.length() > 0)
+                                retval.put("singleton_name", singleton_name);
+                            
+                        }
                     }
                     return retval;
                 }
 
                 public String[] supportedKeys() {
-                    return new String[]{"dump", "keys", "uuids"};
+                    return new String[]{"dump", "keys", "uuids", "info"};
                 }
             });
 
@@ -1852,7 +1855,7 @@ public abstract class TP extends Protocol {
         }
     }
 
-    public static class ProtocolAdapter extends Protocol {
+    public static class ProtocolAdapter extends Protocol implements ProbeHandler {
         String cluster_name;
         final String transport_name;
         TpHeader header;
@@ -1880,9 +1883,19 @@ public abstract class TP extends Protocol {
             return cluster_name;
         }
 
-        @ManagedAttribute(description="local address")
+
         public Address getAddress() {
             return local_addr;
+        }
+
+        @ManagedAttribute(name="Address", description="local address")
+        public String getAddressAsString() {
+            return local_addr != null? local_addr.toString() : null;
+        }
+
+        @ManagedAttribute(name="AddressUUID", description="local address")
+        public String getAddressAsUUID() {
+            return (local_addr instanceof UUID)? ((UUID)local_addr).toStringLong() : null;
         }
 
         @ManagedAttribute(description="Name of the transport")
@@ -1896,6 +1909,19 @@ public abstract class TP extends Protocol {
 
         public ThreadFactory getThreadFactory() {
             return factory;
+        }
+
+        public void start() throws Exception {
+            TP transport=getTransport();
+            if(transport != null)
+                transport.registerProbeHandler(this);
+
+        }
+
+        public void stop() {
+            TP transport=getTransport();
+            if(transport != null)
+                transport.unregisterProbeHandler(this);
         }
 
         public Object down(Event evt) {
@@ -1935,6 +1961,19 @@ public abstract class TP extends Protocol {
 
         public String toString() {
             return cluster_name + " (" + transport_name + ")";
+        }
+
+        public Map<String, String> handleProbe(String... keys) {
+            HashMap<String, String> retval=new HashMap<String, String>();
+            retval.put("cluster", cluster_name);
+            retval.put("local_addr", local_addr != null? local_addr.toString() : null);
+            retval.put("local_addr (UUID)", local_addr instanceof UUID? ((UUID)local_addr).toStringLong() : null);
+            retval.put("transport_name", transport_name);
+            return retval;
+        }
+
+        public String[] supportedKeys() {
+            return null;
         }
     }
 }

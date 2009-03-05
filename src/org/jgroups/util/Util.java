@@ -3,6 +3,7 @@ package org.jgroups.util;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.jgroups.*;
+import org.jgroups.jmx.JmxConfigurator;
 import org.jgroups.auth.AuthToken;
 import org.jgroups.blocks.Connection;
 import org.jgroups.conf.ClassConfigurator;
@@ -28,7 +29,7 @@ import java.util.*;
 /**
  * Collection of various utility routines that can not be assigned to other classes.
  * @author Bela Ban
- * @version $Id: Util.java,v 1.187.2.8 2009/03/05 10:33:22 belaban Exp $
+ * @version $Id: Util.java,v 1.187.2.9 2009/03/05 12:31:21 belaban Exp $
  */
 public class Util {
 
@@ -2916,6 +2917,23 @@ public class Util {
 			return MBeanServerFactory.createMBeanServer();
 		}
 	}
+
+
+    public static void registerChannel(JChannel channel, String name) {
+        MBeanServer server=Util.getMBeanServer();
+        if(server != null) {
+            try {
+                JmxConfigurator.registerChannel(channel,
+                                                server,
+                                                (name != null? name : "jgroups"),
+                                                channel.getClusterName(),
+                                                true);
+            }
+            catch(Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
 
 
 
