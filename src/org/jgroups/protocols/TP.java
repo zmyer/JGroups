@@ -44,7 +44,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * The {@link #receive(Address, byte[], int, int)} method must
  * be called by subclasses when a unicast or multicast message has been received.
  * @author Bela Ban
- * @version $Id: TP.java,v 1.239.4.22 2009/03/05 12:35:09 belaban Exp $
+ * @version $Id: TP.java,v 1.239.4.23 2009/03/05 12:53:50 belaban Exp $
  */
 @MBean(description="Transport protocol")
 @DeprecatedProperty(names={"bind_to_all_interfaces", "use_incoming_packet_handler", "use_outgoing_packet_handler",
@@ -271,7 +271,8 @@ public abstract class TP extends Protocol {
     @ManagedAttribute
     protected long num_bytes_received=0;
 
-    /** The name of the group to which this member is connected */
+    /** The name of the group to which this member is connected. With a shared transport, the channel name is
+     * in TP.ProtocolAdapter (cluster_name), and this field is not used */
     @ManagedAttribute
     protected String channel_name=null;
 
@@ -294,7 +295,8 @@ public abstract class TP extends Protocol {
     /** The address (host and port) of this member. Null by default when a shared transport is used */
     protected Address local_addr=null;
 
-    /** The members of this group (updated when a member joins or leaves). Not used with shared transport */
+    /** The members of this group (updated when a member joins or leaves). With a shared transport,
+     * members contains *all* members from all channels sitting on the shared transport */
     protected final Set<Address> members=new CopyOnWriteArraySet<Address>();
 
     protected final ExposedByteArrayInputStream in_stream=new ExposedByteArrayInputStream(new byte[] { '0' });
@@ -548,7 +550,6 @@ public abstract class TP extends Protocol {
         max_bundle_timeout=timeout;
     }
 
-    public String getChannelName() {return channel_name;}
     public boolean isLoopback() {return loopback;}
     public void setLoopback(boolean b) {loopback=b;}
 
@@ -964,72 +965,36 @@ public abstract class TP extends Protocol {
     private void passMessageUp(Message msg, boolean perform_cluster_name_matching) {
         TpHeader hdr=(TpHeader)msg.getHeader(name); // replaced removeHeader() with getHeader()
         if(hdr == null) {
-            if(channel_name == null) {
-                Event evt=new Event(Event.MSG, msg);
-                if(isSingleton()) {
-                    passMessageToAll(evt);
-                }
-                else {
-                    up_prot.up(evt);
-                }
-            }
-            else {
-                if(log.isErrorEnabled())
-                    log.error(new StringBuilder("message does not have a transport header, msg is ").append(msg).
-                            append(", headers are ").append(msg.printHeaders()).append(", will be discarded"));
-            }
+            if(log.isErrorEnabled())
+                log.error(new StringBuilder("message does not have a transport header, msg is ").append(msg).
+                        append(", headers are ").append(msg.printHeaders()).append(", will be discarded"));
             return;
         }
+
+        if(log.isTraceEnabled())
+            log.trace(new StringBuilder("message is ").append(msg).append(", headers are ").append(msg.printHeaders()));
 
         String ch_name=hdr.channel_name;
         if(isSingleton()) {
             Protocol tmp_prot=up_prots.get(ch_name);
             if(tmp_prot != null) {
-                Event evt=new Event(Event.MSG, msg);
-                if(log.isTraceEnabled()) {
-                    StringBuilder sb=new StringBuilder("message is ").append(msg).append(", headers are ").append(msg.printHeaders());
-                    log.trace(sb);
-                }
-                tmp_prot.up(evt);
-            }
-            else {
-                // we discard messages for a group we don't have. If we had a scenario with channel C1 and A,B on it,
-                // and channel C2 and only A on it (asymmetric setup), then C2 would always log warnings that B was
-                // not found (Jan 25 2008 (bela))
-                // if(log.isWarnEnabled())
-                   // log.warn(new StringBuilder("discarded message from group \"").append(ch_name).
-                     //       append("\" (our groups are ").append(up_prots.keySet()).append("). Sender was ").append(msg.getSrc()));
+                tmp_prot.up(new Event(Event.MSG, msg));
             }
         }
         else {
-            // Discard if message's group name is not the same as our group name
+            // Discard if message's cluster name is not the same as our cluster name
             if(perform_cluster_name_matching && channel_name != null && !channel_name.equals(ch_name)) {
                 if(log.isWarnEnabled() && log_discard_msgs)
                     log.warn(new StringBuilder("discarded message from different cluster \"").append(ch_name).
                             append("\" (our cluster is \"").append(channel_name).append("\"). Sender was ").append(msg.getSrc()));
             }
             else {
-                Event evt=new Event(Event.MSG, msg);
-                if(log.isTraceEnabled()) {
-                    StringBuilder sb=new StringBuilder("message is ").append(msg).append(", headers are ").append(msg.printHeaders());
-                    log.trace(sb);
-                }
-                up_prot.up(evt);
+                up_prot.up(new Event(Event.MSG, msg));
             }
         }
     }
 
-    private void passMessageToAll(Event evt) {
-        for(Protocol tmp_prot: up_prots.values()) {
-            try {
-                tmp_prot.up(evt);
-            }
-            catch(Exception ex) {
-                if(log.isErrorEnabled())
-                    log.error("failure passing message up: message is " + evt.getArg(), ex);
-            }
-        }
-    }
+  
 
 
     /**
