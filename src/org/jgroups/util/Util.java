@@ -28,7 +28,7 @@ import java.util.*;
 /**
  * Collection of various utility routines that can not be assigned to other classes.
  * @author Bela Ban
- * @version $Id: Util.java,v 1.187.2.7 2009/03/04 11:13:39 belaban Exp $
+ * @version $Id: Util.java,v 1.187.2.8 2009/03/05 10:33:22 belaban Exp $
  */
 public class Util {
 
@@ -1335,8 +1335,7 @@ public class Util {
             sb.append("empty");
         }
         else {
-            for(Iterator it=values.iterator(); it.hasNext();) {
-                Object o=it.next();
+            for(Object o: values) {
                 String s=null;
                 if(o instanceof Event) {
                     Event event=(Event)o;
@@ -1351,9 +1350,9 @@ public class Util {
                         s+="[";
                         Message m=(Message)event.getArg();
                         Map<String,Header> headers=new HashMap<String,Header>(m.getHeaders());
-                        for(Iterator i=headers.keySet().iterator(); i.hasNext();) {
-                            Object headerKey=i.next();
-                            Object value=headers.get(headerKey);
+                        for(Map.Entry<String,Header> entry: headers.entrySet()) {
+                            String headerKey=entry.getKey();
+                            Header value=entry.getValue();
                             String headerToString=null;
                             if(value instanceof FD.FdHeader) {
                                 headerToString=value.toString();
@@ -1376,10 +1375,7 @@ public class Util {
                                     headerToString=headerKey + "-" + (value == null ? "null" : value.toString());
                                 }
                             s+=headerToString;
-
-                            if(i.hasNext()) {
-                                s+=",";
-                            }
+                            s+=" ";
                         }
                         s+="]";
                     }
@@ -2971,7 +2967,7 @@ public class Util {
      *                System.getProperty()
      * @return the input string with all property references replaced if any. If
      *         there are no valid references the input string will be returned.
-     * @throws java.lang.AccessControlException
+     * @throws {@link java.security.AccessControlException}
      *                 when not authorised to retrieved system properties
      */
     public static String replaceProperties(final String string, final Properties props) {           
@@ -2992,7 +2988,7 @@ public class Util {
         final int SEEN_DOLLAR=1;
         final int IN_BRACKET=2;
         final char[] chars=string.toCharArray();
-        StringBuffer buffer=new StringBuffer();
+        StringBuilder buffer=new StringBuilder();
         boolean properties=false;
         int state=NORMAL;
         int start=0;

@@ -30,7 +30,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * stacks, and to destroy them again when not needed anymore
  * 
  * @author Bela Ban
- * @version $Id: ProtocolStack.java,v 1.92.4.2 2009/02/24 13:37:26 belaban Exp $
+ * @version $Id: ProtocolStack.java,v 1.92.4.3 2009/03/05 10:34:32 belaban Exp $
  */
 public class ProtocolStack extends Protocol implements Transport {
     public static final int ABOVE = 1; // used by insertProtocol()
@@ -685,7 +685,7 @@ public class ProtocolStack extends Protocol implements Transport {
      * <em>from top to bottom</em>.
      * Each layer can perform some initialization, e.g. create a multicast socket
      */
-    public void startStack(String cluster_name) throws Exception {
+    public void startStack(String cluster_name, Address local_addr) throws Exception {
         if(stopped == false) return;
 
         Protocol above_prot=null;        
@@ -712,7 +712,8 @@ public class ProtocolStack extends Protocol implements Transport {
                             }
 
                             if(above_prot != null) {
-                                TP.ProtocolAdapter ad=new TP.ProtocolAdapter(cluster_name, prot.getName(), above_prot, prot,
+                                TP.ProtocolAdapter ad=new TP.ProtocolAdapter(cluster_name, local_addr, prot.getName(),
+                                                                             above_prot, prot,
                                                                              transport.getThreadNamingPattern());
                                 ad.setProtocolStack(above_prot.getProtocolStack());
                                 above_prot.setDownProtocol(ad);
