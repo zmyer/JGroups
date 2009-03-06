@@ -2,7 +2,6 @@ package org.jgroups.protocols;
 
 import org.jgroups.Address;
 import org.jgroups.Event;
-import org.jgroups.Message;
 import org.jgroups.PhysicalAddress;
 import org.jgroups.annotations.ManagedAttribute;
 import org.jgroups.annotations.Property;
@@ -13,6 +12,8 @@ import org.jgroups.util.Util;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Shared base class for tcpip protocols
@@ -167,7 +168,14 @@ public abstract class BasicTCP extends TP {
         Object ret=super.handleDownEvent(evt);
         if(evt.getType() == Event.VIEW_CHANGE) {
             suspected_mbrs.clear();
-            retainAll(members); // remove all connections from the ConnectionTable which are not members
+
+            Set<Address> physical_mbrs=new HashSet<Address>();
+            for(Address addr: members) {
+                PhysicalAddress physical_addr=getPhysicalAddressFromCache(addr);
+                if(physical_addr != null)
+                    physical_mbrs.add(physical_addr);
+            }
+            retainAll(physical_mbrs); // remove all connections from the ConnectionTable which are not members
         }
         else if(evt.getType() == Event.UNSUSPECT) {
             Address suspected_mbr=(Address)evt.getArg();
