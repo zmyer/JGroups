@@ -33,7 +33,7 @@ import java.util.*;
  * membership.
  * 
  * @author Bela Ban
- * @version $Id: TCPPING.java,v 1.41.4.2 2009/03/06 12:53:43 belaban Exp $
+ * @version $Id: TCPPING.java,v 1.41.4.3 2009/03/06 13:18:27 belaban Exp $
  */
 public class TCPPING extends Discovery {
     
@@ -92,25 +92,10 @@ public class TCPPING extends Discovery {
     }
     
     public void sendGetMembersRequest(String cluster_name) {
-        Set<PhysicalAddress> target_addrs=new HashSet<PhysicalAddress>();
-
-        if(initial_hosts != null)
-            target_addrs.addAll(initial_hosts);
-
-        // Now add the current membership as well: if we only had A and B listed (initial_hosts="A[7800],B[7800]),
-        // but the actual membership is {A,B,C,D,E}, we'd never get UUID/PhysicalAddress mappings for C, D and E !
-//        synchronized(members) {
-//            for(Address mbr: members) {
-//
-//            }
-//        }
-
-
-
         PhysicalAddress physical_addr=(PhysicalAddress)down_prot.down(new Event(Event.GET_PHYSICAL_ADDRESS, local_addr));
         PingData data=new PingData(local_addr, null, false, UUID.get(local_addr), Arrays.asList(physical_addr));
         PingHeader hdr=new PingHeader(PingHeader.GET_MBRS_REQ, data, cluster_name);
-        for(final Address addr: target_addrs) {
+        for(final Address addr: initial_hosts) {
             if(addr.equals(physical_addr))
                 continue;
             final Message msg = new Message(addr, null, null);
