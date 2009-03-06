@@ -38,7 +38,7 @@ import java.util.concurrent.TimeUnit;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: Discovery.java,v 1.52.4.8 2009/02/27 12:43:20 belaban Exp $
+ * @version $Id: Discovery.java,v 1.52.4.9 2009/03/06 12:53:10 belaban Exp $
  */
 @MBean
 public abstract class Discovery extends Protocol {   
@@ -67,6 +67,10 @@ public abstract class Discovery extends Protocol {
     @Property(description="Number of discovery requests to be sent distributed over timeout. Default is 2")
     @ManagedAttribute(description="Number of discovery requests to be sent (min=1), " + "distributed over timeout ms", writable=true)
     int num_ping_requests=2;
+
+    @Property(description="Whether or not to return the entire logical-physical address cache mappings on a " +
+            "discovery request, or not. Default is false, except for TCPPING")
+    boolean return_entire_cache=false;
 
     
     /* ---------------------------------------------   JMX      ------------------------------------------------------ */
@@ -271,16 +275,23 @@ public abstract class Discovery extends Protocol {
                     coord=!members.isEmpty()? members.firstElement() : local_addr;
                 }
 
-                PhysicalAddress physical_addr=(PhysicalAddress)down(new Event(Event.GET_PHYSICAL_ADDRESS, local_addr));
-                PingData ping_rsp=new PingData(local_addr, coord, is_server, org.jgroups.util.UUID.get(local_addr),
-                                               Arrays.asList(physical_addr));
-                rsp_msg=new Message(msg.getSrc(), null, null);
-                rsp_msg.setFlag(Message.OOB);
-                rsp_hdr=new PingHeader(PingHeader.GET_MBRS_RSP, ping_rsp);
-                rsp_msg.putHeader(getName(), rsp_hdr);
-                if(log.isTraceEnabled())
-                    log.trace("received GET_MBRS_REQ from " + msg.getSrc() + ", sending response " + rsp_hdr);
-                down_prot.down(new Event(Event.MSG, rsp_msg));
+                if(return_entire_cache) {
+                    Map<Address,PhysicalAddress> cache=(Map<Address,PhysicalAddress>)down(new Event(Event.GET_LOGICAL_PHYSICAL_MAPPINGS));
+                    if(cache != null) {
+                        Address src=msg.getSrc();
+                        for(Map.Entry<Address,PhysicalAddress> entry: cache.entrySet()) {
+                            Address logical_addr=entry.getKey();
+                            PhysicalAddress physical_addr=entry.getValue();
+                            sendDiscoveryResponse(logical_addr, Arrays.asList(physical_addr), coord, is_server,
+                                                  UUID.get(logical_addr), src);
+                        }
+                    }
+                }
+                else {
+                    PhysicalAddress physical_addr=(PhysicalAddress)down(new Event(Event.GET_PHYSICAL_ADDRESS, local_addr));
+                    sendDiscoveryResponse(local_addr, Arrays.asList(physical_addr), coord, is_server,
+                                          org.jgroups.util.UUID.get(local_addr), msg.getSrc());
+                }
                 return null;
 
             case PingHeader.GET_MBRS_RSP:   // add response to vector and notify waiting thread
@@ -295,7 +306,8 @@ public abstract class Discovery extends Protocol {
                     if(logical_addr == null)
                         logical_addr=msg.getSrc();
                     List<PhysicalAddress> physical_addrs=rsp.getPhysicalAddrs();
-                    physical_addr=physical_addrs != null && !physical_addrs.isEmpty()? physical_addrs.get(0) : null;
+                    PhysicalAddress physical_addr=physical_addrs != null && !physical_addrs.isEmpty()?
+                            physical_addrs.get(0) : null;
                     if(logical_addr != null && physical_addr != null)
                         down(new Event(Event.SET_PHYSICAL_ADDRESS, new Tuple<Address,PhysicalAddress>(logical_addr, physical_addr)));
                     if(logical_addr != null && rsp.getLogicalName() != null)
@@ -401,10 +413,22 @@ public abstract class Discovery extends Protocol {
         return new View(coord, id, mbrs);
     }
 
+
+    private void sendDiscoveryResponse(Address logical_addr, List<PhysicalAddress> physical_addrs,
+                                       Address coord, boolean is_server, String logical_name, Address sender) {
+        PingData ping_rsp=new PingData(logical_addr, coord, is_server, logical_name, physical_addrs);
+        Message rsp_msg=new Message(sender, null, null);
+        rsp_msg.setFlag(Message.OOB);
+        PingHeader rsp_hdr=new PingHeader(PingHeader.GET_MBRS_RSP, ping_rsp);
+        rsp_msg.putHeader(getName(), rsp_hdr);
+        if(log.isTraceEnabled())
+            log.trace("received GET_MBRS_REQ from " + sender + ", sending response " + rsp_hdr);
+        down_prot.down(new Event(Event.MSG, rsp_msg));
+    }
     
 
     class PingSenderTask {        
-	private Future<?>      senderFuture;
+        private Future<?>      senderFuture;
 
         public PingSenderTask() {}
 
@@ -436,7 +460,7 @@ public abstract class Discovery extends Protocol {
 
     private static class Responses {
         final Promise<JoinRsp>  promise;
-        final List<PingData>     ping_rsps=new LinkedList<PingData>();
+        final List<PingData>    ping_rsps=new LinkedList<PingData>();
         final int               num_expected_rsps;
         final int               num_expected_srv_rsps;
         final boolean           break_on_coord_rsp;

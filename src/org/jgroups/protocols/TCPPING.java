@@ -33,7 +33,7 @@ import java.util.*;
  * membership.
  * 
  * @author Bela Ban
- * @version $Id: TCPPING.java,v 1.41.4.1 2009/02/27 12:43:21 belaban Exp $
+ * @version $Id: TCPPING.java,v 1.41.4.2 2009/03/06 12:53:43 belaban Exp $
  */
 public class TCPPING extends Discovery {
     
@@ -56,7 +56,8 @@ public class TCPPING extends Discovery {
     private List<IpAddress> initial_hosts;
 
 
-    public TCPPING() {    
+    public TCPPING() {
+        return_entire_cache=true;
     }
 
     public String getName() {

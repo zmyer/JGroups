@@ -1,4 +1,4 @@
-// $Id: Event.java,v 1.63.4.6 2009/02/26 15:46:02 belaban Exp $
+// $Id: Event.java,v 1.63.4.7 2009/03/06 12:53:30 belaban Exp $
 
 package org.jgroups;
 
@@ -49,9 +49,10 @@ public class Event {
     public static final int DISABLE_UNICASTS_TO                = 81;  // arg = Address (member)
     public static final int PREPARE_VIEW                       = 86;  // arg = View
     public static final int GET_PHYSICAL_ADDRESS               = 87;  // arg = Address --> PhysicalAddress
-    public static final int SET_PHYSICAL_ADDRESS               = 88;  // arg = Tuple<Address,PhysicalAddress>
-    public static final int REMOVE_ADDRESS                     = 89;  // arg = Address
-    public static final int GET_LOCAL_ADDRESS                  = 90;  // arg = null --> UUID (local_addr)
+    public static final int GET_LOGICAL_PHYSICAL_MAPPINGS      = 88;  // arg = null --> Map<Address,PhysicalAddress>
+    public static final int SET_PHYSICAL_ADDRESS               = 89;  // arg = Tuple<Address,PhysicalAddress>
+    public static final int REMOVE_ADDRESS                     = 90;  // arg = Address
+    public static final int GET_LOCAL_ADDRESS                  = 91;  // arg = null --> UUID (local_addr)
 
     public static final int USER_DEFINED                       = 1000; // arg = <user def., e.g. evt type + data>
 
@@ -135,6 +136,7 @@ public class Event {
             case DISABLE_UNICASTS_TO:    return "DISABLE_UNICASTS_TO";
             case PREPARE_VIEW:           return "PREPARE_VIEW";
             case GET_PHYSICAL_ADDRESS:   return "GET_PHYSICAL_ADDRESS";
+            case GET_LOGICAL_PHYSICAL_MAPPINGS: return "GET_LOGICAL_PHYSICAL_MAPPINGS";
             case SET_PHYSICAL_ADDRESS:   return "SET_PHYSICAL_ADDRESS";
             case REMOVE_ADDRESS:         return "REMOVE_ADDRESS";
             case GET_LOCAL_ADDRESS:      return "GET_LOCAL_ADDRESS";
