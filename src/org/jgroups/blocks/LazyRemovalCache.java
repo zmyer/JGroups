@@ -1,8 +1,6 @@
 package org.jgroups.blocks;
 
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -12,7 +10,7 @@ import java.util.concurrent.ConcurrentMap;
  * configurable time are evicted. Elements are marked as removable by remove(), removeAll() and retainAll(). When
  * an elements is marked as removable, but later reinserted, the mark is removed.
  * @author Bela Ban
- * @version $Id: LazyRemovalCache.java,v 1.1.2.2 2009/03/04 11:13:58 belaban Exp $
+ * @version $Id: LazyRemovalCache.java,v 1.1.2.3 2009/03/06 12:54:51 belaban Exp $
  */
 public class LazyRemovalCache<K,V> {
     private final ConcurrentMap<K,Entry<V>> map=new ConcurrentHashMap<K,Entry<V>>();
@@ -50,10 +48,6 @@ public class LazyRemovalCache<K,V> {
         return entry != null? entry.val : null;
     }
 
-    //public Set<Map.Entry<K,Entry<V>>> entrySet() {
-      //  return map.entrySet();
-    //}
-
     public void remove(K key) {
         remove(key, false);
     }
@@ -88,6 +82,15 @@ public class LazyRemovalCache<K,V> {
         checkMaxSizeExceeded();
     }
 
+    public void clear(boolean force) {
+        if(force)
+            map.clear();
+        else {
+            for(Map.Entry<K,Entry<V>> entry: map.entrySet())
+                entry.getValue().removable=true;
+        }
+    }
+
     public void retainAll(Collection<K> keys) {
         retainAll(keys, false);
     }
@@ -105,6 +108,21 @@ public class LazyRemovalCache<K,V> {
             }
         }
         checkMaxSizeExceeded();
+    }
+
+    public Set<V> values() {
+        Set<V> retval=new HashSet<V>();
+        for(Entry<V> entry: map.values()) {
+            retval.add(entry.val);
+        }
+        return retval;
+    }
+
+    public Map<K,V >contents() {
+        Map<K,V> retval=new HashMap<K,V>();
+        for(Map.Entry<K,Entry<V>> entry: map.entrySet())
+            retval.put(entry.getKey(), entry.getValue().val);
+        return retval;
     }
 
     public int size() {

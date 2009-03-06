@@ -2,6 +2,7 @@ package org.jgroups.protocols;
 
 
 import org.jgroups.*;
+import org.jgroups.blocks.LazyRemovalCache;
 import org.jgroups.annotations.*;
 import org.jgroups.conf.PropertyConverters;
 import org.jgroups.stack.Protocol;
@@ -44,7 +45,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * The {@link #receive(Address, byte[], int, int)} method must
  * be called by subclasses when a unicast or multicast message has been received.
  * @author Bela Ban
- * @version $Id: TP.java,v 1.239.4.23 2009/03/05 12:53:50 belaban Exp $
+ * @version $Id: TP.java,v 1.239.4.24 2009/03/06 12:54:50 belaban Exp $
  */
 @MBean(description="Transport protocol")
 @DeprecatedProperty(names={"bind_to_all_interfaces", "use_incoming_packet_handler", "use_outgoing_packet_handler",
@@ -373,7 +374,18 @@ public abstract class TP extends Protocol {
      * <br/>
      * The keys are logical addresses, the values physical addresses
      */
-    protected final ConcurrentMap<Address,PhysicalAddress> logical_addr_cache=new ConcurrentHashMap<Address,PhysicalAddress>();
+    protected final LazyRemovalCache<Address,PhysicalAddress> logical_addr_cache=new LazyRemovalCache<Address,PhysicalAddress>(5,10000);
+
+    private static final LazyRemovalCache.Printable<Address,PhysicalAddress> print_function=new LazyRemovalCache.Printable<Address,PhysicalAddress>() {
+        public java.lang.String print(final Address logical_addr, final PhysicalAddress physical_addr) {
+            StringBuilder sb=new StringBuilder();
+            String tmp_logical_name=UUID.get(logical_addr);
+            if(tmp_logical_name != null)
+                sb.append(tmp_logical_name).append(": ");
+            sb.append(((UUID)logical_addr).toStringLong()).append(": ").append(physical_addr).append("\n");
+            return sb.toString();
+        }
+    };
 
     /** Time when the last request for a physical address was sent. Used to prevent request floods */
     protected long last_who_has_request=System.currentTimeMillis();
@@ -672,19 +684,7 @@ public abstract class TP extends Protocol {
 
     @ManagedOperation(description="Dumps the contents of the logical address cache")
     public String printLogicalAddressCache() {
-        StringBuilder sb=new StringBuilder();
-        String tmp_logical_name;
-        Address logical_addr;
-        Address physical_addr;
-        for(Map.Entry<Address,PhysicalAddress> entry: logical_addr_cache.entrySet()) {
-            logical_addr=entry.getKey();
-            physical_addr=entry.getValue();
-            tmp_logical_name=UUID.get(logical_addr);
-            if(tmp_logical_name != null)
-                sb.append(tmp_logical_name).append(": ");
-            sb.append(((UUID)logical_addr).toStringLong()).append(": ").append(physical_addr).append("\n");
-        }
-        return sb.toString();
+        return logical_addr_cache.printCache(print_function);
     }
 
 
@@ -1193,14 +1193,10 @@ public abstract class TP extends Protocol {
                     }
                 }
 
-                if(evt.getType() == Event.VIEW_CHANGE) {
-                    // fix for https://jira.jboss.org/jira/browse/JGRP-918
-                    List<Address> left_mbrs=Util.leftMembers(old_mbrs, members);
-                    if(left_mbrs != null) {
-                        logical_addr_cache.keySet().removeAll(left_mbrs);
-                        UUID.removeAll(left_mbrs);
-                    }
-                }
+                // fix for https://jira.jboss.org/jira/browse/JGRP-918
+                logical_addr_cache.retainAll(members);
+                UUID.retainAll(members);
+
                 break;
 
             case Event.CONNECT:
@@ -1236,6 +1232,9 @@ public abstract class TP extends Protocol {
 
             case Event.GET_PHYSICAL_ADDRESS:
                 return getPhysicalAddressFromCache((UUID)evt.getArg());
+
+            case Event.GET_LOGICAL_PHYSICAL_MAPPINGS:
+                return logical_addr_cache.contents();
 
             case Event.SET_PHYSICAL_ADDRESS:
                 Tuple<UUID,PhysicalAddress> tuple=(Tuple<UUID,PhysicalAddress>)evt.getArg();
@@ -1383,7 +1382,7 @@ public abstract class TP extends Protocol {
 
     protected void addPhysicalAddressToCache(Address logical_addr, PhysicalAddress physical_addr) {
         if(logical_addr != null && physical_addr != null)
-            logical_addr_cache.put(logical_addr, physical_addr);
+            logical_addr_cache.add(logical_addr, physical_addr);
     }
 
     protected PhysicalAddress getPhysicalAddressFromCache(Address logical_addr) {
@@ -1396,7 +1395,7 @@ public abstract class TP extends Protocol {
     }
     
     public void clearLogicalAddressCache() {
-        logical_addr_cache.clear();
+        logical_addr_cache.clear(true);
     }
 
 
@@ -1688,6 +1687,8 @@ public abstract class TP extends Protocol {
                         }
                         if(key.equals("uuids")) {
                             retval.put("uuids", printLogicalAddressCache());
+                            if(!isSingleton() && !retval.containsKey("local_addr"))
+                                retval.put("local_addr", local_addr != null? local_addr.toString() : null);
                             continue;
                         }
                         if(key.equals("keys")) {
