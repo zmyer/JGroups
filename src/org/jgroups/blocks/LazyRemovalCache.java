@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentMap;
  * configurable time are evicted. Elements are marked as removable by remove(), removeAll() and retainAll(). When
  * an elements is marked as removable, but later reinserted, the mark is removed.
  * @author Bela Ban
- * @version $Id: LazyRemovalCache.java,v 1.1.2.3 2009/03/06 12:54:51 belaban Exp $
+ * @version $Id: LazyRemovalCache.java,v 1.1.2.4 2009/03/06 13:38:54 belaban Exp $
  */
 public class LazyRemovalCache<K,V> {
     private final ConcurrentMap<K,Entry<V>> map=new ConcurrentHashMap<K,Entry<V>>();
@@ -59,7 +59,8 @@ public class LazyRemovalCache<K,V> {
             map.remove(key);
         else {
             Entry<V> entry=map.get(key);
-            entry.removable=true;
+            if(entry != null)
+                entry.removable=true;
         }
         checkMaxSizeExceeded();
     }
@@ -76,7 +77,8 @@ public class LazyRemovalCache<K,V> {
         else {
             for(K key: keys) {
                 Entry<V> entry=map.get(key);
-                entry.removable=true;
+                if(entry != null)
+                    entry.removable=true;
             }
         }
         checkMaxSizeExceeded();
@@ -86,8 +88,14 @@ public class LazyRemovalCache<K,V> {
         if(force)
             map.clear();
         else {
-            for(Map.Entry<K,Entry<V>> entry: map.entrySet())
-                entry.getValue().removable=true;
+            for(Map.Entry<K,Entry<V>> entry: map.entrySet()) {
+                Entry<V> val=entry.getValue();
+                if(val != null) {
+                    Entry<V> tmp=entry.getValue();
+                    if(tmp != null)
+                        tmp.removable=true;
+                }
+            }
         }
     }
 
@@ -103,7 +111,9 @@ public class LazyRemovalCache<K,V> {
         else {
             for(Map.Entry<K,Entry<V>> entry: map.entrySet()) {
                 if(!keys.contains(entry.getKey())) {
-                    entry.getValue().removable=true;
+                    Entry<V> val=entry.getValue();
+                    if(val != null)
+                        val.removable=true;
                 }
             }
         }
