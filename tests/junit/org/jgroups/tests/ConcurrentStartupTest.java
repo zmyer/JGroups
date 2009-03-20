@@ -24,7 +24,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Tests concurrent startup with state transfer.
  * 
  * @author bela
- * @version $Id: ConcurrentStartupTest.java,v 1.48 2008/11/21 14:41:07 vlada Exp $
+<<<<<<< ConcurrentStartupTest.java
+ * @version $Id: ConcurrentStartupTest.java,v 1.49.2.1 2009/03/20 12:46:34 belaban Exp $
+=======
+ * @version $Id: ConcurrentStartupTest.java,v 1.49.2.1 2009/03/20 12:46:34 belaban Exp $
+>>>>>>> 1.48.4.1
  */
 @Test(groups={Global.FLUSH},sequential=true)
 public class ConcurrentStartupTest extends ChannelTestBase {
@@ -97,8 +101,8 @@ public class ConcurrentStartupTest extends ChannelTestBase {
                 // working
                 channels[i].start();
                 semaphore.release(1);
-                //sleep at least a second and max second and a half
-                Util.sleepRandom(1500);
+                //sleep a second and half thus avoiding merges
+                Util.sleep(1500);
             }
 
             // Make sure everyone is in sync
@@ -205,7 +209,7 @@ public class ConcurrentStartupTest extends ChannelTestBase {
 
         public void useChannel() throws Exception {
             channel.connect("test", null, null, 25000);
-            channel.send(null, null, channel.getLocalAddress());
+            channel.send(null, null, channel.getAddress());
         }
 
         List<Address> getList() {
@@ -220,7 +224,7 @@ public class ConcurrentStartupTest extends ChannelTestBase {
             if(msg.getBuffer() == null)
                 return;
             Address obj = (Address)msg.getObject();
-            log.info("-- [#" + getName() + " (" + channel.getLocalAddress() + ")]: received " + obj);
+            log.info("-- [#" + getName() + " (" + channel.getAddress() + ")]: received " + obj);
             synchronized(this){
                 l.add(obj);
                 Integer key = new Integer(getMod());
@@ -245,7 +249,7 @@ public class ConcurrentStartupTest extends ChannelTestBase {
                     l.addAll(tmp);
                     log.info("-- [#" + getName()
                              + " ("
-                             + channel.getLocalAddress()
+                             + channel.getAddress()
                              + ")]: state is "
                              + l);
                     Integer key = new Integer(getMod());
@@ -299,7 +303,7 @@ public class ConcurrentStartupTest extends ChannelTestBase {
                     l.addAll(tmp);
                     log.info("-- [#" + getName()
                              + " ("
-                             + channel.getLocalAddress()
+                             + channel.getAddress()
                              + ")]: state is "
                              + l);
                     Integer key = new Integer(getMod());

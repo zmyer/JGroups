@@ -16,7 +16,6 @@ import java.util.*;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.locks.ReentrantLock;
 
 
 /**
@@ -30,7 +29,11 @@ import java.util.concurrent.locks.ReentrantLock;
  * stacks, and to destroy them again when not needed anymore
  * 
  * @author Bela Ban
- * @version $Id: ProtocolStack.java,v 1.92 2008/10/29 09:19:32 belaban Exp $
+<<<<<<< ProtocolStack.java
+ * @version $Id: ProtocolStack.java,v 1.93.2.1 2009/03/20 12:46:49 belaban Exp $
+=======
+ * @version $Id: ProtocolStack.java,v 1.93.2.1 2009/03/20 12:46:49 belaban Exp $
+>>>>>>> 1.92.4.3
  */
 public class ProtocolStack extends Protocol implements Transport {
     public static final int ABOVE = 1; // used by insertProtocol()
@@ -50,12 +53,6 @@ public class ProtocolStack extends Protocol implements Transport {
     private String   setup_string;
     private JChannel channel = null;
     private volatile boolean stopped=true;
-
-    /**
-     * Locks acquired by protocol below, need to get released on down(). See
-     * http://jira.jboss.com/jira/browse/JGRP-535 for details
-     */
-    private final Map<Thread,ReentrantLock> locks=new ConcurrentHashMap<Thread,ReentrantLock>();
 
 
     private final TP.ProbeHandler props_handler=new TP.ProbeHandler() {
@@ -134,9 +131,6 @@ public class ProtocolStack extends Protocol implements Transport {
     public static void setTimerThreadFactory(ThreadFactory f) {
     }
 
-    public Map<Thread,ReentrantLock> getLocks() {
-        return locks;
-    }
 
     public Channel getChannel() {
         return channel;
@@ -685,7 +679,7 @@ public class ProtocolStack extends Protocol implements Transport {
      * <em>from top to bottom</em>.
      * Each layer can perform some initialization, e.g. create a multicast socket
      */
-    public void startStack(String cluster_name) throws Exception {
+    public void startStack(String cluster_name, Address local_addr) throws Exception {
         if(stopped == false) return;
 
         Protocol above_prot=null;        
@@ -712,9 +706,9 @@ public class ProtocolStack extends Protocol implements Transport {
                             }
 
                             if(above_prot != null) {
-                                TP.ProtocolAdapter ad=new TP.ProtocolAdapter(cluster_name, prot.getName(), above_prot, prot,
-                                                                             transport.getThreadNamingPattern(),
-                                                                             transport.getLocalAddress());
+                                TP.ProtocolAdapter ad=new TP.ProtocolAdapter(cluster_name, local_addr, prot.getName(),
+                                                                             above_prot, prot,
+                                                                             transport.getThreadNamingPattern());
                                 ad.setProtocolStack(above_prot.getProtocolStack());
                                 above_prot.setDownProtocol(ad);
                                 up_prots.put(cluster_name, ad);
@@ -725,8 +719,6 @@ public class ProtocolStack extends Protocol implements Transport {
                             ProtocolStack.RefCounter counter=val.getVal2();
                             short num_starts=counter.incrementStartCount();
                             if(num_starts >= 1) {
-                                if(above_prot != null)
-                                    above_prot.up(new Event(Event.SET_LOCAL_ADDRESS, transport.getLocalAddress()));
                                 continue;
                             }
                             else {
@@ -828,12 +820,6 @@ public class ProtocolStack extends Protocol implements Transport {
 
 
     public Object down(Event evt) {
-        ReentrantLock lock=locks.remove(Thread.currentThread());
-        if(lock != null && lock.isHeldByCurrentThread()) {
-            lock.unlock();
-            if(log.isTraceEnabled())
-                log.trace("released lock held by " + Thread.currentThread());
-        }
         if(top_prot != null)
             return top_prot.down(evt);
         return null;

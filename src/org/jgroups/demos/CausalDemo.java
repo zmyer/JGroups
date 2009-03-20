@@ -1,4 +1,4 @@
-// $Id: CausalDemo.java,v 1.7 2007/11/19 16:11:07 belaban Exp $
+// $Id: CausalDemo.java,v 1.7.6.1 2009/03/20 12:46:51 belaban Exp $
 package org.jgroups.demos;
 
 import org.jgroups.*;
@@ -119,12 +119,12 @@ public class CausalDemo implements Runnable
                listAlphabet();
 
                //am I chosen to transmit next letter?
-               if (cm.member.equals(channel.getLocalAddress()))
+               if (cm.member.equals(channel.getAddress()))
                {
                   int nextTarget = r.nextInt(members.size());
 
                   //chose someone other than yourself
-                  while (nextTarget == members.indexOf(channel.getLocalAddress()))
+                  while (nextTarget == members.indexOf(channel.getAddress()))
                   {
                      nextTarget = r.nextInt(members.size());
                   }

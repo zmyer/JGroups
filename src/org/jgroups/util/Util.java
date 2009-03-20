@@ -3,12 +3,13 @@ package org.jgroups.util;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.jgroups.*;
+import org.jgroups.jmx.JmxConfigurator;
 import org.jgroups.auth.AuthToken;
 import org.jgroups.blocks.Connection;
 import org.jgroups.conf.ClassConfigurator;
 import org.jgroups.protocols.FD;
 import org.jgroups.protocols.PingHeader;
-import org.jgroups.protocols.PingRsp;
+import org.jgroups.protocols.PingData;
 import org.jgroups.stack.IpAddress;
 
 import javax.management.MBeanServer;
@@ -28,7 +29,11 @@ import java.util.*;
 /**
  * Collection of various utility routines that can not be assigned to other classes.
  * @author Bela Ban
- * @version $Id: Util.java,v 1.187 2009/02/12 16:39:34 vlada Exp $
+<<<<<<< Util.java
+ * @version $Id: Util.java,v 1.192.2.1 2009/03/20 12:46:41 belaban Exp $
+=======
+ * @version $Id: Util.java,v 1.192.2.1 2009/03/20 12:46:41 belaban Exp $
+>>>>>>> 1.187.2.9
  */
 public class Util {
 
@@ -55,6 +60,8 @@ public class Util {
     static boolean resolve_dns=false;
 
     static boolean      JGROUPS_COMPAT=false;
+
+    private static short COUNTER=1;
 
     /**
      * Global thread group to which all (most!) JGroups threads belong
@@ -230,6 +237,18 @@ public class Util {
         }
     }
 
+
+    public static byte setFlag(byte bits, byte flag) {
+        return bits |= flag;
+    }
+
+    public static boolean isFlagSet(byte bits, byte flag) {
+        return (bits & flag) == flag;
+    }
+
+    public static byte clearFlags(byte bits, byte flag) {
+        return bits &= ~flag;
+    }
 
 
     /**
@@ -680,12 +699,7 @@ public class Util {
         return result;
     }
 
-    public static int size(Address addr) {
-        int retval=Global.BYTE_SIZE; // presence byte
-        if(addr != null)
-            retval+=addr.size() + Global.BYTE_SIZE; // plus type of address
-        return retval;
-    }
+
 
     public static void writeAuthToken(AuthToken token, DataOutputStream out) throws IOException{
         Util.writeString(token.getName(), out);
@@ -706,28 +720,42 @@ public class Util {
     }
 
     public static void writeAddress(Address addr, DataOutputStream out) throws IOException {
+        byte flags=0;
+        boolean streamable_addr=true;
+
         if(addr == null) {
-            out.writeBoolean(false);
+            flags=Util.setFlag(flags, Address.NULL);
+            out.writeByte(flags);
             return;
         }
-
-        out.writeBoolean(true);
-        if(addr instanceof IpAddress) {
-            // regular case, we don't need to include class information about the type of Address, e.g. JmsAddress
-            out.writeBoolean(true);
-            addr.writeTo(out);
+        if(addr instanceof UUID) {
+            flags=Util.setFlag(flags, Address.UUID_ADDR);
+        }
+        else if(addr instanceof IpAddress) {
+            flags=Util.setFlag(flags, Address.IP_ADDR);
         }
         else {
-            out.writeBoolean(false);
-            writeOtherAddress(addr, out);
+            streamable_addr=false;
         }
+
+        out.writeByte(flags);
+        if(streamable_addr)
+            addr.writeTo(out);
+        else
+            writeOtherAddress(addr, out);
     }
 
     public static Address readAddress(DataInputStream in) throws IOException, IllegalAccessException, InstantiationException {
-        Address addr=null;
-        if(in.readBoolean() == false)
+        byte flags=in.readByte();
+        if(Util.isFlagSet(flags, Address.NULL))
             return null;
-        if(in.readBoolean()) {
+
+        Address addr;
+        if(Util.isFlagSet(flags, Address.UUID_ADDR)) {
+            addr=new UUID();
+            addr.readFrom(in);
+        }
+        else if(Util.isFlagSet(flags, Address.IP_ADDR)) {
             addr=new IpAddress();
             addr.readFrom(in);
         }
@@ -737,21 +765,25 @@ public class Util {
         return addr;
     }
 
+    public static int size(Address addr) {
+        int retval=Global.BYTE_SIZE; // flags
+        if(addr != null) {
+            if(addr instanceof UUID || addr instanceof IpAddress)
+                retval+=addr.size();
+            else {
+                retval+=Global.SHORT_SIZE; // magic number
+                retval+=addr.size();
+            }
+        }
+        return retval;
+    }
+
     private static Address readOtherAddress(DataInputStream in) throws IOException, IllegalAccessException, InstantiationException {
-        int b=in.read();
-        short magic_number;
-        String classname;
-        Class cl=null;
-        Address addr;
-        if(b == 1) {
-            magic_number=in.readShort();
-            cl=ClassConfigurator.get(magic_number);
-        }
-        else {
-            classname=in.readUTF();
-            cl=ClassConfigurator.get(classname);
-        }
-        addr=(Address)cl.newInstance();
+        short magic_number=in.readShort();
+        Class cl=ClassConfigurator.get(magic_number);
+        if(cl == null)
+            throw new RuntimeException("class for magic number " + magic_number + " not found");
+        Address addr=(Address)cl.newInstance();
         addr.readFrom(in);
         return addr;
     }
@@ -760,16 +792,10 @@ public class Util {
         short magic_number=ClassConfigurator.getMagicNumber(addr.getClass());
 
         // write the class info
-        if(magic_number == -1) {
-            out.write(0);
-            out.writeUTF(addr.getClass().getName());
-        }
-        else {
-            out.write(1);
-            out.writeShort(magic_number);
-        }
+        if(magic_number == -1)
+            throw new RuntimeException("magic number " + magic_number + " not found");
 
-        // write the data itself
+        out.writeShort(magic_number);
         addr.writeTo(out);
     }
 
@@ -779,7 +805,7 @@ public class Util {
      * @param out
      * @throws IOException
      */
-    public static void writeAddresses(Collection<Address> v, DataOutputStream out) throws IOException {
+    public static void writeAddresses(Collection<? extends Address> v, DataOutputStream out) throws IOException {
         if(v == null) {
             out.writeShort(-1);
             return;
@@ -799,7 +825,7 @@ public class Util {
      * @throws IllegalAccessException
      * @throws InstantiationException
      */
-    public static Collection<Address> readAddresses(DataInputStream in, Class cl) throws IOException, IllegalAccessException, InstantiationException {
+    public static Collection<? extends Address> readAddresses(DataInputStream in, Class cl) throws IOException, IllegalAccessException, InstantiationException {
         short length=in.readShort();
         if(length < 0) return null;
         Collection<Address> retval=(Collection<Address>)cl.newInstance();
@@ -818,7 +844,7 @@ public class Util {
      * @param addrs Collection<Address>
      * @return long size
      */
-    public static long size(Collection<Address> addrs) {
+    public static long size(Collection<? extends Address> addrs) {
         int retval=Global.SHORT_SIZE; // number of elements
         if(addrs != null && !addrs.isEmpty()) {
             Address addr=addrs.iterator().next();
@@ -1227,6 +1253,16 @@ public class Util {
         long r=(int)((Math.random() * 100000) % timeout) + 1;
         sleep(r);
     }
+    
+    /** Sleeps between floor and ceiling milliseconds, chosen randomly */
+    public static void sleepRandom(long floor, long ceiling) {
+        if(ceiling - floor<= 0) {
+            return;
+        }
+        long diff = ceiling - floor;
+        long r=(int)((Math.random() * 100000) % diff) + floor;
+        sleep(r);
+    }
 
 
     /**
@@ -1314,8 +1350,7 @@ public class Util {
             sb.append("empty");
         }
         else {
-            for(Iterator it=values.iterator(); it.hasNext();) {
-                Object o=it.next();
+            for(Object o: values) {
                 String s=null;
                 if(o instanceof Event) {
                     Event event=(Event)o;
@@ -1330,9 +1365,9 @@ public class Util {
                         s+="[";
                         Message m=(Message)event.getArg();
                         Map<String,Header> headers=new HashMap<String,Header>(m.getHeaders());
-                        for(Iterator i=headers.keySet().iterator(); i.hasNext();) {
-                            Object headerKey=i.next();
-                            Object value=headers.get(headerKey);
+                        for(Map.Entry<String,Header> entry: headers.entrySet()) {
+                            String headerKey=entry.getKey();
+                            Header value=entry.getValue();
                             String headerToString=null;
                             if(value instanceof FD.FdHeader) {
                                 headerToString=value.toString();
@@ -1355,10 +1390,7 @@ public class Util {
                                     headerToString=headerKey + "-" + (value == null ? "null" : value.toString());
                                 }
                             s+=headerToString;
-
-                            if(i.hasNext()) {
-                                s+=",";
-                            }
+                            s+=" ";
                         }
                         s+="]";
                     }
@@ -1777,14 +1809,7 @@ public class Util {
     }
 
     public static String array2String(Object[] array) {
-        StringBuilder ret=new StringBuilder("[");
-
-        if(array != null) {
-            for(int i=0; i < array.length; i++)
-                ret.append(array[i]).append(" ");
-        }
-        ret.append(']');
-        return ret.toString();
+        return Arrays.toString(array);
     }
 
     /** Returns true if all elements of c match obj */
@@ -1811,7 +1836,7 @@ public class Util {
         return retval;
     }
 
-    public static List<Address> leftMembers(List<Address> old_list, List<Address> new_list) {
+    public static List<Address> leftMembers(Collection<Address> old_list, Collection<Address> new_list) {
         if(old_list == null || new_list == null)
             return null;
         List<Address> retval=new ArrayList<Address>(old_list);
@@ -1907,12 +1932,12 @@ public class Util {
     }
 
 
-    public static String printPingRsps(List<PingRsp> rsps) {
+    public static String printPingData(List<PingData> rsps) {
         StringBuilder sb=new StringBuilder();
         if(rsps != null) {
             int total=rsps.size();
             int servers=0, clients=0, coords=0;
-            for(PingRsp rsp: rsps) {
+            for(PingData rsp: rsps) {
                 if(rsp.isCoord())
                     coords++;
                 if(rsp.isServer())
@@ -2430,6 +2455,40 @@ public class Util {
             sb.append(hostname);
         return sb.toString();
     }
+    
+    public static boolean startFlush(Channel c, List<Address> flushParticipants, int numberOfAttempts,  long randomSleepTimeoutFloor,long randomSleepTimeoutCeiling) {
+    	boolean successfulFlush = false;
+        int attemptCount = 0;
+        while(attemptCount < numberOfAttempts){
+        	successfulFlush = c.startFlush(flushParticipants, false);
+        	if(successfulFlush)
+        		break;
+        	Util.sleepRandom(randomSleepTimeoutFloor,randomSleepTimeoutCeiling);
+        	attemptCount++;
+        }
+        return successfulFlush;
+    }
+    
+    public static boolean startFlush(Channel c, List<Address> flushParticipants) {
+    	return startFlush(c,flushParticipants,4,1000,5000);
+    }
+
+    public static boolean startFlush(Channel c, int numberOfAttempts, long randomSleepTimeoutFloor,long randomSleepTimeoutCeiling) {
+    	boolean successfulFlush = false;
+        int attemptCount = 0;
+        while(attemptCount < numberOfAttempts){
+        	successfulFlush = c.startFlush(false);
+        	if(successfulFlush)
+        		break;
+        	Util.sleepRandom(randomSleepTimeoutFloor,randomSleepTimeoutCeiling);
+        	attemptCount++;
+        }
+        return successfulFlush;
+    }
+    
+    public static boolean startFlush(Channel c) {
+    	return startFlush(c,4,1000,5000);
+    }
 
     public static String shortName(InetAddress hostname) {
         if(hostname == null) return null;
@@ -2439,6 +2498,29 @@ public class Util {
         else
             sb.append(hostname.getHostAddress());
         return sb.toString();
+    }
+
+    public static String generateLocalName() {
+        String retval=null;
+        try {
+            retval=InetAddress.getLocalHost().getHostName();
+        }
+        catch(UnknownHostException e) {
+            retval="localhost";
+        }
+
+        long counter=Util.random(Short.MAX_VALUE *2);
+        return retval + "-" + counter;
+    }
+
+
+
+
+    public synchronized static short incrCounter() {
+        short retval=COUNTER++;
+        if(COUNTER >= Short.MAX_VALUE)
+            COUNTER=1;
+        return retval;
     }
 
 
@@ -2636,6 +2718,10 @@ public class Util {
 
     public static boolean checkForWindows() {
         return checkForPresence("os.name", "win");
+    }
+
+    public static boolean checkForMax() {
+        return checkForPresence("os.name", "mac");
     }
 
     private static boolean checkForPresence(String key, String value) {
@@ -2857,7 +2943,7 @@ public class Util {
         View view=ch.getView();
         if(view == null)
             return false;
-        Address local_addr=ch.getLocalAddress();
+        Address local_addr=ch.getAddress();
         if(local_addr == null)
             return false;
         Vector<Address> mbrs=view.getMembers();
@@ -2883,6 +2969,23 @@ public class Util {
 			return MBeanServerFactory.createMBeanServer();
 		}
 	}
+
+
+    public static void registerChannel(JChannel channel, String name) {
+        MBeanServer server=Util.getMBeanServer();
+        if(server != null) {
+            try {
+                JmxConfigurator.registerChannel(channel,
+                                                server,
+                                                (name != null? name : "jgroups"),
+                                                channel.getClusterName(),
+                                                true);
+            }
+            catch(Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
 
 
 
@@ -2934,7 +3037,7 @@ public class Util {
      *                System.getProperty()
      * @return the input string with all property references replaced if any. If
      *         there are no valid references the input string will be returned.
-     * @throws java.lang.AccessControlException
+     * @throws {@link java.security.AccessControlException}
      *                 when not authorised to retrieved system properties
      */
     public static String replaceProperties(final String string, final Properties props) {           
@@ -2955,7 +3058,7 @@ public class Util {
         final int SEEN_DOLLAR=1;
         final int IN_BRACKET=2;
         final char[] chars=string.toCharArray();
-        StringBuffer buffer=new StringBuffer();
+        StringBuilder buffer=new StringBuilder();
         boolean properties=false;
         int state=NORMAL;
         int start=0;
@@ -3227,7 +3330,6 @@ public class Util {
             return null;
         }
     }
-
 
 
 }

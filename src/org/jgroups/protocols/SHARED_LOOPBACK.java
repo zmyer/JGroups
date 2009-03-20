@@ -3,6 +3,7 @@ package org.jgroups.protocols;
 import org.jgroups.Address;
 import org.jgroups.Event;
 import org.jgroups.Message;
+import org.jgroups.PhysicalAddress;
 import org.jgroups.stack.IpAddress;
 
 import java.util.Map;
@@ -13,10 +14,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * Loopback transport shared by all channels within the same VM. Property for testing is that no messages are lost. Allows
  * us to test various protocols (with ProtocolTester) at maximum speed.
  * @author Bela Ban
- * @version $Id: SHARED_LOOPBACK.java,v 1.5 2008/04/04 10:23:36 belaban Exp $
+ * @version $Id: SHARED_LOOPBACK.java,v 1.5.6.1 2009/03/20 12:46:43 belaban Exp $
  */
 public class SHARED_LOOPBACK extends TP {
     private static int next_port=10000;
+
+    private PhysicalAddress physical_addr=null;
+    private Address local_addr=null;
 
     /** Map of cluster names and address-protocol mappings. Used for routing messages to all or single members */
     private static final Map<String,Map<Address,SHARED_LOOPBACK>> routing_table=new ConcurrentHashMap<String,Map<Address,SHARED_LOOPBACK>>();
@@ -31,7 +35,7 @@ public class SHARED_LOOPBACK extends TP {
         return "SHARED_LOOPBACK(local address: " + local_addr + ')';
     }
 
-    public void sendToAllMembers(byte[] data, int offset, int length) throws Exception {
+    public void sendMulticast(byte[] data, int offset, int length) throws Exception {
         Map<Address,SHARED_LOOPBACK> dests=routing_table.get(channel_name);
         if(dests == null) {
             if(log.isWarnEnabled())
@@ -42,7 +46,7 @@ public class SHARED_LOOPBACK extends TP {
             Address dest=entry.getKey();
             SHARED_LOOPBACK target=entry.getValue();
             try {
-                target.receive(dest, local_addr, data, offset, length);
+                target.receive(local_addr, data, offset, length);
             }
             catch(Throwable t) {
                 log.error("failed sending message to " + dest, t);
@@ -50,7 +54,7 @@ public class SHARED_LOOPBACK extends TP {
         }
     }
 
-    public void sendToSingleMember(Address dest, byte[] data, int offset, int length) throws Exception {
+    public void sendUnicast(PhysicalAddress dest, byte[] data, int offset, int length) throws Exception {
         Map<Address,SHARED_LOOPBACK> dests=routing_table.get(channel_name);
         if(dests == null) {
             if(log.isWarnEnabled())
@@ -63,19 +67,16 @@ public class SHARED_LOOPBACK extends TP {
                 log.warn("destination address " + dest + " not found");
             return;
         }
-        target.receive(dest, local_addr, data, offset, length);
+        target.receive(local_addr, data, offset, length);
     }
 
     public String getInfo() {
         return toString();
     }
 
-    public void postUnmarshalling(Message msg, Address dest, Address src, boolean multicast) {
-        msg.setDest(dest);
-    }
-
-    public void postUnmarshallingList(Message msg, Address dest, boolean multicast) {
-        msg.setDest(dest);
+    
+    protected PhysicalAddress getPhysicalAddress() {
+        return physical_addr;
     }
 
     /*------------------------------ Protocol interface ------------------------------ */
@@ -84,14 +85,6 @@ public class SHARED_LOOPBACK extends TP {
         return "SHARED_LOOPBACK";
     }
 
-//    public boolean setProperties(Properties props) {
-//        super.setProperties(props);
-//        if(!props.isEmpty()) {
-//            log.error("the following properties are not recognized: " + props);
-//            return false;
-//        }
-//        return true;
-//    }
 
 
     public void init() throws Exception {
@@ -114,7 +107,11 @@ public class SHARED_LOOPBACK extends TP {
         switch(evt.getType()) {
             case Event.CONNECT:
             case Event.CONNECT_WITH_STATE_TRANSFER:   
-                register(channel_name, local_addr, this);
+                register((String)evt.getArg(), local_addr, this);
+                break;
+
+            case Event.SET_LOCAL_ADDRESS:
+                local_addr=(Address)evt.getArg();
                 break;
 
             case Event.DISCONNECT:
@@ -125,7 +122,7 @@ public class SHARED_LOOPBACK extends TP {
         return retval;
     }
 
-    private void register(String channel_name, Address local_addr, SHARED_LOOPBACK shared_loopback) {
+    private static void register(String channel_name, Address local_addr, SHARED_LOOPBACK shared_loopback) {
         Map<Address,SHARED_LOOPBACK> map=routing_table.get(channel_name);
         if(map == null) {
             map=new ConcurrentHashMap<Address,SHARED_LOOPBACK>();
@@ -134,7 +131,7 @@ public class SHARED_LOOPBACK extends TP {
         map.put(local_addr, shared_loopback);
     }
 
-    private void unregister(String channel_name, Address local_addr) {
+    private static void unregister(String channel_name, Address local_addr) {
         Map<Address,SHARED_LOOPBACK> map=routing_table.get(channel_name);
         if(map != null) {
             map.remove(local_addr);

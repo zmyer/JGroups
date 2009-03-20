@@ -1,4 +1,4 @@
-// $Id: Topology.java,v 1.8 2007/11/19 16:08:27 belaban Exp $
+// $Id: Topology.java,v 1.8.6.1 2009/03/20 12:46:51 belaban Exp $
 
 
 package org.jgroups.demos;
@@ -210,7 +210,7 @@ public class Topology extends Frame implements WindowListener, MembershipListene
         channel=new JChannel(props);
         channel.connect(channel_name);
         new PullPushAdapter(channel, this);
-        my_addr=channel.getLocalAddress();
+        my_addr=channel.getAddress();
         if(my_addr != null)
             setTitle(my_addr.toString());
         pack();

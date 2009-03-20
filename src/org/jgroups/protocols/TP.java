@@ -2,12 +2,13 @@ package org.jgroups.protocols;
 
 
 import org.jgroups.*;
+import org.jgroups.blocks.LazyRemovalCache;
 import org.jgroups.annotations.*;
 import org.jgroups.conf.PropertyConverters;
-import org.jgroups.stack.IpAddress;
 import org.jgroups.stack.Protocol;
 import org.jgroups.util.*;
 import org.jgroups.util.ThreadFactory;
+import org.jgroups.util.UUID;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -32,8 +33,8 @@ import java.util.concurrent.locks.ReentrantLock;
  * </ul>
  * A subclass has to override
  * <ul>
- * <li>{@link #sendToAllMembers(byte[], int, int)}
- * <li>{@link #sendToSingleMember(org.jgroups.Address, byte[], int, int)}
+ * <li>{@link #sendMulticast(byte[], int, int)}
+ * <li>{@link #sendUnicast(org.jgroups.PhysicalAddress, byte[], int, int)}
  * <li>{@link #init()}
  * <li>{@link #start()}: subclasses <em>must</em> call super.start() <em>after</em> they initialize themselves
  * (e.g., created their sockets).
@@ -41,14 +42,14 @@ import java.util.concurrent.locks.ReentrantLock;
  * <li>{@link #destroy()}
  * </ul>
  * The create() or start() method has to create a local address.<br>
- * The {@link #receive(Address, Address, byte[], int, int)} method must
+ * The {@link #receive(Address, byte[], int, int)} method must
  * be called by subclasses when a unicast or multicast message has been received.
  * @author Bela Ban
- * @version $Id: TP.java,v 1.239 2008/12/12 08:10:22 belaban Exp $
+ * @version $Id: TP.java,v 1.239.6.1 2009/03/20 12:46:43 belaban Exp $
  */
 @MBean(description="Transport protocol")
 @DeprecatedProperty(names={"bind_to_all_interfaces", "use_incoming_packet_handler", "use_outgoing_packet_handler",
-        "use_concurrent_stack"})
+        "use_concurrent_stack", "prevent_port_reuse", "persistent_ports", "pm_expiry_time", "persistent_ports_file"})
 public abstract class TP extends Protocol {
     
     private static final byte LIST=1; // we have a list of messages rather than a single message when set
@@ -107,7 +108,12 @@ public abstract class TP extends Protocol {
     @Property(name="end_port", deprecatedMessage="end_port is deprecated; use port_range instead")
     protected int port_range=1; // 27-6-2003 bgooren, Only try one port by default
 
-    @Property(description="TODO")
+    /**
+     * @deprecated In 2.8 with the introduction of logical addresses
+     */
+    @Deprecated
+    @Property(description="tries to make sure ephemeral ports are used",
+              deprecatedMessage="Not used anymore since logical addresses make this superfluous (2.8)")
     protected boolean prevent_port_reuse=false;
 
     /**
@@ -218,13 +224,20 @@ public abstract class TP extends Protocol {
     @Property(description="If assigned enable this transport to be a singleton (shared) transport")
     protected String singleton_name=null;
 
-    @Property(description="Path to a file to store currently used ports on this machine.")
+    @Property(description="Path to a file to store currently used ports on this machine",
+              deprecatedMessage="With the addition of logical addresses, the port manager has been deprecated")
     protected String persistent_ports_file=null;
     
-    @Property(name="ports_expiry_time",description="Timeout to expire ports used with PortManager. Default is 30000 msec")
+    @Property(name="ports_expiry_time",
+              description="Timeout to expire ports used with PortManager. Default is 30000 msec",
+              deprecatedMessage="With the addition of logical addresses, the port manager has been deprecated")
     protected long pm_expiry_time=30000L;
-    
-    @Property(description="Switch to enable tracking of currently used ports on this machine. Default is false")
+
+    /**
+     * @deprecated With the addition of logical addresses, we don't need port manager any longer (since 2.8)
+     */
+    @Property(description="Switch to enable tracking of currently used ports on this machine. Default is false",
+              deprecatedMessage="With the addition of logical addresses, the port manager has been deprecated")
     protected boolean persistent_ports=false;
     
     
@@ -259,7 +272,8 @@ public abstract class TP extends Protocol {
     @ManagedAttribute
     protected long num_bytes_received=0;
 
-    /** The name of the group to which this member is connected */
+    /** The name of the group to which this member is connected. With a shared transport, the channel name is
+     * in TP.ProtocolAdapter (cluster_name), and this field is not used */
     @ManagedAttribute
     protected String channel_name=null;
 
@@ -279,17 +293,15 @@ public abstract class TP extends Protocol {
 
     
     
-    /** The address (host and port) of this member */
+    /** The address (host and port) of this member. Null by default when a shared transport is used */
     protected Address local_addr=null;
 
-    /** The members of this group (updated when a member joins or leaves) */
-    protected final HashSet<Address> members=new HashSet<Address>(11);
-
-    protected View view=null;
+    /** The members of this group (updated when a member joins or leaves). With a shared transport,
+     * members contains *all* members from all channels sitting on the shared transport */
+    protected final Set<Address> members=new CopyOnWriteArraySet<Address>();
 
     protected final ExposedByteArrayInputStream in_stream=new ExposedByteArrayInputStream(new byte[] { '0' });
     protected final DataInputStream dis=new DataInputStream(in_stream);
-
 
     protected ThreadGroup pool_thread_group=new ThreadGroup(Util.getGlobalThreadGroup(), "Thread Pools");
 
@@ -337,12 +349,6 @@ public abstract class TP extends Protocol {
     /** Used by all threads created by JGroups outside of the thread pools */
     protected ThreadFactory global_thread_factory=null;
 
-  
-    /**
-     * If set it will be added to <tt>local_addr</tt>. Used to implement for example transport independent addresses
-     */
-    protected byte[] additional_data=null;
-
     private Bundler bundler=null;
 
     private DiagnosticsHandler diag_handler=null;
@@ -355,15 +361,37 @@ public abstract class TP extends Protocol {
      */
     private final ConcurrentMap<String,Protocol> up_prots=new ConcurrentHashMap<String,Protocol>();
 
+    /** The header including the cluster name, sent with each message. Not used with a shared transport (instead
+     * TP.ProtocolAdapter attaches the header to the message */
     protected TpHeader header;
 
     protected final String name=getName();
 
-    protected PortsManager pm=null;  
-   
+
+    /**
+     * Cache which maintains mappings between logical and physical addresses. When sending a message to a logical
+     * address,  we look up the physical address from logical_addr_cache and send the message to the physical address
+     * <br/>
+     * The keys are logical addresses, the values physical addresses
+     */
+    protected final LazyRemovalCache<Address,PhysicalAddress> logical_addr_cache=new LazyRemovalCache<Address,PhysicalAddress>(5,10000);
+
+    private static final LazyRemovalCache.Printable<Address,PhysicalAddress> print_function=new LazyRemovalCache.Printable<Address,PhysicalAddress>() {
+        public java.lang.String print(final Address logical_addr, final PhysicalAddress physical_addr) {
+            StringBuilder sb=new StringBuilder();
+            String tmp_logical_name=UUID.get(logical_addr);
+            if(tmp_logical_name != null)
+                sb.append(tmp_logical_name).append(": ");
+            sb.append(((UUID)logical_addr).toStringLong()).append(": ").append(physical_addr).append("\n");
+            return sb.toString();
+        }
+    };
+
+    /** Time when the last request for a physical address was sent. Used to prevent request floods */
+    protected long last_who_has_request=System.currentTimeMillis();
 
 
-
+    
     /**
      * Creates the TP protocol, and initializes the state variables, does
      * however not start any sockets or threads.
@@ -375,7 +403,10 @@ public abstract class TP extends Protocol {
      * debug only
      */
     public String toString() {
-        return local_addr != null? name + "(local address: " + local_addr + ')' : name;
+        if(!isSingleton())
+            return local_addr != null? name + "(local address: " + local_addr + ')' : name;
+        else
+            return name + " (singleton=" + singleton_name + ")";
     }
     
     public void resetStats() {
@@ -501,10 +532,6 @@ public abstract class TP extends Protocol {
     @Deprecated
     public void setUseConcurrentStack(boolean flag) {}
 
-
-    @ManagedAttribute
-    public String getLocalAddressAsString() {return local_addr != null? local_addr.toString() : "n/a";}
-    
     @ManagedAttribute
     public boolean isOOBThreadPoolEnabled() { return oob_thread_pool_enabled; }
 
@@ -535,8 +562,6 @@ public abstract class TP extends Protocol {
         max_bundle_timeout=timeout;
     }
 
-    public Address getLocalAddress() {return local_addr;}
-    public String getChannelName() {return channel_name;}
     public boolean isLoopback() {return loopback;}
     public void setLoopback(boolean b) {loopback=b;}
 
@@ -657,6 +682,11 @@ public abstract class TP extends Protocol {
         return log_discard_msgs;
     }
 
+    @ManagedOperation(description="Dumps the contents of the logical address cache")
+    public String printLogicalAddressCache() {
+        return logical_addr_cache.printCache(print_function);
+    }
+
 
     /**
      * Send to all members in the group. UDP would use an IP multicast message, whereas TCP would send N
@@ -666,24 +696,19 @@ public abstract class TP extends Protocol {
      * @param length
      * @throws Exception
      */
-    public abstract void sendToAllMembers(byte[] data, int offset, int length) throws Exception;
+    public abstract void sendMulticast(byte[] data, int offset, int length) throws Exception;
 
     /**
-     * Send to all members in the group. UDP would use an IP multicast message, whereas TCP would send N
-     * messages, one for each member
+     * Send a unicast to 1 member. Note that the destination address is a *physical*, not a logical address
      * @param dest Must be a non-null unicast address
      * @param data The data to be sent. This is not a copy, so don't modify it
      * @param offset
      * @param length
      * @throws Exception
      */
-    public abstract void sendToSingleMember(Address dest, byte[] data, int offset, int length) throws Exception;
+    public abstract void sendUnicast(PhysicalAddress dest, byte[] data, int offset, int length) throws Exception;
 
     public abstract String getInfo();
-
-    public abstract void postUnmarshalling(Message msg, Address dest, Address src, boolean multicast);
-
-    public abstract void postUnmarshallingList(Message msg, Address dest, boolean multicast);
 
     /* ------------------------------------------------------------------------------- */
 
@@ -709,6 +734,7 @@ public abstract class TP extends Protocol {
         
         oob_thread_factory=new DefaultThreadFactory(pool_thread_group, "OOB", false, true);
 
+        // local_addr is null when shared transport, channel_name is not used
         setInAllThreadFactories(channel_name, local_addr, thread_naming_pattern);
 
         timer=new TimeScheduler(timer_thread_factory, num_timer_threads);
@@ -747,9 +773,6 @@ public abstract class TP extends Protocol {
             thread_pool=new DirectExecutor();
         }
 
-        if(persistent_ports){
-            pm = new PortsManager(pm_expiry_time,persistent_ports_file);
-        }
         if(bind_addr != null) {
             Map<String, Object> m=new HashMap<String, Object>(1);
             m.put("bind_addr", bind_addr);
@@ -785,6 +808,8 @@ public abstract class TP extends Protocol {
      * Creates the unicast and multicast sockets and starts the unicast and multicast receiver threads
      */
     public void start() throws Exception {
+        fetchLocalAddresses();
+
         if(timer == null)
             throw new Exception("timer is null");
 
@@ -800,8 +825,8 @@ public abstract class TP extends Protocol {
             bundler=new Bundler();
         }
 
+        // local_addr is null when shared transport
         setInAllThreadFactories(channel_name, local_addr, thread_naming_pattern);
-        sendUpLocalAddressEvent();
     }
 
 
@@ -837,16 +862,6 @@ public abstract class TP extends Protocol {
      * @param evt - the event being send from the stack
      */
     public Object up(Event evt) {
-        switch(evt.getType()) {
-        case Event.CONFIG:
-            if(isSingleton())
-                passToAllUpProtocols(evt);
-            else
-                up_prot.up(evt);
-            if(log.isDebugEnabled()) log.debug("received CONFIG event: " + evt.getArg());
-            handleConfigEvent((Map<String,Object>)evt.getArg());
-            return null;
-        }
         if(isSingleton()) {
             passToAllUpProtocols(evt);
             return null;
@@ -873,7 +888,8 @@ public abstract class TP extends Protocol {
             msg.putHeaderIfAbsent(name, header);
         }
 
-        setSourceAddress(msg); // very important !! listToBuffer() will fail with a null src address !!
+        if(!isSingleton())
+            setSourceAddress(msg); // very important !! listToBuffer() will fail with a null src address !!
         if(log.isTraceEnabled()) {
             log.trace("sending msg to " + msg.getDest() + ", src=" + msg.getSrc() + ", headers are " + msg.printHeaders());
         }
@@ -882,8 +898,15 @@ public abstract class TP extends Protocol {
         // If multicast message, loopback a copy directly to us (but still multicast). Once we receive this,
         // we will discard our own multicast message
         Address dest=msg.getDest();
+        if(dest instanceof PhysicalAddress) {
+            // We can modify the message because it won't get retransmitted. The only time we have a physical address
+            // as dest is when TCPPING sends the initial discovery requests to initial_hosts: this is below UNICAST,
+            // so no retransmission
+            msg.setDest(null);
+        }
+
         boolean multicast=dest == null || dest.isMulticastAddress();
-        if(loopback && (multicast || dest.equals(local_addr))) {
+        if(loopback && (multicast || dest.equals(msg.getSrc()))) {
 
             // we *have* to make a copy, or else up_prot.up() might remove headers from msg which will then *not*
             // be available for marshalling further down (when sending the message)
@@ -929,12 +952,12 @@ public abstract class TP extends Protocol {
 
     /**
      * If the sender is null, set our own address. We cannot just go ahead and set the address
-     * anyway, as we might be sending a message on behalf of someone else ! E.gin case of
+     * anyway, as we might be sending a message on behalf of someone else ! E.g. in case of
      * retransmission, when the original sender has crashed, or in a FLUSH protocol when we
      * have to return all unstable messages with the FLUSH_OK response.
      */
     private void setSourceAddress(Message msg) {
-        if(msg.getSrc() == null)
+        if(msg.getSrc() == null && local_addr != null) // should already be set by TP.ProtocolAdapter in shared transport case !
             msg.setSrc(local_addr);
     }
 
@@ -942,104 +965,60 @@ public abstract class TP extends Protocol {
     private void passMessageUp(Message msg, boolean perform_cluster_name_matching) {
         TpHeader hdr=(TpHeader)msg.getHeader(name); // replaced removeHeader() with getHeader()
         if(hdr == null) {
-            if(channel_name == null) {
-                Event evt=new Event(Event.MSG, msg);
-                if(isSingleton()) {
-                    passMessageToAll(evt);
-                }
-                else {
-                    up_prot.up(evt);
-                }
-            }
-            else {
-                if(log.isErrorEnabled())
-                    log.error(new StringBuilder("message does not have a transport header, msg is ").append(msg).
-                            append(", headers are ").append(msg.printHeaders()).append(", will be discarded"));
-            }
+            if(log.isErrorEnabled())
+                log.error(new StringBuilder("message does not have a transport header, msg is ").append(msg).
+                        append(", headers are ").append(msg.printHeaders()).append(", will be discarded"));
             return;
         }
+
+        if(log.isTraceEnabled())
+            log.trace(new StringBuilder("message is ").append(msg).append(", headers are ").append(msg.printHeaders()));
 
         String ch_name=hdr.channel_name;
         if(isSingleton()) {
             Protocol tmp_prot=up_prots.get(ch_name);
             if(tmp_prot != null) {
-                Event evt=new Event(Event.MSG, msg);
-                if(log.isTraceEnabled()) {
-                    StringBuilder sb=new StringBuilder("message is ").append(msg).append(", headers are ").append(msg.printHeaders());
-                    log.trace(sb);
-                }
-                tmp_prot.up(evt);
-            }
-            else {
-                // we discard messages for a group we don't have. If we had a scenario with channel C1 and A,B on it,
-                // and channel C2 and only A on it (asymmetric setup), then C2 would always log warnings that B was
-                // not found (Jan 25 2008 (bela))
-                // if(log.isWarnEnabled())
-                   // log.warn(new StringBuilder("discarded message from group \"").append(ch_name).
-                     //       append("\" (our groups are ").append(up_prots.keySet()).append("). Sender was ").append(msg.getSrc()));
+                tmp_prot.up(new Event(Event.MSG, msg));
             }
         }
         else {
-            // Discard if message's group name is not the same as our group name
+            // Discard if message's cluster name is not the same as our cluster name
             if(perform_cluster_name_matching && channel_name != null && !channel_name.equals(ch_name)) {
                 if(log.isWarnEnabled() && log_discard_msgs)
-                    log.warn(new StringBuilder("discarded message from different group \"").append(ch_name).
-                            append("\" (our group is \"").append(channel_name).append("\"). Sender was ").append(msg.getSrc()));
+                    log.warn(new StringBuilder("discarded message from different cluster \"").append(ch_name).
+                            append("\" (our cluster is \"").append(channel_name).append("\"). Sender was ").append(msg.getSrc()));
             }
             else {
-                Event evt=new Event(Event.MSG, msg);
-                if(log.isTraceEnabled()) {
-                    StringBuilder sb=new StringBuilder("message is ").append(msg).append(", headers are ").append(msg.printHeaders());
-                    log.trace(sb);
-                }
-                up_prot.up(evt);
+                up_prot.up(new Event(Event.MSG, msg));
             }
         }
     }
 
-    private void passMessageToAll(Event evt) {
-        for(Protocol tmp_prot: up_prots.values()) {
-            try {
-                tmp_prot.up(evt);
-            }
-            catch(Exception ex) {
-                if(log.isErrorEnabled())
-                    log.error("failure passing message up: message is " + evt.getArg(), ex);
-            }
-        }
-    }
+  
 
 
     /**
      * Subclasses must call this method when a unicast or multicast message has been received.
      * Declared final so subclasses cannot override this method.
      *
-     * @param dest
      * @param sender
      * @param data
      * @param offset
      * @param length
      */
-    protected final void receive(Address dest, Address sender, byte[] data, int offset, int length) {
+    protected void receive(Address sender, byte[] data, int offset, int length) {
         if(data == null) return;
-
-        if(log.isTraceEnabled()){
-            boolean mcast=dest == null || dest.isMulticastAddress();
-            StringBuilder sb=new StringBuilder("received (");
-            sb.append(mcast? "mcast) " : "ucast) ").append(length).append(" bytes from ").append(sender);
-            log.trace(sb);
-        }
 
         try {
             // determine whether OOB or not by looking at first byte of 'data'
             byte oob_flag=data[Global.SHORT_SIZE]; // we need to skip the first 2 bytes (version)
             if((oob_flag & OOB) == OOB) {
                 num_oob_msgs_received++;
-                dispatchToThreadPool(oob_thread_pool, dest, sender, data, offset, length);
+                dispatchToThreadPool(oob_thread_pool, sender, data, offset, length);
             }
             else {
                 num_incoming_msgs_received++;
-                dispatchToThreadPool(thread_pool, dest, sender, data, offset, length);
+                dispatchToThreadPool(thread_pool, sender, data, offset, length);
             }
         }
         catch(Throwable t) {
@@ -1050,15 +1029,15 @@ public abstract class TP extends Protocol {
 
 
 
-    private void dispatchToThreadPool(Executor pool, Address dest, Address sender, byte[] data, int offset, int length) {
+    private void dispatchToThreadPool(Executor pool, Address sender, byte[] data, int offset, int length) {
         if(pool instanceof DirectExecutor) {
             // we don't make a copy of the buffer if we execute on this thread
-            pool.execute(new IncomingPacket(dest, sender, data, offset, length));
+            pool.execute(new IncomingPacket(sender, data, offset, length));
         }
         else {
             byte[] tmp=new byte[length];
             System.arraycopy(data, offset, tmp, 0, length);
-            pool.execute(new IncomingPacket(dest, sender, tmp, 0, length));
+            pool.execute(new IncomingPacket(sender, tmp, 0, length));
         }
     }
 
@@ -1099,7 +1078,7 @@ public abstract class TP extends Protocol {
             num_bytes_sent+=buf.getLength();
         }
         if(multicast) {
-            sendToAllMembers(buf.getBuf(), buf.getOffset(), buf.getLength());
+            sendMulticast(buf.getBuf(), buf.getOffset(), buf.getLength());
         }
         else {
             sendToSingleMember(dest, buf.getBuf(), buf.getOffset(), buf.getLength());
@@ -1107,6 +1086,28 @@ public abstract class TP extends Protocol {
     }
 
 
+    protected void sendToSingleMember(Address dest, byte[] buf, int offset, int length) throws Exception {
+        PhysicalAddress physical_dest=dest instanceof PhysicalAddress? (PhysicalAddress)dest : getPhysicalAddressFromCache(dest);
+        if(physical_dest == null) {
+
+            if(System.currentTimeMillis() - last_who_has_request >= 5000) { // send only every 5 secs max
+                if(log.isWarnEnabled())
+                    log.warn("no physical address for " + dest + ", dropping message");
+                up_prot.up(new Event(Event.GET_PHYSICAL_ADDRESS, dest));
+                last_who_has_request=System.currentTimeMillis();
+            }
+            return;
+        }
+        sendUnicast(physical_dest, buf, offset, length);
+    }
+
+
+    protected void sendToAllPhysicalAddresses(byte[] buf, int offset, int length) throws Exception {
+        Set<PhysicalAddress> dests=new HashSet<PhysicalAddress>(logical_addr_cache.values());
+        for(PhysicalAddress dest: dests) {
+            sendUnicast(dest, buf, offset, length);
+        }
+    }
 
     /**
      * This method needs to be synchronized on out_stream when it is called
@@ -1125,20 +1126,17 @@ public abstract class TP extends Protocol {
         msg.writeTo(dos);
     }
 
-    private Message readMessage(DataInputStream instream, Address dest, Address sender, boolean multicast) throws Exception {
+    private static Message readMessage(DataInputStream instream) throws Exception {
         Message msg=new Message(false); // don't create headers, readFrom() will do this
         msg.readFrom(instream);
-        postUnmarshalling(msg, dest, sender, multicast); // allows for optimization by subclass
         return msg;
     }
 
 
 
     private static void writeMessageList(List<Message> msgs, DataOutputStream dos, boolean multicast) throws Exception {
-        Address src;
         byte flags=0;
         int len=msgs != null? msgs.size() : 0;
-        boolean src_written=false;
 
         dos.writeShort(Version.version);
         flags+=LIST;
@@ -1148,29 +1146,20 @@ public abstract class TP extends Protocol {
         dos.writeInt(len);
         if(msgs != null) {
             for(Message msg: msgs) {
-                src=msg.getSrc();
-                if(!src_written) {
-                    Util.writeAddress(src, dos);
-                    src_written=true;
-                }
                 msg.writeTo(dos);
             }
         }
     }
 
-    private List<Message> readMessageList(DataInputStream instream, Address dest, boolean multicast) throws Exception {
+    private static List<Message> readMessageList(DataInputStream instream) throws Exception {
         int           len;
         Message       msg;
-        Address       src;
 
         len=instream.readInt();
         List<Message> list=new ArrayList<Message>(len);
-        src=Util.readAddress(instream);
         for(int i=0; i < len; i++) {
             msg=new Message(false); // don't create headers, readFrom() will do this
             msg.readFrom(instream);
-            postUnmarshallingList(msg, dest, multicast);
-            msg.setSrc(src);
             list.add(msg);
         }
         return list;
@@ -1181,66 +1170,124 @@ public abstract class TP extends Protocol {
     protected Object handleDownEvent(Event evt) {
         switch(evt.getType()) {
 
-        case Event.TMP_VIEW:
-        case Event.VIEW_CHANGE:
-            synchronized(members) {
-                view=(View)evt.getArg();
-                members.clear();
+            case Event.TMP_VIEW:
+            case Event.VIEW_CHANGE:
+                Set<Address> old_mbrs;
+                synchronized(members) {
+                    View view=(View)evt.getArg();
+                    old_mbrs=new HashSet<Address>(members);
+                    members.clear();
 
-                if(!isSingleton()) {
-                    Vector<Address> tmpvec=view.getMembers();
-                    members.addAll(tmpvec);
-                }
-                else {
-                    for(Protocol prot: up_prots.values()) {
-                        if(prot instanceof ProtocolAdapter) {
-                            ProtocolAdapter ad=(ProtocolAdapter)prot;
-                            List<Address> tmp=ad.getMembers();
-                            members.addAll(tmp);
+                    if(!isSingleton()) {
+                        Vector<Address> tmpvec=view.getMembers();
+                        members.addAll(tmpvec);
+                    }
+                    else {
+                        // add all members from all clusters
+                        for(Protocol prot: up_prots.values()) {
+                            if(prot instanceof ProtocolAdapter) {
+                                ProtocolAdapter ad=(ProtocolAdapter)prot;
+                                Set<Address> tmp=ad.getMembers();
+                                members.addAll(tmp);
+                            }
                         }
                     }
                 }
-            }
-            break;
 
-        case Event.CONNECT:
-        case Event.CONNECT_WITH_STATE_TRANSFER:    
-            channel_name=(String)evt.getArg();
-            header=new TpHeader(channel_name);
-            setInAllThreadFactories(channel_name, local_addr, thread_naming_pattern);
-            setThreadNames();
-            connectLock.lock();
-            try {
-                handleConnect();
-            }
-            catch(Exception e) {
-                throw new RuntimeException(e);
-            }
-            finally {
-                connectLock.unlock();
-            }
-            return null;
+                // fix for https://jira.jboss.org/jira/browse/JGRP-918
+                logical_addr_cache.retainAll(members);
+                UUID.retainAll(members);
 
-        case Event.DISCONNECT:
-            unsetThreadNames();
-            connectLock.lock();
-            try {
-                handleDisconnect();
-            }
-            finally {
-                connectLock.unlock();
-            }
-            break;
+                break;
 
-        case Event.CONFIG:
-            if(log.isDebugEnabled()) log.debug("received CONFIG event: " + evt.getArg());
-            handleConfigEvent((Map<String,Object>)evt.getArg());
-            break;
+            case Event.CONNECT:
+            case Event.CONNECT_WITH_STATE_TRANSFER:
+                channel_name=(String)evt.getArg();
+                header=new TpHeader(channel_name);
+
+                // local_addr is null when shared transport
+                setInAllThreadFactories(channel_name, local_addr, thread_naming_pattern);
+                setThreadNames();
+                connectLock.lock();
+                try {
+                    handleConnect();
+                }
+                catch(Exception e) {
+                    throw new RuntimeException(e);
+                }
+                finally {
+                    connectLock.unlock();
+                }
+                return null;
+
+            case Event.DISCONNECT:
+                unsetThreadNames();
+                connectLock.lock();
+                try {
+                    handleDisconnect();
+                }
+                finally {
+                    connectLock.unlock();
+                }
+                break;
+
+            case Event.GET_PHYSICAL_ADDRESS:
+                return getPhysicalAddressFromCache((UUID)evt.getArg());
+
+            case Event.GET_LOGICAL_PHYSICAL_MAPPINGS:
+                return logical_addr_cache.contents();
+
+            case Event.SET_PHYSICAL_ADDRESS:
+                Tuple<UUID,PhysicalAddress> tuple=(Tuple<UUID,PhysicalAddress>)evt.getArg();
+                addPhysicalAddressToCache(tuple.getVal1(), tuple.getVal2());
+                break;
+
+            case Event.REMOVE_ADDRESS:
+                removeLogicalAddressFromCache((UUID)evt.getArg());
+                break;
+
+            case Event.SET_LOCAL_ADDRESS:
+                if(!isSingleton())
+                    local_addr=(Address)evt.getArg();
+                registerLocalAddress((Address)evt.getArg());
+                break;
         }
         return null;
     }
 
+    /**
+     * Associates the address with the physical address fetched from the cache
+     * @param addr
+     * @return true if registered successfully, otherwise false (e.g. physical addr could not be fetched)
+     */
+    protected void registerLocalAddress(Address addr) {
+        PhysicalAddress physical_addr=getPhysicalAddress();
+        if(physical_addr != null && addr != null)
+            addPhysicalAddressToCache(addr, physical_addr);
+    }
 
+    /**
+     * Grabs the local address (or addresses in the shared transport case) and registers them with the physical address
+     * in the transport's cache
+     */
+    protected void fetchLocalAddresses() {
+        if(!isSingleton()) {
+            if(local_addr != null) {
+                registerLocalAddress(local_addr);
+            }
+            else {
+                Address addr=(Address)up_prot.up(new Event(Event.GET_LOCAL_ADDRESS));
+                local_addr=addr;
+                registerLocalAddress(addr);
+            }
+        }
+        else {
+            for(Protocol prot: up_prots.values()) {
+                Address addr=(Address)prot.up(new Event(Event.GET_LOCAL_ADDRESS));
+                registerLocalAddress(addr);
+            }
+        }
+    }
 
 
     protected void setThreadNames() {              
@@ -1277,15 +1324,6 @@ public abstract class TP extends Protocol {
     }
 
     
-    protected void handleConfigEvent(Map<String,Object> map) {
-        if(map == null) return;
-        if(map.containsKey("additional_data")) {
-            additional_data=(byte[])map.get("additional_data");
-            if(local_addr instanceof IpAddress)
-                ((IpAddress)local_addr).setAdditionalData(additional_data);
-        }
-    }
-
 
     protected static ExecutorService createThreadPool(int min_threads, int max_threads, long keep_alive_time, String rejection_policy,
                                                       BlockingQueue<Runnable> queue, final ThreadFactory factory) {
@@ -1341,19 +1379,28 @@ public abstract class TP extends Protocol {
         }
     }
 
-    public void sendUpLocalAddressEvent() {
-        if(up_prot != null)
-            up(new Event(Event.SET_LOCAL_ADDRESS, local_addr));
-        else {
-            for(Map.Entry<String,Protocol> entry: up_prots.entrySet()) {
-                String tmp=entry.getKey();
-                if(tmp.startsWith(Global.DUMMY))
-                    continue;
-                Protocol prot=entry.getValue();
-                prot.up(new Event(Event.SET_LOCAL_ADDRESS, local_addr));
-            }
-        }
+  
+
+    protected void addPhysicalAddressToCache(Address logical_addr, PhysicalAddress physical_addr) {
+        if(logical_addr != null && physical_addr != null)
+            logical_addr_cache.add(logical_addr, physical_addr);
     }
+
+    protected PhysicalAddress getPhysicalAddressFromCache(Address logical_addr) {
+        return logical_addr != null? logical_addr_cache.get(logical_addr) : null;
+    }
+
+    protected void removeLogicalAddressFromCache(Address logical_addr) {
+        if(logical_addr != null)
+            logical_addr_cache.remove(logical_addr);
+    }
+    
+    public void clearLogicalAddressCache() {
+        logical_addr_cache.clear(true);
+    }
+
+
+    protected abstract PhysicalAddress getPhysicalAddress();
 
     /* ----------------------------- End of Private Methods ---------------------------------------- */
 
@@ -1362,12 +1409,11 @@ public abstract class TP extends Protocol {
     /* ----------------------------- Inner Classes ---------------------------------------- */
 
     class IncomingPacket implements Runnable {
-        final Address   dest, sender;
+        final Address   sender;
         final byte[]    buf;
         final int       offset, length;
 
-        IncomingPacket(Address dest, Address sender, byte[] buf, int offset, int length) {
-            this.dest=dest;
+        IncomingPacket(Address sender, byte[] buf, int offset, int length) {
             this.sender=sender;
             this.buf=buf;
             this.offset=offset;
@@ -1378,7 +1424,6 @@ public abstract class TP extends Protocol {
         /** Code copied from handleIncomingPacket */
         public void run() {
             short                        version=0;
-            boolean                      is_message_list, multicast;
             byte                         flags;
             ExposedByteArrayInputStream  in_stream=null;
             DataInputStream              dis=null;
@@ -1410,11 +1455,11 @@ public abstract class TP extends Protocol {
                 }
 
                 flags=dis.readByte();
-                is_message_list=(flags & LIST) == LIST;
-                multicast=(flags & MULTICAST) == MULTICAST;
+                boolean is_message_list=(flags & LIST) == LIST;
+                boolean multicast=(flags & MULTICAST) == MULTICAST;
 
                 if(is_message_list) { // used if message bundling is enabled
-                    List<Message> msgs=readMessageList(dis, dest, multicast);
+                    List<Message> msgs=readMessageList(dis);
                     for(Message msg: msgs) {
                         if(msg.isFlagSet(Message.OOB)) {
                             log.warn("bundled message should not be marked as OOB");
@@ -1423,7 +1468,7 @@ public abstract class TP extends Protocol {
                     }
                 }
                 else {
-                    Message msg=readMessage(dis, dest, sender, multicast);
+                    Message msg=readMessage(dis);
                     handleMyMessage(msg, multicast);
                 }
             }
@@ -1443,8 +1488,7 @@ public abstract class TP extends Protocol {
                 num_bytes_received+=msg.getLength();
             }
 
-            Address src=msg.getSrc();
-            if(loopback && multicast && src != null && src.equals(local_addr)) {
+            if(loopback && multicast && msg.isFlagSet(Message.LOOPBACK)) {
                 return; // drop message that was already looped back and delivered
             }
 
@@ -1548,7 +1592,7 @@ public abstract class TP extends Protocol {
                     doSend(buffer, dst, multicast);
                 }
                 catch(Throwable e) {
-                    if(log.isErrorEnabled()) log.error("exception sending msg: " + e.toString(), e.getCause());
+                    if(log.isErrorEnabled()) log.error("exception sending msg: " + e.toString(), e);
                 }
             }
             msgs.clear();
@@ -1593,6 +1637,20 @@ public abstract class TP extends Protocol {
         String[] supportedKeys();
     }
 
+//    /**
+//     * Maps UUIDs to physical addresses
+//     */
+//    public interface AddressMapper {
+//        /**
+//         * Given a UUID, pick one physical address from a list. If the UUID is null, the message needs to be sent to
+//         * the entire cluster. In UDP, for example, we would pick a multicast address
+//         * @param uuid The UUID. Null for a cluster wide destination
+//         * @param physical_addrs A list of physical addresses
+//         * @return an address from the list
+//         */
+//        Address pick(UUID uuid, List<Address> physical_addrs);
+//    }
+
 
     private class DiagnosticsHandler implements Runnable {
     	public static final String THREAD_NAME = "DiagnosticsHandler"; 
@@ -1628,6 +1686,12 @@ public abstract class TP extends Protocol {
                             retval.put("dump", Util.dumpThreads());
                             continue;
                         }
+                        if(key.equals("uuids")) {
+                            retval.put("uuids", printLogicalAddressCache());
+                            if(!isSingleton() && !retval.containsKey("local_addr"))
+                                retval.put("local_addr", local_addr != null? local_addr.toString() : null);
+                            continue;
+                        }
                         if(key.equals("keys")) {
                             StringBuilder sb=new StringBuilder();
                             for(ProbeHandler handler: handlers) {
@@ -1639,12 +1703,17 @@ public abstract class TP extends Protocol {
                             }
                             retval.put("keys", sb.toString());
                         }
+                        if(key.equals("info")) {
+                            if(singleton_name != null && singleton_name.length() > 0)
+                                retval.put("singleton_name", singleton_name);
+                            
+                        }
                     }
                     return retval;
                 }
 
                 public String[] supportedKeys() {
-                    return new String[]{"dump", "keys"};
+                    return new String[]{"dump", "keys", "uuids", "info"};
                 }
             });
 
@@ -1708,8 +1777,6 @@ public abstract class TP extends Protocol {
                 Map<String, String> map=handler.handleProbe(tokens);
                 if(map == null || map.isEmpty())
                     continue;
-                if(!map.containsKey("local_addr"))
-                    map.put("local_addr", local_addr != null? local_addr.toString() : "n/a");
                 if(!map.containsKey("cluster"))
                     map.put("cluster", channel_name != null? channel_name : "n/a");
                 StringBuilder info=new StringBuilder();
@@ -1753,41 +1820,73 @@ public abstract class TP extends Protocol {
         }
     }
 
-    public static class ProtocolAdapter extends Protocol {
-        final String cluster_name;
+    public static class ProtocolAdapter extends Protocol implements ProbeHandler {
+        String cluster_name;
         final String transport_name;
-        final TpHeader header;
-        final List<Address> members=new CopyOnWriteArrayList<Address>();
+        TpHeader header;
+        final Set<Address> members=new CopyOnWriteArraySet<Address>();
         final ThreadFactory factory;
+        Address local_addr;
 
-        public ProtocolAdapter(String cluster_name, String transport_name, Protocol up, Protocol down, String pattern, Address addr) {
+        public ProtocolAdapter(String cluster_name, Address local_addr, String transport_name, Protocol up, Protocol down, String pattern) {
             this.cluster_name=cluster_name;
+            this.local_addr=local_addr;
             this.transport_name=transport_name;
             this.up_prot=up;
             this.down_prot=down;
             this.header=new TpHeader(cluster_name);
             this.factory=new DefaultThreadFactory(Util.getGlobalThreadGroup(), "", false);
             factory.setPattern(pattern);
-            if(addr != null)
-                factory.setAddress(addr.toString());
+            if(local_addr != null)
+                factory.setAddress(local_addr.toString());
+            if(cluster_name != null)
+                factory.setClusterName(cluster_name);
         }
 
         @ManagedAttribute(description="Name of the cluster to which this adapter proxies")
-        public String getCluster_name() {
+        public String getClusterName() {
             return cluster_name;
         }
 
+
+        public Address getAddress() {
+            return local_addr;
+        }
+
+        @ManagedAttribute(name="Address", description="local address")
+        public String getAddressAsString() {
+            return local_addr != null? local_addr.toString() : null;
+        }
+
+        @ManagedAttribute(name="AddressUUID", description="local address")
+        public String getAddressAsUUID() {
+            return (local_addr instanceof UUID)? ((UUID)local_addr).toStringLong() : null;
+        }
+
         @ManagedAttribute(description="Name of the transport")
-        public String getTransport_name() {
+        public String getTransportName() {
             return transport_name;
         }
 
-        public List<Address> getMembers() {
-            return Collections.unmodifiableList(members);
+        public Set<Address> getMembers() {
+            return Collections.unmodifiableSet(members);
         }
 
         public ThreadFactory getThreadFactory() {
             return factory;
+        }
+
+        public void start() throws Exception {
+            TP transport=getTransport();
+            if(transport != null)
+                transport.registerProbeHandler(this);
+
+        }
+
+        public void stop() {
+            TP transport=getTransport();
+            if(transport != null)
+                transport.unregisterProbeHandler(this);
         }
 
         public Object down(Event evt) {
@@ -1795,6 +1894,8 @@ public abstract class TP extends Protocol {
                 case Event.MSG:
                     Message msg=(Message)evt.getArg();
                     msg.putHeader(transport_name, header);
+                    if(msg.getSrc() == null)
+                        msg.setSrc(local_addr);
                     break;
                 case Event.VIEW_CHANGE:
                     View view=(View)evt.getArg();
@@ -1804,21 +1905,19 @@ public abstract class TP extends Protocol {
                     break;
                 case Event.CONNECT:
                 case Event.CONNECT_WITH_STATE_TRANSFER:
-                    factory.setClusterName((String)evt.getArg());
+                    cluster_name=(String)evt.getArg();
+                    factory.setClusterName(cluster_name);
+                    this.header=new TpHeader(cluster_name);
+                    break;
+                case Event.SET_LOCAL_ADDRESS:
+                    Address addr=(Address)evt.getArg();
+                    if(addr != null) {
+                        local_addr=addr;
+                        factory.setAddress(addr.toString()); // used for thread naming
+                    }
                     break;
             }
             return down_prot.down(evt);
-        }
-
-        public Object up(Event evt) {
-            switch(evt.getType()) {
-                case Event.SET_LOCAL_ADDRESS:
-                    Address addr=(Address)evt.getArg();
-                    if(addr != null)
-                        factory.setAddress(addr.toString());
-                    break;
-            }
-            return up_prot.up(evt);
         }
 
         public String getName() {
@@ -1827,6 +1926,19 @@ public abstract class TP extends Protocol {
 
         public String toString() {
             return cluster_name + " (" + transport_name + ")";
+        }
+
+        public Map<String, String> handleProbe(String... keys) {
+            HashMap<String, String> retval=new HashMap<String, String>();
+            retval.put("cluster", cluster_name);
+            retval.put("local_addr", local_addr != null? local_addr.toString() : null);
+            retval.put("local_addr (UUID)", local_addr instanceof UUID? ((UUID)local_addr).toStringLong() : null);
+            retval.put("transport_name", transport_name);
+            return retval;
+        }
+
+        public String[] supportedKeys() {
+            return null;
         }
     }
 }

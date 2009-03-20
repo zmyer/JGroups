@@ -1,4 +1,4 @@
-// $Id: DistributedQueue.java,v 1.21 2008/04/08 14:41:22 belaban Exp $
+// $Id: DistributedQueue.java,v 1.21.6.1 2009/03/20 12:46:38 belaban Exp $
 package org.jgroups.blocks;
 
 import org.apache.commons.logging.Log;
@@ -142,7 +142,7 @@ public class DistributedQueue implements MessageListener, MembershipListener, Cl
 
     public Address getLocalAddress()
     {
-        return (channel != null) ? channel.getLocalAddress() : null;
+        return (channel != null) ? channel.getAddress() : null;
     }
 
     public Channel getChannel()

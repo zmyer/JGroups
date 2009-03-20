@@ -1,4 +1,4 @@
-// $Id: DistributedTree.java,v 1.19 2008/06/10 10:25:49 belaban Exp $
+// $Id: DistributedTree.java,v 1.19.6.1 2009/03/20 12:46:38 belaban Exp $
 
 package org.jgroups.blocks;
 
@@ -108,7 +108,7 @@ public class DistributedTree implements MessageListener, MembershipListener {
     }
 
     public Object getLocalAddress() {
-        return channel != null? channel.getLocalAddress() : null;
+        return channel != null? channel.getAddress() : null;
     }
 
     public void setDeadlockDetection(boolean flag) {

@@ -1,4 +1,4 @@
-// $Id: MERGE3.java,v 1.21 2008/06/06 15:57:54 vlada Exp $
+// $Id: MERGE3.java,v 1.21.6.1 2009/03/20 12:46:43 belaban Exp $
 
 package org.jgroups.protocols;
 
@@ -95,10 +95,6 @@ public class MERGE3 extends Protocol {
                 }
                 else
                     return up_prot.up(evt);
-
-            case Event.SET_LOCAL_ADDRESS:
-                local_addr=(Address)evt.getArg();
-                break;
         }
 
         return up_prot.up(evt);
@@ -129,6 +125,10 @@ public class MERGE3 extends Protocol {
                         stopCoordAnnouncerTask();
                     }
                 }
+                break;
+
+            case Event.SET_LOCAL_ADDRESS:
+                local_addr=(Address)evt.getArg();
                 break;
         }
         return down_prot.down(evt);

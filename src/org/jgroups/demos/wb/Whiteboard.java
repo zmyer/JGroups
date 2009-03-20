@@ -1,4 +1,4 @@
-// $Id: Whiteboard.java,v 1.7 2008/01/22 10:44:37 belaban Exp $
+// $Id: Whiteboard.java,v 1.7.6.1 2009/03/20 12:46:59 belaban Exp $
 
 package org.jgroups.demos.wb;
 
@@ -109,7 +109,7 @@ public class Whiteboard extends Applet implements ActionListener, MessageListene
         } catch (Exception e) {
             log.error("Whiteboard.init(): " + e);
         }
-        panel.my_addr = channel.getLocalAddress();
+        panel.my_addr = channel.getAddress();
 
 
         UserInfoDialog dlg = new UserInfoDialog(findParent());

@@ -20,7 +20,11 @@ import java.util.concurrent.TimeUnit;
  * configured to use FLUSH
  * 
  * @author Bela Ban
- * @version $Id: FlushTest.java,v 1.76 2008/11/20 17:54:49 vlada Exp $
+<<<<<<< FlushTest.java
+ * @version $Id: FlushTest.java,v 1.77.2.1 2009/03/20 12:46:34 belaban Exp $
+=======
+ * @version $Id: FlushTest.java,v 1.77.2.1 2009/03/20 12:46:34 belaban Exp $
+>>>>>>> 1.76.4.1
  */
 @Test(groups=Global.FLUSH,sequential=true)
 public class FlushTest extends ChannelTestBase {
@@ -63,7 +67,7 @@ public class FlushTest extends ChannelTestBase {
             c1.setReceiver(new SimpleReplier(c1, true));
             c1.connect("testJoinFollowedByUnicast");
 
-            Address target=c1.getLocalAddress();
+            Address target=c1.getAddress();
             Message unicast_msg=new Message(target);
 
             c2=createChannel(c1);
@@ -93,7 +97,7 @@ public class FlushTest extends ChannelTestBase {
             c1.setReceiver(new SimpleReplier(c1, true));
             c1.connect("testStateTransferFollowedByUnicast");
 
-            Address target=c1.getLocalAddress();
+            Address target=c1.getAddress();
             Message unicast_msg=new Message(target);
 
             c2=createChannel(c1);
@@ -127,7 +131,7 @@ public class FlushTest extends ChannelTestBase {
 			c3.connect("testFlushWithCrashedFlushCoordinator");
 
 			// start flush
-			c2.startFlush(false);
+			Util.startFlush(c2);
 
 			// and then kill the flush coordinator
 			((JChannel) c2).shutdown();
@@ -160,7 +164,7 @@ public class FlushTest extends ChannelTestBase {
 			c3.connect("testFlushWithCrashedFlushCoordinator");
 
 			// start flush
-			c2.startFlush(false);
+			Util.startFlush(c2);
 
 			// and then kill the flush coordinator
 			((JChannel) c3).shutdown();
@@ -194,7 +198,7 @@ public class FlushTest extends ChannelTestBase {
 			c3.connect("testFlushWithCrashedFlushCoordinator");
 
 			// start flush
-			c2.startFlush(false);
+			Util.startFlush(c2);
 
 			// and then kill members other than flush coordinator
 			((JChannel) c3).shutdown();
@@ -229,8 +233,8 @@ public class FlushTest extends ChannelTestBase {
             c2.connect("testPartialFlush");
 
             List<Address> members=new ArrayList<Address>();
-            members.add(c2.getLocalAddress());
-            boolean flushedOk=c2.startFlush(members, false);
+            members.add(c2.getAddress());
+            boolean flushedOk=Util.startFlush(c2,members);
 
             assertTrue("Partial flush worked", flushedOk);
 
@@ -464,7 +468,7 @@ public class FlushTest extends ChannelTestBase {
         public void receive(Message msg) {
             Message reply = new Message(msg.getSrc());
             try{
-                log.info("-- MySimpleReplier[" + channel.getLocalAddress()
+                log.info("-- MySimpleReplier[" + channel.getAddress()
                          + "]: received message from "
                          + msg.getSrc());
                 if(handle_requests){
@@ -478,18 +482,18 @@ public class FlushTest extends ChannelTestBase {
         }
 
         public void viewAccepted(View new_view) {
-            log.info("-- MySimpleReplier[" + channel.getLocalAddress()
+            log.info("-- MySimpleReplier[" + channel.getAddress()
                      + "]: viewAccepted("
                      + new_view
                      + ")");
         }
 
         public void block() {
-            log.info("-- MySimpleReplier[" + channel.getLocalAddress() + "]: block()");
+            log.info("-- MySimpleReplier[" + channel.getAddress() + "]: block()");
         }
 
         public void unblock() {
-            log.info("-- MySimpleReplier[" + channel.getLocalAddress() + "]: unblock()");
+            log.info("-- MySimpleReplier[" + channel.getAddress() + "]: unblock()");
         }
     }
 

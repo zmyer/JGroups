@@ -190,10 +190,6 @@ public class STREAMING_STATE_TRANSFER extends Protocol {
                 }
                 break;
 
-            case Event.SET_LOCAL_ADDRESS:
-                local_addr=(Address)evt.getArg();
-                break;
-
             case Event.TMP_VIEW:
             case Event.VIEW_CHANGE:
                 handleViewChange((View)evt.getArg());
@@ -270,6 +266,9 @@ public class STREAMING_STATE_TRANSFER extends Protocol {
                 }
                 break;
 
+            case Event.SET_LOCAL_ADDRESS:
+                local_addr=(Address)evt.getArg();
+                break;
         }
 
         return down_prot.down(evt); // pass on to the layer below us

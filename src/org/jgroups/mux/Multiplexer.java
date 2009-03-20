@@ -6,7 +6,6 @@ import org.jgroups.*;
 import org.jgroups.TimeoutException;
 import org.jgroups.annotations.Experimental;
 import org.jgroups.protocols.pbcast.FLUSH;
-import org.jgroups.stack.ProtocolStack;
 import org.jgroups.stack.StateTransferInfo;
 import org.jgroups.util.*;
 import org.jgroups.util.ThreadFactory;
@@ -37,7 +36,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @author Bela Ban, Vladimir Blagojevic
  * @see MuxChannel
  * @see Channel
- * @version $Id: Multiplexer.java,v 1.105 2008/05/29 08:22:05 belaban Exp $
+<<<<<<< Multiplexer.java
+ * @version $Id: Multiplexer.java,v 1.106.2.1 2009/03/20 12:46:48 belaban Exp $
+=======
+ * @version $Id: Multiplexer.java,v 1.106.2.1 2009/03/20 12:46:48 belaban Exp $
+>>>>>>> 1.105.4.3
  */
 @Experimental(comment="because of impedance mismatches between a MuxChannel and JChannel, this might get deprecated " +
         "in the future. The replacement would be a shared transport (see the documentation for details)")
@@ -250,7 +253,7 @@ public class Multiplexer implements UpHandler {
     private boolean fetchServiceStates(Address target, Set<String> keys, long timeout) throws ChannelClosedException,
                                                                                       ChannelNotConnectedException {
         boolean rc, all_tranfers_ok=false;
-        boolean flushStarted=channel.startFlush(false);
+        boolean flushStarted=Util.startFlush(channel);
         if(flushStarted) {
             try {
                 for(String stateId:keys) {
@@ -412,10 +415,6 @@ public class Multiplexer implements UpHandler {
                 handleStateResponse(evt, true);
                 break;
 
-            case Event.SET_LOCAL_ADDRESS:
-                passToAllMuxChannels(evt);
-                break;
-
             case Event.BLOCK:
                 passToAllMuxChannels(evt, true, true);
                 return null;
@@ -538,7 +537,7 @@ public class Multiplexer implements UpHandler {
     }
 
     Address getLocalAddress() {
-        return channel.getLocalAddress();
+        return channel.getAddress();
     }
 
     boolean flushSupported() {
@@ -546,7 +545,10 @@ public class Multiplexer implements UpHandler {
     }
 
     boolean startFlush(boolean automatic_resume) {
-        return channel.startFlush(automatic_resume);
+    	boolean result = Util.startFlush(channel);
+    	if(automatic_resume)
+    		channel.stopFlush();
+    	return result;
     }
 
     void stopFlush() {
@@ -615,7 +617,7 @@ public class Multiplexer implements UpHandler {
         
         if(!channel.isOpen() || !channel.isConnected()) {
             if(log.isWarnEnabled()) {
-                log.warn("Underlying multiplexer channel " + channel.getLocalAddress()
+                log.warn("Underlying multiplexer channel " + channel.getAddress()
                          + " is not connected, cannot send ServiceInfo."
                          + ServiceInfo.typeToString(type)
                          + " message");
@@ -643,7 +645,7 @@ public class Multiplexer implements UpHandler {
             }
 
             //initialize collector and ...
-            service_ack_collector.reset(null, muxChannels);
+            service_ack_collector.reset(muxChannels);
             int size=service_ack_collector.size();            
 
             //then send a message
@@ -704,7 +706,7 @@ public class Multiplexer implements UpHandler {
             //JGRP-616
             if(mux_ch == null) {
                 if(log.isWarnEnabled())
-                    log.warn("State provider " + channel.getLocalAddress()
+                    log.warn("State provider " + channel.getAddress()
                              + " does not have service with id "
                              + id
                              + ", returning null state");
@@ -760,7 +762,7 @@ public class Multiplexer implements UpHandler {
 
         mux_ch=services.get(appl_id);
         if(mux_ch == null) {
-            log.error("State receiver " + channel.getLocalAddress()
+            log.error("State receiver " + channel.getAddress()
                       + " does not have service with id "
                       + appl_id);
         }
@@ -1133,12 +1135,12 @@ public class Multiplexer implements UpHandler {
                     boolean fetchAndGetState=reconnect && getState;
                     if(fetchAndGetState) {
                         mux_ch.connect(mux_ch.getClusterName(), null, null, 10000);
-                        mux_ch.fireChannelReconnected(mux_ch.getLocalAddress());
+                        mux_ch.fireChannelReconnected(mux_ch.getAddress());
                     }
                     else {
                         if(reconnect) {
                             mux_ch.connect(mux_ch.getClusterName());
-                            mux_ch.fireChannelReconnected(mux_ch.getLocalAddress());
+                            mux_ch.fireChannelReconnected(mux_ch.getAddress());
                         }
                         if(getState) {
                             mux_ch.getState(null, 5000);

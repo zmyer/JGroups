@@ -14,8 +14,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -31,13 +31,16 @@ import java.util.concurrent.locks.ReentrantLock;
  * instead of the requester by setting use_mcast_xmit to true.
  *
  * @author Bela Ban
- * @version $Id: NAKACK.java,v 1.209 2008/11/12 13:32:18 belaban Exp $
+<<<<<<< NAKACK.java
+ * @version $Id: NAKACK.java,v 1.212.2.1 2009/03/20 12:46:39 belaban Exp $
+=======
+ * @version $Id: NAKACK.java,v 1.212.2.1 2009/03/20 12:46:39 belaban Exp $
+>>>>>>> 1.209.4.3
  */
 @MBean(description="Reliable transmission multipoint FIFO protocol")
-@DeprecatedProperty(names={"max_xmit_size"})
+@DeprecatedProperty(names={"max_xmit_size", "eager_lock_release"})
 public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand, NakReceiverWindow.Listener {
 
-    
     private static final long INITIAL_SEQNO=0;
 
     private static final String name="NAKACK";
@@ -130,7 +133,7 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
      * false.
      */
     @Property(description="See http://jira.jboss.com/jira/browse/JGRP-656. Default is true")
-    private boolean eager_lock_release=true;
+    private boolean eager_lock_release=false;
 
     /**
      * If value is > 0, the retransmit buffer is bounded: only the
@@ -223,10 +226,6 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
 
     /* -------------------------------------------------    Fields    ------------------------------------------------------------------------- */
 
-    
-    
-    
-    private Map<Thread,ReentrantLock> locks;
     private boolean is_server=false;
     private Address local_addr=null;
     private final List<Address> members=new CopyOnWriteArrayList<Address>();
@@ -528,7 +527,6 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
         timer=getTransport().getTimer();
         if(timer == null)
             throw new Exception("timer is null");
-        locks=stack.getLocks();
         started=true;
         leaving=false;
 
@@ -536,7 +534,6 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
             Runtime.getRuntime().addShutdownHook(new Thread() {
                 public void run() {
                     String filename="xmit-stats-" + local_addr + ".log";
-                    System.out.println("-- dumping runtime xmit stats to " + filename);
                     try {
                         dumpXmitStats(filename);
                     }
@@ -615,6 +612,10 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
 
             case Event.BECOME_SERVER:
                 is_server=true;
+                break;
+
+            case Event.SET_LOCAL_ADDRESS:
+                local_addr=(Address)evt.getArg();
                 break;
 
             case Event.DISCONNECT:
@@ -704,10 +705,6 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
             stable((Digest)evt.getArg());
             return null;  // do not pass up further (Bela Aug 7 2001)
 
-        case Event.SET_LOCAL_ADDRESS:
-            local_addr=(Address)evt.getArg();
-            break;
-
         case Event.SUSPECT:
             // release the promise if rebroadcasting is in progress... otherwise we wait forever. there will be a new
             // flush round anyway
@@ -752,7 +749,8 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
             try { // incrementing seqno and adding the msg to sent_msgs needs to be atomic
                 msg_id=seqno +1;
                 msg.putHeader(name, new NakAckHeader(NakAckHeader.MSG, msg_id));
-                win.add(msg_id, msg);
+                if(win.add(msg_id, msg) && !msg.isFlagSet(Message.OOB))
+                    undelivered_msgs.incrementAndGet();
                 seqno=msg_id;
             }
             catch(Throwable t) {
@@ -804,8 +802,11 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
         }
 
         boolean loopback=local_addr.equals(sender);
-        boolean added=loopback || win.add(hdr.seqno, msg);
-        boolean regular_msg_added=added && !msg.isFlagSet(Message.OOB);
+        boolean added_to_window=false;
+        boolean added=loopback || (added_to_window=win.add(hdr.seqno, msg));
+        
+        if(added_to_window)
+            undelivered_msgs.incrementAndGet();
 
         // message is passed up if OOB. Later, when remove() is called, we discard it. This affects ordering !
         // http://jira.jboss.com/jira/browse/JGRP-379
@@ -833,18 +834,15 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
         // We *can* deliver messages from *different* senders concurrently, e.g. reception of P1, Q1, P2, Q2 can result in
         // delivery of P1, Q1, Q2, P2: FIFO (implemented by NAKACK) says messages need to be delivered in the
         // order in which they were sent by the sender
-        short removed_regular_msgs=0;
+        int num_regular_msgs_removed=0;
 
         // 2nd line of defense: in case of an exception, remove() might not be called, therefore processing would never
         // be set back to false. If we get an exception and released_processing is not true, then we set
         // processing to false in the finally clause
         boolean released_processing=false;
-        final ReentrantLock lock=win.getLock();
         try {
-            if(eager_lock_release)
-                locks.put(Thread.currentThread(), lock);
-            lock.lock();
             while(true) {
+                // we're removing a msg and set processing to false (if null) *atomically* (wrt to add())
                 Message msg_to_deliver=win.remove(processing);
                 if(msg_to_deliver == null) {
                     released_processing=true;
@@ -855,7 +853,8 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
                 if(msg_to_deliver.isFlagSet(Message.OOB)) {
                     continue;
                 }
-                removed_regular_msgs++;
+                num_regular_msgs_removed++;
+                // System.out.println("removed regular #" + ((NakAckHeader)msg_to_deliver.getHeader(name)).seqno);
 
                 // Changed by bela Jan 29 2003: not needed (see above)
                 //msg_to_deliver.removeHeader(getName());
@@ -863,22 +862,15 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
             }
         }
         finally {
-            if(!released_processing)
-                processing.set(false);
-            if(eager_lock_release)
-                locks.remove(Thread.currentThread());
-            if(lock.isHeldByCurrentThread())
-                lock.unlock();
             // We keep track of regular messages that we added, but couldn't remove (because of ordering).
             // When we have such messages pending, then even OOB threads will remove and process them
             // http://jira.jboss.com/jira/browse/JGRP-781
-            if(regular_msg_added && removed_regular_msgs == 0) {
-                undelivered_msgs.incrementAndGet();
-            }
-            if(removed_regular_msgs > 0) { // regardless of whether a message was added or not !
-                int num_msgs_added=regular_msg_added? 1 : 0;
-                undelivered_msgs.addAndGet(-(removed_regular_msgs -num_msgs_added));
-            }
+            undelivered_msgs.addAndGet(-num_regular_msgs_removed);
+
+            // processing is always set in win.remove(processing) above and never here ! This code is just a
+            // 2nd line of defense should there be an exception before win.remove(processing) sets processing
+            if(!released_processing)
+                processing.set(false);
         }
     }
 
@@ -1015,8 +1007,8 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
         try {
             buf=Util.messageToByteBuffer(msg);
             Message xmit_msg=new Message(dest, null, buf.getBuf(), buf.getOffset(), buf.getLength());
-            // changed Bela Jan 4 2007: we should not use OOB for retransmitted messages, otherwise we tax the OOB thread pool
-            // too much
+            // changed Bela Jan 4 2007: we should not use OOB for retransmitted messages, otherwise we tax the
+            // OOB thread pool too much
             // msg.setFlag(Message.OOB);
             xmit_msg.putHeader(name, new NakAckHeader(NakAckHeader.XMIT_RSP, seqno));
             down_prot.down(new Event(Event.MSG, xmit_msg));

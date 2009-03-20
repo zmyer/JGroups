@@ -35,7 +35,7 @@ import java.io.ByteArrayInputStream;
  * <li>Documentation, comparison to memcached
  * </ol>
  * @author Bela Ban
- * @version $Id: PartitionedHashMap.java,v 1.18 2009/01/09 15:22:59 belaban Exp $
+ * @version $Id: PartitionedHashMap.java,v 1.18.4.1 2009/03/20 12:46:38 belaban Exp $
  */
 @Experimental @Unsupported
 public class PartitionedHashMap<K,V> implements MembershipListener {
@@ -223,7 +223,7 @@ public class PartitionedHashMap<K,V> implements MembershipListener {
         });
 
         ch.connect(cluster_name);
-        local_addr=ch.getLocalAddress();
+        local_addr=ch.getAddress();
         view=ch.getView();
     }
 
