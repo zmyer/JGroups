@@ -42,7 +42,7 @@ import java.util.Map;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: UDP.java,v 1.196 2009/01/06 16:43:12 belaban Exp $
+ * @version $Id: UDP.java,v 1.195.2.1 2009/05/18 16:25:57 galderz Exp $
  */
 @DeprecatedProperty(names={"num_last_ports","null_src_addresses", "send_on_all_interfaces", "send_interfaces"})
 public class UDP extends TP {
@@ -58,7 +58,7 @@ public class UDP extends TP {
 
 
     static {
-        can_bind_to_mcast_addr=Util.checkForLinux() || Util.checkForSolaris();
+        can_bind_to_mcast_addr=Util.checkForLinux() || Util.checkForSolaris() || Util.checkForHp();
     }
 
     /* ------------------------------------------ Properties  ------------------------------------------ */
@@ -584,7 +584,7 @@ public class UDP extends TP {
         try {
             sock.setReceiveBufferSize(recv_buf_size);
             int actual_size=sock.getReceiveBufferSize();
-            if(actual_size < recv_buf_size && log.isWarnEnabled()) {
+            if(actual_size < send_buf_size && log.isWarnEnabled()) {
                 log.warn("receive buffer of socket " + sock + " was set to " +
                         Util.printBytes(recv_buf_size) + ", but the OS only allocated " +
                         Util.printBytes(actual_size) + ". This might lead to performance problems. Please set your " +
