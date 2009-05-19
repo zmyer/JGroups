@@ -38,7 +38,7 @@ import java.util.*;
  * input buffer overflow, consider setting this property to true.
  * </ul>
  * @author Bela Ban
- * @version $Id: UDP.java,v 1.123.2.8 2009/05/18 16:13:40 galderz Exp $
+ * @version $Id: UDP.java,v 1.123.2.7.2.1 2009/05/19 11:37:09 galderz Exp $
  */
 public class UDP extends TP implements Runnable {
 
