@@ -31,7 +31,7 @@ import java.util.concurrent.TimeUnit;
  * FIND_INITIAL_MBRS_OK event up the stack.
  * 
  * @author Bela Ban
- * @version $Id: TCPGOSSIP.java,v 1.49 2009/12/22 09:02:01 belaban Exp $
+ * @version $Id: TCPGOSSIP.java,v 1.48.2.1 2009/12/22 09:03:07 belaban Exp $
  */
 @DeprecatedProperty(names={"gossip_refresh_rate"})
 public class TCPGOSSIP extends Discovery implements RouterStub.ConnectionListener {
@@ -136,7 +136,7 @@ public class TCPGOSSIP extends Discovery implements RouterStub.ConnectionListene
 			try {
 				stub.disconnect(group_addr, local_addr);
                 stub.destroy();
-			} 
+			}
 			catch (Exception e) {
 			}
 		}
