@@ -22,7 +22,7 @@ import java.util.List;
 /**
  * Client stub that talks to a remote GossipRouter
  * @author Bela Ban
- * @version $Id: RouterStub.java,v 1.54 2009/11/17 08:48:35 belaban Exp $
+ * @version $Id: RouterStub.java,v 1.54.2.1 2010/02/11 13:47:32 belaban Exp $
  */
 public class RouterStub {
 
@@ -200,6 +200,10 @@ public class RouterStub {
         List<PingData> retval=new ArrayList<PingData>();
         try {
 
+            // we might get a spurious SUSPECT message from the router, just ignore it
+            if(input.available() > 0) // fixes https://jira.jboss.org/jira/browse/JGRP-1151
+                input.skipBytes(input.available());
+            
             GossipData request=new GossipData(GossipRouter.GOSSIP_GET, group, null);
             request.writeTo(output);
             output.flush();
