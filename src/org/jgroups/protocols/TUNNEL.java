@@ -36,7 +36,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * 
  * @author Bela Ban
  * @author Vladimir Blagojevic
- * @version $Id: TUNNEL.java,v 1.91 2009/11/18 16:48:44 vlada Exp $
+ * @version $Id: TUNNEL.java,v 1.91.2.1 2010/02/26 19:10:22 vlada Exp $
  */
 @Experimental
 public class TUNNEL extends TP {
@@ -80,7 +80,8 @@ public class TUNNEL extends TP {
    public TUNNEL() {
    }
 
-   @Property
+
+    @Property
    public void setGossipRouterHosts(String hosts) throws UnknownHostException {
       gossip_router_hosts.clear();
       // if we get passed value of List<SocketAddress>#toString() we have to strip []
@@ -297,9 +298,10 @@ public class TUNNEL extends TP {
          this.stub = stub;
       }
 
-      public void connectionStatusChange(RouterStub.ConnectionStatus newState) {
+      public void connectionStatusChange(RouterStub stub, RouterStub.ConnectionStatus newState) {
          if (newState == RouterStub.ConnectionStatus.DISCONNECTED) {
              stub.interrupt();
+             stub.destroy();
              startReconnecting(stub);
          }
          else if (currentState != RouterStub.ConnectionStatus.CONNECTED
