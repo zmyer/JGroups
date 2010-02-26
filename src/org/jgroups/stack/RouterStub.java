@@ -21,7 +21,7 @@ import java.util.List;
 /**
  * Client stub that talks to a remote GossipRouter
  * @author Bela Ban
- * @version $Id: RouterStub.java,v 1.56 2010/02/26 18:10:13 vlada Exp $
+ * @version $Id: RouterStub.java,v 1.55.2.1 2010/02/26 19:10:17 vlada Exp $
  */
 public class RouterStub {
 
