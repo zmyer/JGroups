@@ -1,4 +1,4 @@
-// $Id: ENCRYPT.java,v 1.38.4.2 2010/08/17 08:28:46 belaban Exp $
+// $Id: ENCRYPT.java,v 1.38.4.1.4.1 2010/08/26 19:09:07 dereed Exp $
 
 package org.jgroups.protocols;
 
@@ -153,7 +153,7 @@ public class ENCRYPT extends Protocol {
     // queue to hold upcoming messages while key negotiation is happening
     private BlockingQueue<Event> upMessageQueue = new LinkedBlockingQueue<Event>();
 
-    //	 queue to hold downcoming messages while key negotiation is happening
+//	 queue to hold downcoming messages while key negotiation is happening
     private BlockingQueue<Event> downMessageQueue = new LinkedBlockingQueue<Event>();
     // decrypting cypher for secret key requests
     private Cipher asymCipher;
@@ -163,7 +163,6 @@ public class ENCRYPT extends Protocol {
 
     /** To prevent concurrent access to the decrypting cypher */
     protected final Lock decrypt_lock=new ReentrantLock();
-
 
     public ENCRYPT()
     {
@@ -769,7 +768,7 @@ public class ENCRYPT extends Protocol {
         //we do not synchronize here as we only have one up thread so we should never get an issue
         //synchronized(upLock){
         Event tmp =null;
-        while ((tmp =upMessageQueue.poll(0L, TimeUnit.MILLISECONDS)) != null){
+        while ((tmp = (Event)upMessageQueue.poll(0L, TimeUnit.MILLISECONDS)) != null){
             Message msg = decryptMessage(symDecodingCipher, ((Message)tmp.getArg()).copy());
 
             if (msg != null){
@@ -829,7 +828,7 @@ public class ENCRYPT extends Protocol {
         EncryptHeader hdr = (EncryptHeader)msg.getHeader(EncryptHeader.KEY);
         if (!hdr.getVersion().equals(getSymVersion())){
             log.warn("attempting to use stored cipher as message does not uses current encryption version ");
-            cipher =keyMap.get(hdr.getVersion());
+            cipher = (Cipher)keyMap.get(hdr.getVersion());
             if (cipher == null) {
                 log.warn("Unable to find a matching cipher in previous key map");
                 return null;
@@ -1054,7 +1053,7 @@ public class ENCRYPT extends Protocol {
         //	we do not synchronize here as we only have one down thread so we should never get an issue
         //  first lets replay any oustanding events
         Event tmp =null;
-        while((tmp =downMessageQueue.poll(0L, TimeUnit.MILLISECONDS))!= null){
+        while((tmp = (Event)downMessageQueue.poll(0L, TimeUnit.MILLISECONDS) )!= null){
             sendDown(tmp);
         }
     }
