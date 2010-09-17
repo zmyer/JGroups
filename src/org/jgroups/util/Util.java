@@ -28,6 +28,8 @@ import java.nio.channels.WritableByteChannel;
 import java.security.MessageDigest;
 import java.text.NumberFormat;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 
@@ -35,7 +37,7 @@ import java.util.regex.Matcher;
 /**
  * Collection of various utility routines that can not be assigned to other classes.
  * @author Bela Ban
- * @version $Id: Util.java,v 1.272 2010/08/18 07:43:48 belaban Exp $
+ * @version $Id: Util.java,v 1.266.2.1 2010/09/17 16:29:10 vlada Exp $
  */
 public class Util {
 
@@ -65,6 +67,10 @@ public class Util {
 
     private static Pattern METHOD_NAME_TO_ATTR_NAME_PATTERN=Pattern.compile("[A-Z]+");
     private static Pattern ATTR_NAME_TO_METHOD_NAME_PATTERN=Pattern.compile("_.");
+    
+    protected static int   CCHM_INITIAL_CAPACITY=16;
+    protected static float CCHM_LOAD_FACTOR=0.75f;
+    protected static int   CCHM_CONCURRENCY_LEVEL=16;
 
     /**
      * Global thread group to which all (most!) JGroups threads belong
@@ -1449,6 +1455,18 @@ public class Util {
         }
         return t.isAlive();
 	}
+    
+    public static <K,V> ConcurrentMap<K,V> createConcurrentMap(int initial_capacity, float load_factor, int concurrency_level) {
+        return new ConcurrentHashMap<K,V>(initial_capacity, load_factor, concurrency_level);
+    }
+
+    public static <K,V> ConcurrentMap<K,V> createConcurrentMap(int initial_capacity) {
+        return new ConcurrentHashMap<K,V>(initial_capacity);
+    }
+
+    public static <K,V> ConcurrentMap<K,V> createConcurrentMap() {
+        return new ConcurrentHashMap<K,V>(CCHM_INITIAL_CAPACITY, CCHM_LOAD_FACTOR, CCHM_CONCURRENCY_LEVEL);
+    }
 
 
     /**
@@ -2105,25 +2123,6 @@ public class Util {
         return array[index];
     }
 
-    /**
-     * Returns the object next to element in list
-     * @param list
-     * @param obj
-     * @param <T>
-     * @return
-     */
-    public static <T> T pickNext(List<T> list, T obj) {
-        if(list == null || obj == null)
-            return null;
-        Object[] array=list.toArray();
-        for(int i=0; i < array.length; i++) {
-            T tmp=(T)array[i];
-            if(tmp != null && tmp.equals(obj))
-                return (T)array[(i+1) % array.length];
-        }
-        return null;
-    }
-
 
     public static View createView(Address coord, long id, Address ... members) {
         Vector<Address> mbrs=new Vector<Address>();
@@ -2140,14 +2139,6 @@ public class Util {
         UUID retval=UUID.randomUUID();
         UUID.add(retval, name);
         return retval;
-    }
-
-    public static Object[][] createTimer() {
-        return new Object[][] {
-                {new DefaultTimeScheduler(5)},
-                {new TimeScheduler2()},
-                {new HashedTimingWheel(5)}
-        };
     }
 
     /**
@@ -3449,16 +3440,17 @@ public class Util {
 
 
     public static boolean isCoordinator(JChannel ch) {
-        return isCoordinator(ch.getView(), ch.getAddress());
-    }
-
-
-    public static boolean isCoordinator(View view, Address local_addr) {
-        if(view == null || local_addr == null)
+        if(ch == null) return false;
+        View view=ch.getView();
+        if(view == null)
+            return false;
+        Address local_addr=ch.getAddress();
+        if(local_addr == null)
             return false;
         Vector<Address> mbrs=view.getMembers();
         return !(mbrs == null || mbrs.isEmpty()) && local_addr.equals(mbrs.firstElement());
     }
+
 
     public static MBeanServer getMBeanServer() {
 		ArrayList servers = MBeanServerFactory.findMBeanServer(null);
