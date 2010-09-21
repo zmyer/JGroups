@@ -25,6 +25,10 @@
     <pbcast.STABLE stability_delay="1000"
         desired_avg_gossip="20000"
         max_bytes="0"/>
+    <UFC max_credits="2m"
+         min_threshold="0.40"/>
+    <MFC max_credits="2m"
+         min_threshold="0.40"/>
     <FRAG frag_size="8192"/>
     <AUTH auth_class="org.jgroups.auth.X509Token"
         auth_value="chris"
