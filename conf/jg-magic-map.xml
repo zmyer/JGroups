@@ -24,6 +24,7 @@
     <class id="41" name="java.util.Hashtable"/>
     <class id="53" name="org.jgroups.protocols.COMPRESS$CompressHeader"/>
     <class id="54" name="org.jgroups.protocols.FC$FcHeader"/>
+    <class id="55" name="org.jgroups.protocols.FcHeader"/>
     <class id="56" name="org.jgroups.protocols.TpHeader"/>
     <class id="57" name="org.jgroups.protocols.ENCRYPT$EncryptHeader"/>
     <class id="58" name="org.jgroups.protocols.SEQUENCER$SequencerHeader"/>
@@ -44,6 +45,4 @@
     <class id="73" name="org.jgroups.protocols.UNICAST2$Unicast2Header"/>
     <class id="74" name="org.jgroups.protocols.SCOPE$ScopeHeader"/>
     <class id="75" name="org.jgroups.blocks.mux.MuxHeader"/>
-    <class id="76" name="org.jgroups.protocols.DAISYCHAIN$DaisyHeader"/>
-    <class id="77" name="org.jgroups.protocols.RELAY$RelayHeader"/>
 </magic-number-class-mapping>
