@@ -2,7 +2,7 @@
 
 <!--
 TCP-based stack with IP multicast-based discovery
-Version: $Id: mping.xml,v 1.18 2009/10/28 08:34:15 belaban Exp $
+Version: $Id: mping.xml,v 1.18.6.1 2010/09/21 08:44:13 belaban Exp $
 Author: Bela Ban
  -->
 
@@ -34,4 +34,8 @@ Author: Bela Ban
     <pbcast.GMS print_local_addr="true" 
                 join_timeout="5000" 
                 />
+    <UFC max_credits="2m"
+         min_threshold="0.40"/>
+    <MFC max_credits="2m"
+         min_threshold="0.40"/>
 </config>

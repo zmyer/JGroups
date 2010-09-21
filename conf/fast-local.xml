@@ -5,7 +5,7 @@
   Therefore, this configuration will NOT work to cluster members residing on different hosts !
 
   Author: Bela Ban
-  Version: $Id: fast-local.xml,v 1.12 2010/08/12 14:45:25 belaban Exp $
+  Version: $Id: fast-local.xml,v 1.9.6.1 2010/09/21 08:44:13 belaban Exp $
 -->
 
 <config xmlns="urn:org:jgroups"
@@ -27,12 +27,6 @@
          enable_unicast_bundling="true"
          enable_diagnostics="true"
          thread_naming_pattern="cl"
-
-         timer_type="new"
-         timer.min_threads="4"
-         timer.max_threads="10"
-         timer.keep_alive_time="3000"
-         timer.queue_max_size="500"
 
          thread_pool.enabled="true"
          thread_pool.min_threads="2"
@@ -69,8 +63,10 @@
     <pbcast.GMS print_local_addr="true" join_timeout="3000"
                 
                 view_bundling="true"/>
-    <FC max_credits="1M"
-        min_threshold="0.6"/>
+    <UFC max_credits="2m"
+         min_threshold="0.40"/>
+    <MFC max_credits="4m"
+         min_threshold="0.40"/>
     <FRAG2 frag_size="60000"  />
     <!--pbcast.STREAMING_STATE_TRANSFER /-->
     <pbcast.STATE_TRANSFER  />
