@@ -318,7 +318,7 @@ public class FLUSH extends Protocol {
             while (isBlockingFlushDown) {
                 if (log.isDebugEnabled())
                     log.debug(localAddress + ": blocking for " + (timeout <= 0 ? "ever" : timeout + "ms"));
-                    shouldSuspendByItself = notBlockedDown.await(timeout, TimeUnit.MILLISECONDS);
+                    shouldSuspendByItself = !notBlockedDown.await(timeout, TimeUnit.MILLISECONDS);
             }
             if (shouldSuspendByItself) {
                 isBlockingFlushDown = false;      
