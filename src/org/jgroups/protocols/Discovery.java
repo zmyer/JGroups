@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit;
  * </ul>
  * 
  * @author Bela Ban
- * @version $Id: Discovery.java,v 1.75 2010/07/28 09:49:57 belaban Exp $
+ * @version $Id: Discovery.java,v 1.74.2.1 2010/09/24 04:52:35 belaban Exp $
  */
 @MBean
 public abstract class Discovery extends Protocol {   
@@ -146,8 +146,10 @@ public abstract class Discovery extends Protocol {
 
 
     public Vector<Integer> providedUpServices() {
-        Vector<Integer> ret=new Vector<Integer>(1);
-        ret.addElement(new Integer(Event.FIND_INITIAL_MBRS));
+        Vector<Integer> ret=new Vector<Integer>(3);
+        ret.addElement(Event.FIND_INITIAL_MBRS);
+        ret.addElement(Event.FIND_ALL_MBRS);
+        ret.addElement(Event.GET_PHYSICAL_ADDRESS);
         return ret;
     }
     
@@ -192,7 +194,7 @@ public abstract class Discovery extends Protocol {
     }
 
     public List<PingData> findAllMembers(Promise<JoinRsp> promise) {
-        int num_expected_mbrs=Math.max(max_found_members, Math.max(num_initial_members, view != null? view.size() : num_initial_members));
+        int num_expected_mbrs=Math.max(max_found_members, Math.max(num_initial_members, view.size()));
         max_found_members=Math.max(max_found_members, num_expected_mbrs);
         return findInitialMembers(promise, num_expected_mbrs, false, true);
     }
