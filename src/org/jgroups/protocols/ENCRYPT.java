@@ -1,9 +1,8 @@
-// $Id: ENCRYPT.java,v 1.61 2010/08/17 08:36:06 belaban Exp $
+// $Id: ENCRYPT.java,v 1.59.2.1 2010/09/29 14:25:46 belaban Exp $
 
 package org.jgroups.protocols;
 
 import org.jgroups.*;
-import org.jgroups.annotations.GuardedBy;
 import org.jgroups.annotations.Property;
 import org.jgroups.stack.Protocol;
 import org.jgroups.util.QueueClosedException;
@@ -24,8 +23,6 @@ import java.util.WeakHashMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * ENCRYPT layer. Encrypt and decrypt the group communication in JGroups
@@ -168,12 +165,7 @@ public class ENCRYPT extends Protocol {
     // needed because we do simultaneous encode/decode with these ciphers - which
     // would be a threading issue
     Cipher symEncodingCipher;
-
-    @GuardedBy("decrypt_lock")
     Cipher symDecodingCipher;
-
-    /** To synchronize access to symDecodingCipher */
-    protected final Lock decrypt_lock=new ReentrantLock();
 
     // version filed for secret key
     private String symVersion=null;
@@ -520,7 +512,7 @@ public class ENCRYPT extends Protocol {
             return;
         }
 
-        if(msg.getLength() == 0) {
+        if(msg.getLength() == 0 && !encrypt_entire_message) {
             passItUp(evt);
             return;
         }
@@ -726,22 +718,13 @@ public class ENCRYPT extends Protocol {
         }
     }
 
-    private Message _decrypt(Cipher cipher, Message msg, boolean decrypt_entire_msg) throws Exception {
-        byte[] decrypted_msg;
-
-        decrypt_lock.lock();
-        try {
-            decrypted_msg=cipher.doFinal(msg.getRawBuffer(), msg.getOffset(), msg.getLength());
-        }
-        finally {
-            decrypt_lock.unlock();
-        }
-
+    private static Message _decrypt(Cipher cipher, Message msg, boolean decrypt_entire_msg) throws Exception {
         if(!decrypt_entire_msg) {
-            msg.setBuffer(decrypted_msg);
+            msg.setBuffer(cipher.doFinal(msg.getRawBuffer(), msg.getOffset(), msg.getLength()));
             return msg;
         }
 
+        byte[] decrypted_msg=cipher.doFinal(msg.getRawBuffer(), msg.getOffset(), msg.getLength());
         Message ret=(Message)Util.streamableFromByteBuffer(Message.class, decrypted_msg);
         if(ret.getDest() == null)
             ret.setDest(msg.getDest());
@@ -896,7 +879,7 @@ public class ENCRYPT extends Protocol {
         }
 
         Message msg=(Message)evt.getArg();
-        if(msg.getLength() == 0) {
+        if(msg.getLength() == 0 && !encrypt_entire_message) {
             passItDown(evt);
             return;
         }
@@ -937,17 +920,13 @@ public class ENCRYPT extends Protocol {
      * @return
      * @throws Exception
      */
-    private synchronized byte[] encryptMessage(Cipher cipher, byte[] plain, int offset, int length) throws Exception {
+    private static byte[] encryptMessage(Cipher cipher, byte[] plain, int offset, int length) throws Exception {
         return cipher.doFinal(plain, offset, length);
     }
 
     private SecretKeySpec decodeKey(byte[] encodedKey) throws Exception {
         // try and decode secrey key sent from keyserver
-        byte[] keyBytes;
-
-        synchronized(this) {
-            keyBytes=asymCipher.doFinal(encodedKey);
-        }
+        byte[] keyBytes=asymCipher.doFinal(encodedKey);
 
         SecretKeySpec keySpec=null;
         try {
