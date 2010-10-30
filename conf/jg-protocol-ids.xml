@@ -42,6 +42,7 @@
     <class id="40" name="org.jgroups.protocols.UNICAST2"/>
     <class id="44" name="org.jgroups.protocols.MFC"/>
     <class id="45" name="org.jgroups.protocols.UFC"/>
+    <class id="47" name="org.jgroups.protocols.STOMP"/>
 
 
     <class id="200" name="org.jgroups.blocks.PullPushAdapter"/>
