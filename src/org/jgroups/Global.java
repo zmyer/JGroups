@@ -8,7 +8,7 @@ import org.jgroups.util.UUID;
  * Globals used by JGroups packages.
  * 
  * @author Bela Ban Mar 29, 2004
- * @version $Id: Global.java,v 1.60 2010/08/03 17:01:27 belaban Exp $
+ * @version $Id: Global.java,v 1.59.2.1 2010/10/30 09:42:22 belaban Exp $
  */
 public class Global {
     public static final int BYTE_SIZE   = Byte.SIZE    / 8; // 1
@@ -45,6 +45,8 @@ public class Global {
     public static final String MPING_MCAST_PORT="jgroups.mping.mcast_port";
     public static final String MPING_IP_TTL="jgroups.mping.ip_ttl";
 
+    public static final String STOMP_BIND_ADDR="jgroups.stomp.bind_addr";
+
     public static final String MAGIC_NUMBER_FILE="jgroups.conf.magic_number_file";
     public static final String PROTOCOL_ID_FILE="jgroups.conf.protocol_id_file";
     public static final String RESOLVE_DNS="jgroups.resolve_dns";
@@ -78,11 +80,11 @@ public class Global {
 
     // for TestNG
     public static final String FUNCTIONAL="functional";
-    public static final String TIME_SENSITIVE="time-sensitive";
     public static final String STACK_DEPENDENT="stack-dependent";
     public static final String STACK_INDEPENDENT="stack-independent";
     public static final String GOSSIP_ROUTER="gossip-router";
     public static final String FLUSH="flush";
+    public static final String STRESS="stress";
     public static final String INITIAL_MCAST_ADDR="INITIAL_MCAST_ADDR";
     public static final String INITIAL_MCAST_PORT="INITIAL_MCAST_PORT";
     public static final String INITIAL_TCP_PORT="INITIAL_TCP_PORT";
@@ -96,6 +98,7 @@ public class Global {
     public static final String STREAMING_STATE_TRANSFER_SERVER_SOCK="jgroups.streaming_state_transfer.srv_sock";
     public static final String FD_SOCK_SRV_SOCK="jgroups.fd_sock.srv_sock";
     public static final String BSH_SRV_SOCK="jgroups.bsh.srv_sock";
+    public static final String STOMP_SRV_SOCK="jgroups.stomp.srv_sock";
 
     public static final int IPV4_SIZE=4;
     public static final int IPV6_SIZE=16;
