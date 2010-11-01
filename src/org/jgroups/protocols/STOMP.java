@@ -26,7 +26,7 @@ import java.util.concurrent.ConcurrentMap;
  * todo: add PING to test health of client connections
  * <p/> 
  * @author Bela Ban
- * @version $Id: STOMP.java,v 1.23.2.3 2010/10/30 11:07:02 belaban Exp $
+ * @version $Id: STOMP.java,v 1.23.2.4 2010/11/01 07:50:15 belaban Exp $
  * @since 2.11
  */
 @MBean(description="Server side STOPM protocol, STOMP clients can connect to it")
@@ -311,7 +311,7 @@ public class STOMP extends Protocol implements Runnable {
         for(Util.AddressScope scope: Util.AddressScope.values()) {
             try {
                 InetAddress addr=Util.getAddress(scope);
-                if(addr != null) return addr.getHostAddress() + ":" + port;
+                if(addr != null) return addr.getHostAddress() + ":" + srv_sock.getLocalPort();
             }
             catch(SocketException e) {
             }
