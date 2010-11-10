@@ -32,7 +32,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * instead of the requester by setting use_mcast_xmit to true.
  *
  * @author Bela Ban
- * @version $Id: NAKACK.java,v 1.256 2010/08/27 09:26:08 belaban Exp $
+ * @version $Id: NAKACK.java,v 1.255.2.1 2010/11/10 14:08:45 belaban Exp $
  */
 @MBean(description="Reliable transmission multipoint FIFO protocol")
 @DeprecatedProperty(names={"max_xmit_size", "eager_lock_release", "stats_list_size"})
@@ -270,6 +270,9 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
         return num;
     }
 
+
+    @ManagedAttribute
+    public long getCurrentSeqno() {return seqno;}
 
     @ManagedOperation
     public String printRetransmitStats() {
@@ -1192,8 +1195,8 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
         for(Map.Entry<Address,NakReceiverWindow> entry: xmit_table.entrySet()) {
             Address sender=entry.getKey(); // guaranteed to be non-null (CCHM)
             NakReceiverWindow win=entry.getValue(); // guaranteed to be non-null (CCHM)
-            long[] digest=win.getDigest();
-            map.put(sender, new Digest.Entry(digest[0], digest[1], digest[2]));
+            long low=win.getLowestSeen(), highest_delivered=win.getHighestDelivered(), highest_received=win.getHighestReceived();
+            map.put(sender, new Digest.Entry(low, highest_delivered, highest_received));
         }
         return new Digest(map);
     }
@@ -1230,6 +1233,7 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
         StringBuilder sb=new StringBuilder("\n[overwriteDigest()]\n");
         sb.append("existing digest:  " + getDigest()).append("\nnew digest:       " + digest);
 
+        boolean set_own_seqno=false;
         for(Map.Entry<Address, Digest.Entry> entry: digest.getSenders().entrySet()) {
             Address sender=entry.getKey();
             Digest.Entry val=entry.getValue();
@@ -1243,11 +1247,23 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
             if(win != null) {
                 win.destroy(); // stops retransmission
                 xmit_table.remove(sender);
+                if(sender.equals(local_addr)) { // Adjust the seqno: https://jira.jboss.org/browse/JGRP-1251
+                    seqno_lock.lock();
+                    try {
+                        seqno=highest_delivered_seqno;
+                        set_own_seqno=true;
+                    }
+                    finally {
+                        seqno_lock.unlock();
+                    }
+                }
             }
             win=createNakReceiverWindow(sender, highest_delivered_seqno, low_seqno);
             xmit_table.put(sender, win);
         }
         sb.append("\n").append("resulting digest: " + getDigest());
+        if(set_own_seqno)
+            sb.append("\nnew seqno for " + local_addr + ": " + seqno);
         digest_history.add(sb.toString());
         if(log.isDebugEnabled())
             log.debug(sb.toString());
@@ -1268,6 +1284,7 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
         StringBuilder sb=new StringBuilder(merge? "\n[mergeDigest()]\n" : "\n[setDigest()]\n");
         sb.append("existing digest:  " + getDigest()).append("\nnew digest:       " + digest);
 
+        boolean set_own_seqno=false;
         for(Map.Entry<Address, Digest.Entry> entry: digest.getSenders().entrySet()) {
             Address sender=entry.getKey();
             Digest.Entry val=entry.getValue();
@@ -1288,11 +1305,23 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
 
                 win.destroy(); // stops retransmission
                 xmit_table.remove(sender);
+                if(sender.equals(local_addr)) { // Adjust the seqno: https://jira.jboss.org/browse/JGRP-1251
+                    seqno_lock.lock();
+                    try {
+                        seqno=highest_delivered_seqno;
+                        set_own_seqno=true;
+                    }
+                    finally {
+                        seqno_lock.unlock();
+                    }
+                }
             }
             win=createNakReceiverWindow(sender, highest_delivered_seqno, low_seqno);
             xmit_table.put(sender, win);
         }
         sb.append("\n").append("resulting digest: " + getDigest());
+        if(set_own_seqno)
+            sb.append("\nnew seqno for " + local_addr + ": " + seqno);
         digest_history.add(sb.toString());
         if(log.isDebugEnabled())
             log.debug(sb.toString());
