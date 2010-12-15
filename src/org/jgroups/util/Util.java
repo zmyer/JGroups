@@ -8,6 +8,7 @@ import org.jgroups.jmx.JmxConfigurator;
 import org.jgroups.logging.Log;
 import org.jgroups.logging.LogFactory;
 import org.jgroups.protocols.*;
+import org.jgroups.protocols.jentMESH.dataTypes.MeshView;
 import org.jgroups.protocols.pbcast.FLUSH;
 import org.jgroups.protocols.pbcast.GMS;
 import org.jgroups.stack.IpAddress;
@@ -794,13 +795,13 @@ public class Util {
         }
     }
 
-
     public static void writeView(View view, DataOutputStream out) throws IOException {
         if(view == null) {
             out.writeBoolean(false);
             return;
         }
         out.writeBoolean(true);
+        out.writeBoolean(view instanceof MeshView);
         out.writeBoolean(view instanceof MergeView);
         view.writeTo(out);
     }
@@ -808,12 +809,16 @@ public class Util {
     public static View readView(DataInputStream in) throws IOException, InstantiationException, IllegalAccessException {
         if(in.readBoolean() == false)
             return null;
+        boolean isMeshView = in.readBoolean();
         boolean isMergeView=in.readBoolean();
         View view;
-        if(isMergeView)
-            view=new MergeView();
-        else
+        if (isMeshView) {
+            view = new MeshView();
+        } else if(isMergeView) {
+            view=new MergeView(); 
+        } else {
             view=new View();
+        }
         view.readFrom(in);
         return view;
     }
