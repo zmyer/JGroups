@@ -358,7 +358,7 @@ public abstract class Discovery extends Protocol {
                             if(logical_addr != null && physical_addr != null)
                                 down(new Event(Event.SET_PHYSICAL_ADDRESS, new Tuple<Address,PhysicalAddress>(logical_addr, physical_addr)));
                             if(logical_addr != null && data.getLogicalName() != null)
-                                UUID.add((UUID)logical_addr, data.getLogicalName());
+                                UUID.add(logical_addr, data.getLogicalName());
 
                             if(log.isTraceEnabled())
                                 log.trace("received GET_MBRS_RSP from " + response_sender + ": " + data);

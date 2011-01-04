@@ -1786,7 +1786,10 @@ public class JChannel extends Channel {
      */
     protected void setAddress() {
         Address old_addr=local_addr;
-        local_addr=UUID.randomUUID();
+        // local_addr=UUID.randomUUID();
+
+        short id=(short)Util.random(Short.MAX_VALUE);
+        local_addr=new IdAddress(id);
 
         byte[] buf=(byte[])additional_data.get("additional_data");
         if(buf != null)

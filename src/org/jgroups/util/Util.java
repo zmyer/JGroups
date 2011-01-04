@@ -836,6 +836,9 @@ public class Util {
         else if(addr instanceof ProxyAddress) {
             flags=Util.setFlag(flags, Address.PROXY_ADDR);
         }
+        else if(addr instanceof IdAddress) {
+            flags=Util.setFlag(flags, Address.ID_ADDR);
+        }
         else {
             streamable_addr=false;
         }
@@ -863,6 +866,10 @@ public class Util {
         }
         else if(Util.isFlagSet(flags, Address.PROXY_ADDR)) {
             addr=new ProxyAddress();
+            addr.readFrom(in);
+        }
+        else if(Util.isFlagSet(flags, Address.ID_ADDR)) {
+            addr=new IdAddress();
             addr.readFrom(in);
         }
         else {
