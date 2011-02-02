@@ -39,7 +39,7 @@ public class Version {
      * @param args
      */
     public static void main(String[] args) {
-        System.out.println("\nVersion: \t" + description);
+        System.out.println("\nVersion: \t" + description + "_JGRP-1279");
         System.out.println("CVS: \t\t" + cvs);
         System.out.println("History: \t(see doc/history.txt for details)\n");
     }
