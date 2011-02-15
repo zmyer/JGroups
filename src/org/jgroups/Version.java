@@ -42,7 +42,7 @@ public class Version {
      * @param args
      */
     public static void main(String[] args) {
-        System.out.println("\nVersion:      " + description);
+        System.out.println("\nVersion:      " + description + "-JGRP-1205");
         System.out.println("CVS:          " + cvs + "\n");
     }
 
