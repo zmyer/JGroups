@@ -642,6 +642,9 @@ public class FLUSH extends Protocol {
             } else {
                 participantsInFlush = new ArrayList<Address>(currentView.getMembers());
             }
+            flushMembers.clear();
+            flushMembers.addAll(participantsInFlush);
+            flushMembers.removeAll(suspected);
             msg = new Message(null, localAddress, null);
             msg.putHeader(getName(), new FlushHeader(FlushHeader.START_FLUSH, currentViewId(),
                             participantsInFlush));
@@ -687,14 +690,18 @@ public class FLUSH extends Protocol {
             numberOfFlushes += 1;
         }
         boolean proceed = false;
+        boolean amIFlushStarter = false;
         synchronized (sharedLock) {
-            flushCoordinator = flushStarter;
-            flushMembers.clear();
-            if (fh.flushParticipants != null) {
-                flushMembers.addAll(fh.flushParticipants);
+            amIFlushStarter = flushStarter.equals(localAddress);
+            if(!amIFlushStarter){
+               flushCoordinator = flushStarter;
+               flushMembers.clear();
+               if (fh.flushParticipants != null) {
+                   flushMembers.addAll(fh.flushParticipants);
+               }
+               flushMembers.removeAll(suspected);
             }
-            proceed = flushMembers.contains(localAddress);
-            flushMembers.removeAll(suspected);
+            proceed = flushMembers.contains(localAddress);            
         }
 
         if (proceed) {
