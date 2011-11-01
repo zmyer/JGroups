@@ -98,6 +98,15 @@ public class VERIFY_SUSPECT extends Protocol implements Runnable {
         return true;
     }
 
+    public void down(Event evt) {
+        switch(evt.getType()) {
+            case Event.VIEW_CHANGE:
+                View v=(View)evt.getArg();
+                adjustSuspectedMembers(v.getMembers());
+                break;
+        }
+        passDown(evt);
+    }
 
     public void up(Event evt) {
         Address suspected_mbr;
@@ -290,6 +299,18 @@ public class VERIFY_SUSPECT extends Protocol implements Runnable {
         }
     }
 
+    /**
+     * Removes all elements from suspects that are <em>not</em> in the new membership
+     */
+    void adjustSuspectedMembers(List new_mbrship) {
+        synchronized(suspects) {
+            for (Iterator it=suspects.keySet().iterator(); it.hasNext();) {
+                Address s = (Address)it.next();
+                if (!new_mbrship.contains(s))
+                    suspects.remove ( s );
+            }
+        }
+    }
 
     void startTimer() {
         if(timer == null || !timer.isAlive()) {
