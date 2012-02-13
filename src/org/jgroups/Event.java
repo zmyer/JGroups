@@ -8,7 +8,8 @@ package org.jgroups;
  */
 public class Event {
     public static final int MSG                                =  1;  // arg = Message
-    public static final int CONNECT                            =  2;  // arg = cluster name (string)
+    public static final int MSG_LIST                           =  2;  // arg = List<Message>
+    public static final int CONNECT                            =  3;  // arg = cluster name (string)
     public static final int DISCONNECT                         =  4;  // arg = member address (Address)
     public static final int VIEW_CHANGE                        =  6;  // arg = View (or MergeView in case of merge)
     public static final int SET_LOCAL_ADDRESS                  =  8;  // arg = Address
@@ -91,6 +92,7 @@ public class Event {
     public static String type2String(int t) {
         switch(t) {
             case MSG:	                 return "MSG";
+            case MSG_LIST:               return "MSG_LIST";
             case CONNECT:	             return "CONNECT";
             case DISCONNECT:	         return "DISCONNECT";
             case VIEW_CHANGE:	         return "VIEW_CHANGE";

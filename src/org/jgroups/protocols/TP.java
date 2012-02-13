@@ -1196,6 +1196,43 @@ public abstract class TP extends Protocol {
     }
 
 
+    protected void passMessagesUp(List<Message> msgs, boolean perform_cluster_name_matching, boolean multicast, boolean discard_own_mcast) {
+        Message tmp=msgs.isEmpty()? null : msgs.get(0);
+        if(tmp == null)
+            return;
+        TpHeader hdr=(TpHeader)tmp.getHeader(this.id);
+        if(hdr == null) {
+            if(log.isErrorEnabled())
+                log.error(new StringBuilder("message does not have a transport header, msg is ").append(tmp).
+                  append(", headers are ").append(tmp.printHeaders()).append(", will be discarded").toString());
+            return;
+        }
+
+        if(log.isTraceEnabled())
+            log.trace(new StringBuilder("received ").append(msgs.size()).append(" msgs"));
+
+        String ch_name=hdr.channel_name;
+
+        final Protocol tmp_prot=isSingleton()? up_prots.get(ch_name) : up_prot;
+        if(tmp_prot != null) {
+            boolean is_protocol_adapter=tmp_prot instanceof ProtocolAdapter;
+            // Discard if message's cluster name is not the same as our cluster name
+            if(!is_protocol_adapter && perform_cluster_name_matching && channel_name != null && !channel_name.equals(ch_name)) {
+                if(log.isWarnEnabled() && log_discard_msgs)
+                    log.warn(new StringBuilder("discarded message from different cluster \"").append(ch_name).
+                      append("\" (our cluster is \"").append(channel_name).append("\"). Sender was ").append(tmp.getSrc()).toString());
+                return;
+            }
+
+            if(loopback && multicast && discard_own_mcast) {
+                Address local=is_protocol_adapter? ((ProtocolAdapter)tmp_prot).getAddress() : local_addr;
+                if(local != null && local.equals(tmp.getSrc()))
+                    return;
+            }
+            tmp_prot.up(new Event(Event.MSG_LIST, msgs));
+        }
+    }
+
 
 
     /**
@@ -1719,6 +1756,11 @@ public abstract class TP extends Protocol {
 
                 if(is_message_list) { // used if message bundling is enabled
                     List<Message> msgs=readMessageList(dis);
+                    Message tmp=msgs.isEmpty()? null : msgs.get(0);
+                    if(tmp != null && tmp.getDest() == null) {
+                        handleMyMessageList(msgs, multicast);
+                        return;
+                    }
                     for(Message msg: msgs) {
                         if(msg.isFlagSet(Message.OOB)) {
                             log.warn("bundled message should not be marked as OOB");
@@ -1747,6 +1789,16 @@ public abstract class TP extends Protocol {
                 num_bytes_received+=msg.getLength();
             }
             passMessageUp(msg, true, multicast, true);
+        }
+
+        private void handleMyMessageList(List<Message> msgs, boolean multicast) {
+            if(stats) {
+                for(Message msg: msgs) {
+                    num_msgs_received++;
+                    num_bytes_received+=msg.getLength();
+                }
+            }
+            passMessagesUp(msgs, true, multicast, true);
         }
     }
 
@@ -2101,7 +2153,6 @@ public abstract class TP extends Protocol {
         protected SocketFactory socket_factory=new DefaultSocketFactory();
         Address                 local_addr;
 
-        // TODO [JGRP-1194] - Revisit implementation of TUNNEL and shared transport
         static final ThreadLocal<ProtocolAdapter> thread_local=new ThreadLocal<ProtocolAdapter>();
 
         public ProtocolAdapter(String cluster_name, Address local_addr, short transport_id, Protocol up, Protocol down, String pattern) {
@@ -2188,14 +2239,12 @@ public abstract class TP extends Protocol {
                     members.addAll(tmp);
                     break;
                 case Event.DISCONNECT:
-                    // TODO [JGRP-1194] - Revisit implementation of TUNNEL and shared transport
                     thread_local.set(this);
                     break;
                 case Event.CONNECT:
                 case Event.CONNECT_WITH_STATE_TRANSFER:
                 case Event.CONNECT_USE_FLUSH:
                 case Event.CONNECT_WITH_STATE_TRANSFER_USE_FLUSH:  
-                    // TODO [JGRP-1194] - Revisit implementation of TUNNEL and shared transport
                     thread_local.set(this);
                     cluster_name=(String)evt.getArg();
                     factory.setClusterName(cluster_name);

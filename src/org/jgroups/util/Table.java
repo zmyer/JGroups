@@ -82,6 +82,10 @@ public class Table<T> {
         boolean visit(long seqno, T element, int row, int column);
     }
 
+    public interface SeqnoExtractor<T> {
+        long getSeqnoFrom(T element);
+    }
+
 
 
     public Table() {
@@ -172,25 +176,53 @@ public class Table<T> {
     public boolean add(long seqno, T element) {
         lock.lock();
         try {
-            if(seqno <= hd)
-                return false;
+            return _add(seqno, element);
+        }
+        finally {
+            lock.unlock();
+        }
+    }
 
-            int row_index=computeRow(seqno);
-            if(row_index >= matrix.length) {
-                resize(seqno);
-                row_index=computeRow(seqno);
-            }
-            T[] row=getRow(row_index);
-            int index=computeIndex(seqno);
-            T existing_element=row[index];
-            if(existing_element == null) {
-                row[index]=element;
-                size++;
-                if(seqno > hr)
-                    hr=seqno;
-                return true;
-            }
+
+    protected boolean _add(long seqno, T element) {
+        if(seqno <= hd)
             return false;
+
+        int row_index=computeRow(seqno);
+        if(row_index >= matrix.length) {
+            resize(seqno);
+            row_index=computeRow(seqno);
+        }
+        T[] row=getRow(row_index);
+        int index=computeIndex(seqno);
+        T existing_element=row[index];
+        if(existing_element == null) {
+            row[index]=element;
+            size++;
+            if(seqno > hr)
+                hr=seqno;
+            return true;
+        }
+        return false;
+
+    }
+
+
+    public boolean add(List<T> elements, SeqnoExtractor<T> extractor) {
+        if(elements == null || extractor == null)
+            return false;
+        boolean retval=false;
+        int num=0;
+        lock.lock();
+        try {
+            for(T element: elements) {
+                if(_add(extractor.getSeqnoFrom(element), element)) {
+                    retval=true;
+                    num++;
+                }
+            }
+            // System.out.println("added " + num + " elements");
+            return retval;
         }
         finally {
             lock.unlock();
