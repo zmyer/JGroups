@@ -41,7 +41,7 @@ public class Version {
      * @param args
      */
     public static void main(String[] args) {
-        System.out.println("\nVersion:      " + description + "_JGRP-1383");
+        System.out.println("\nVersion:      " + description + "_JGRP-1383_JGRP-1497");
     }
 
 
