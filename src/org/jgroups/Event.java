@@ -49,16 +49,17 @@ public class Event {
     public static final int CONNECT_USE_FLUSH			       = 92;
     public static final int CONNECT_WITH_STATE_TRANSFER_USE_FLUSH = 93;
     public static final int SUSPEND_BUT_FAIL                      = 94; // used in FLUSH testing, no args
-    public static final int LOCK                               = 95; // arg=LockInfo
-    public static final int UNLOCK                             = 96; // arg=LockInfo
-    public static final int UNLOCK_ALL                         = 97; // arg=null
-    public static final int LOCK_AWAIT                         = 98; // arg=LockInfo
-    public static final int LOCK_SIGNAL                        = 99; // arg=AwaitInfo
+    public static final int LOCK                               = 95; // arg = LockInfo
+    public static final int UNLOCK                             = 96; // arg = LockInfo
+    public static final int UNLOCK_ALL                         = 97; // arg = null
+    public static final int LOCK_AWAIT                         = 98; // arg = LockInfo
+    public static final int LOCK_SIGNAL                        = 99; // arg = AwaitInfo
     public static final int IS_MERGE_IN_PROGRESS               = 100; // returns true or false
-    public static final int ADD_TO_XMIT_TABLE                  = 101; // arg=Message
-    public static final int GET_PHYSICAL_ADDRESSES             = 102; // arg=null (returns all physical addresses)
-    public static final int RETRANSMIT                         = 103; // arg=Tuple<Address,Long>
-    public static final int SITE_UNREACHABLE                   = 104; // arg=SiteMaster (RELAY2)
+    public static final int ADD_TO_XMIT_TABLE                  = 101; // arg = Message
+    public static final int GET_PHYSICAL_ADDRESSES             = 102; // arg = null (returns all physical addresses)
+    public static final int RETRANSMIT                         = 103; // arg = Tuple<Address,Long>
+    public static final int SITE_UNREACHABLE                   = 104; // arg = SiteMaster (RELAY2)
+    public static final int FORWARD_TO_COORD                   = 105; // arg = Message
 
 
     public static final int USER_DEFINED                       = 1000; // arg = <user def., e.g. evt type + data>
@@ -143,6 +144,7 @@ public class Event {
             case GET_PHYSICAL_ADDRESSES: return "GET_PHYSICAL_ADDRESSES";
             case RETRANSMIT:             return "RETRANSMIT";
             case SITE_UNREACHABLE:       return "SITE_UNREACHABLE";
+            case FORWARD_TO_COORD:       return "FORWARD_TO_COORD";
 
             case USER_DEFINED:           return "USER_DEFINED";
             default:                     return "UNDEFINED(" + t + ")";
