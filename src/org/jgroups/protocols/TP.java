@@ -829,6 +829,15 @@ public abstract class TP extends Protocol {
         return logical_addr_cache.printCache(print_function);
     }
 
+    @ManagedOperation(description="Prints the logical address cache (more details)")
+    public String printAddressCache() {
+        return _printAddressCache();
+    }
+
+    @ManagedOperation(description="Prints the who-has cache")
+    public String printWhoHasCache() {return _printWhoHasCache();};
+
+
     @ManagedOperation(description="Evicts elements in the logical address cache which have expired")
     public void evictLogicalAddressCache() {
         evictLogicalAddressCache(false);
@@ -1375,9 +1384,40 @@ public abstract class TP extends Protocol {
 
         if(physical_dest != null)
             sendUnicast(physical_dest, buf, offset, length);
-        else if(log.isWarnEnabled())
-            log.warn(local_addr+  ": no physical address for " + dest + ", dropping message");
+        else if(log.isWarnEnabled()) {
+            log.warn(local_addr+  ": no physical address for " + dest + ", dropping message. who-has-cache:\n" +
+                       _printWhoHasCache() + "\naddress cache:\n" + _printAddressCache());
+
+        }
     }
+
+
+    protected String _printWhoHasCache() {
+        StringBuilder sb=new StringBuilder();
+        Set<Address> keys=who_has_cache.keys();
+        for(Address key: keys) {
+            sb.append(key + "(").append(key.getClass().getSimpleName() + ")");
+            if(key instanceof UUID)
+                sb.append(", uuid=" + ((UUID)key).toStringLong());
+            sb.append("\n");
+        }
+        return sb.toString();
+    }
+
+
+    protected String _printAddressCache() {
+        StringBuilder sb=new StringBuilder();
+        Map<Address,PhysicalAddress> contents=logical_addr_cache.contents();
+        for(Map.Entry<Address,PhysicalAddress> entry: contents.entrySet()) {
+            Address key=entry.getKey();
+            sb.append(key + "(").append(key.getClass().getSimpleName() + ")");
+            if(key instanceof UUID)
+                sb.append(", uuid=" + ((UUID)key).toStringLong());
+            sb.append(" --> ").append(entry.getValue()).append("\n");
+        }
+        return sb.toString();
+    }
+
 
 
     protected void sendToAllPhysicalAddresses(byte[] buf, int offset, int length) throws Exception {

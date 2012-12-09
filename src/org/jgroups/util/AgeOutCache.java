@@ -1,8 +1,10 @@
 package org.jgroups.util;
 
-import java.util.Collection;
-import java.util.Map;
-import java.util.concurrent.*;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 /** Cache which removes its elements after a certain time
  * @author Bela Ban
@@ -89,6 +91,10 @@ public class AgeOutCache<K> {
 
     public int size() {
         return map.size();
+    }
+
+    public Set<K> keys() {
+        return new HashSet<K>(map.keySet());
     }
 
     public String toString() {
