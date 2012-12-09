@@ -96,6 +96,33 @@ public class ExpiryCache<K> {
         return sb.toString();
     }
 
+    public String toStringDetailed() {
+        StringBuilder sb=new StringBuilder();
+        long current_time=System.nanoTime();
+        for(Map.Entry<K,Long> entry: map.entrySet()) {
+            K key=entry.getKey();
+
+            sb.append(key + "(").append(key.getClass().getSimpleName() + ")");
+            if(key instanceof UUID)
+                sb.append(", uuid=" + ((UUID)key).toStringLong());
+            sb.append(": ");
+
+            long val=entry.getValue(); // expiry time in ns
+            long diff=val - current_time;
+            long diff_ms=TimeUnit.MILLISECONDS.convert(diff, TimeUnit.NANOSECONDS);
+            if(diff <= 0) { // expired
+
+                sb.append("(expired ").append(Math.abs(diff_ms)).append(" ms ago)");
+            }
+            else { // not expired
+                sb.append("(expiring in ").append(diff_ms).append(" ms)");
+            }
+            sb.append("\n");
+        }
+        return sb.toString();
+    }
+
+
 
     protected static boolean hasExpired(long val) {
         return System.nanoTime() >= val;

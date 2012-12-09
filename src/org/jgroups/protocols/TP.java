@@ -830,7 +830,11 @@ public abstract class TP extends Protocol {
     }
 
     @ManagedOperation(description="Prints the contents of the who-has cache")
-    public String printWhoHasCache() {return who_has_cache.toString();}
+    public String printWhoHasCache() {return _printWhoHasCache();}
+    @ManagedOperation(description="Prints the logical address cache (more details)")
+    public String printAddressCache() {
+        return _printAddressCache();
+    }
 
     @ManagedOperation(description="Evicts elements in the logical address cache which have expired")
     public void evictLogicalAddressCache() {
@@ -1377,9 +1381,32 @@ public abstract class TP extends Protocol {
 
         if(physical_dest != null)
             sendUnicast(physical_dest, buf, offset, length);
-        else if(log.isWarnEnabled())
-            log.warn(local_addr+  ": no physical address for " + dest + ", dropping message");
+        else if(log.isWarnEnabled()) {
+            log.warn(local_addr+  ": no physical address for " + dest + ", dropping message. who-has-cache:\n" +
+                       _printWhoHasCache() + "\naddress cache:\n" + _printAddressCache());
+
+        }
     }
+
+
+    protected String _printWhoHasCache() {
+        return who_has_cache.toStringDetailed();
+    }
+
+
+    protected String _printAddressCache() {
+        StringBuilder sb=new StringBuilder();
+        Map<Address,PhysicalAddress> contents=logical_addr_cache.contents();
+        for(Map.Entry<Address,PhysicalAddress> entry: contents.entrySet()) {
+            Address key=entry.getKey();
+            sb.append(key + "(").append(key.getClass().getSimpleName() + ")");
+            if(key instanceof UUID)
+                sb.append(", uuid=" + ((UUID)key).toStringLong());
+            sb.append(" --> ").append(entry.getValue()).append("\n");
+        }
+        return sb.toString();
+    }
+
 
 
     protected void sendToAllPhysicalAddresses(byte[] buf, int offset, int length) throws Exception {
@@ -1718,6 +1745,8 @@ public abstract class TP extends Protocol {
     protected void addPhysicalAddressToCache(Address logical_addr, PhysicalAddress physical_addr) {
         if(logical_addr != null && physical_addr != null)
             logical_addr_cache.add(logical_addr, physical_addr);
+        log.warn(local_addr + ": added " + logical_addr + " --> " + physical_addr + " to address cache, contents:\n" +
+                   printLogicalAddressCache());
     }
 
     protected PhysicalAddress getPhysicalAddressFromCache(Address logical_addr) {
@@ -1733,6 +1762,9 @@ public abstract class TP extends Protocol {
             logical_addr_cache.remove(logical_addr);
             fetchLocalAddresses();
         }
+
+        log.warn(local_addr + ": removed " + logical_addr + " from address cache, contents:\n" +
+                   printLogicalAddressCache());
     }
 
     /** Clears the cache. <em>Do not use, this is only for unit testing !</em> */
