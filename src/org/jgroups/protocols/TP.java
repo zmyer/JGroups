@@ -831,10 +831,6 @@ public abstract class TP extends Protocol {
 
     @ManagedOperation(description="Prints the contents of the who-has cache")
     public String printWhoHasCache() {return _printWhoHasCache();}
-    @ManagedOperation(description="Prints the logical address cache (more details)")
-    public String printAddressCache() {
-        return _printAddressCache();
-    }
 
     @ManagedOperation(description="Evicts elements in the logical address cache which have expired")
     public void evictLogicalAddressCache() {
