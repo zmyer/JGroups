@@ -41,6 +41,7 @@ public class SUPERVISOR_Test {
         assertFailureDetectorRunning(a, b);
 
         System.out.println("stopping failure detection, waiting for failure detection restart rule to restart failure detection");
+        stopFailureDetection(a, b);
 
         for(int i=0; i < 10; i++) {
             if(isFailureDetectionRunning(a, b))
@@ -83,17 +84,19 @@ public class SUPERVISOR_Test {
         }
     }
 
+    protected void stopFailureDetection(JChannel ... channels) {
+        for(JChannel ch: channels) {
+            FD fd=(FD)ch.getProtocolStack().findProtocol(FD.class);
+            fd.stopFailureDetection();
+        }
+    }
+
 
     protected static class RestartFailureDetector extends Rule {
         protected FD fd;
 
-        public String name() {
-            return "MyRule";
-        }
-
-        public String description() {
-            return "Checks if FD.Monitor is running and - if not - starts it";
-        }
+        public String name()        {return "MyRule";}
+        public String description() {return "Checks if FD.Monitor is running and - if not - starts it";}
 
         public void init() {
             super.init();
@@ -102,16 +105,11 @@ public class SUPERVISOR_Test {
                 throw new IllegalStateException("FD not found in stack");
         }
 
-        public boolean eval() {
-            return sv.getView().size() > 1 &&  !fd.isMonitorRunning();
-        }
-
-        public String condition() {
-            return "The view size is > 1 (" + sv.getView() + ") but the monitor is not running";
-        }
+        public boolean eval()      {return sv.getView().size() > 1 &&  !fd.isMonitorRunning();}
+        public String  condition() {return "The view size is > 1 (" + sv.getView() + ") but the monitor is not running";}
 
         public void trigger() throws Throwable {
-            System.out.println("restarting FD.Monitor: view=" + sv.getView());
+            System.out.println(getClass().getSimpleName() + ": restarting FD.Monitor: view=" + sv.getView());
             fd.startFailureDetection();
         }
     }
