@@ -2,6 +2,7 @@ package org.jgroups.protocols.rules;
 
 import org.jgroups.Address;
 import org.jgroups.Event;
+import org.jgroups.View;
 import org.jgroups.annotations.MBean;
 import org.jgroups.annotations.ManagedAttribute;
 import org.jgroups.annotations.ManagedOperation;
@@ -22,10 +23,13 @@ import java.util.concurrent.TimeUnit;
  * https://issues.jboss.org/browse/JGRP-1557
  * @author Bela Ban
  * @since  3.3
+ * todo: add event based rule triggering
  */
 @MBean(description="Supervises the running stack, taking corrective actions if necessary")
 public class SUPERVISOR extends Protocol {
     protected Address                     local_addr;
+
+    protected volatile View               view;
 
     // The timer used to run the rules on
     protected TimeScheduler               timer;
@@ -40,11 +44,15 @@ public class SUPERVISOR extends Protocol {
     @ManagedAttribute(description="Location of an XML file listing the rules to be installed")
     protected String                      rule_config;
 
-    public Address getLocalAddress() {return local_addr;}
+    public Address getLocalAddress()      {return local_addr;}
+    public View    getView()              {return view;}
 
     @ManagedOperation(description="Prints the last N conditions that triggered a rule action")
     public String executions() {
-        return executions.toString();
+        StringBuilder sb=new StringBuilder();
+        for(String execution: executions)
+            sb.append(execution + "\n");
+        return sb.toString();
     }
 
     public void addCondition(String cond) {
@@ -81,6 +89,7 @@ public class SUPERVISOR extends Protocol {
      * @param rule The rule
      */
     public void installRule(long interval, Rule rule) {
+        rule.supervisor(this).log(log).init();
         Future<?> future=timer.scheduleAtFixedRate(rule, interval, interval, TimeUnit.MILLISECONDS);
         Tuple<Rule,Future<?>> existing=rules.put(rule.name(),new Tuple<Rule,Future<?>>(rule, future));
         if(existing != null)
@@ -90,8 +99,10 @@ public class SUPERVISOR extends Protocol {
     public void uninstallRule(String name) {
         if(name != null) {
             Tuple<Rule,Future<?>> tuple=rules.remove(name);
-            if(tuple != null)
+            if(tuple != null) {
                 tuple.getVal2().cancel(true);
+                tuple.getVal1().destroy();
+            }
         }
     }
 
@@ -100,7 +111,23 @@ public class SUPERVISOR extends Protocol {
             case Event.SET_LOCAL_ADDRESS:
                 local_addr=(Address)evt.getArg();
                 break;
+            case Event.VIEW_CHANGE:
+                handleView((View)evt.getArg());
+                break;
         }
         return down_prot.down(evt);
+    }
+
+    public Object up(Event evt) {
+        switch(evt.getType()) {
+            case Event.VIEW_CHANGE:
+                handleView((View)evt.getArg());
+                break;
+        }
+        return up_prot.up(evt);
+    }
+
+    protected void handleView(View view) {
+        this.view=view;
     }
 }

@@ -12,14 +12,20 @@ public abstract class Rule implements Runnable {
     protected SUPERVISOR sv;  // set when rule is installed
     protected Log        log;         // set when rule is installed
 
-    public Rule supervisor(SUPERVISOR sv) {this.sv=sv; return this;}
-    public Rule log(Log log)              {this.log=log;       return this;}
+    public Rule supervisor(SUPERVISOR sv) {this.sv=sv;   return this;}
+    public Rule log(Log log)              {this.log=log; return this;}
 
     /** Returns the name of the rule. Should be unique if a rule needs to be uninstalled */
     public abstract String name();
 
     /** Describes what the rules does */
     public abstract String description();
+
+    /** Called when rule is installed */
+    public void init() {}
+
+    /** Called when rule is uninstalled */
+    public void destroy() {}
 
     /** Evaluates the condition. If true, the rule is triggered. If true, the next execution of {@link #condition()}
      * should return a non-null string */
@@ -29,9 +35,7 @@ public abstract class Rule implements Runnable {
     public abstract String condition();
 
     /** The action of the rule. Triggered if {@link #eval()} returned true */
-    public void trigger() throws Throwable {
-
-    }
+    public abstract void trigger() throws Throwable;
 
     public void run() {
         if(!eval())
