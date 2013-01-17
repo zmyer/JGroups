@@ -13,7 +13,6 @@ import org.jgroups.util.UUID;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
@@ -1281,38 +1280,100 @@ public abstract class TP extends Protocol {
      */
     protected void receive(Address sender, byte[] data, int offset, int length) {
         if(data == null) return;
-
+        DataInputStream dis=null;
         try {
-            // determine whether OOB or not by looking at first byte of 'data'
-            byte oob_flag=data[Global.SHORT_SIZE]; // we need to skip the first 2 bytes (version)
+            ExposedByteArrayInputStream in_stream=new ExposedByteArrayInputStream(data, offset, length);
+            dis=new DataInputStream(in_stream);
+            short version=dis.readShort();
+            if(Version.isBinaryCompatible(version) == false) {
+                if(log_discard_msgs_version && log.isWarnEnabled()) {
+                    if(suppress_log_different_version != null)
+                        suppress_log_different_version.log(SuppressLog.Level.warn, sender,
+                                                           suppress_time_different_version_warnings,
+                                                           sender, Version.print(version), Version.printVersion());
+                    else
+                        log.warn(Util.getMessage("VersionMismatch", sender, Version.print(version), Version.printVersion()));
+                }
+                return;
+            }
 
-            if((oob_flag & OOB) == OOB) {
-                num_oob_msgs_received++;
-                dispatchToThreadPool(oob_thread_pool, sender, data, offset, length);
+            byte flags=dis.readByte();
+            // boolean oob=(flags & OOB) == OOB;
+            boolean is_message_list=(flags & LIST) == LIST;
+            final boolean multicast=(flags & MULTICAST) == MULTICAST;
+
+            if(is_message_list) { // used if message bundling is enabled
+                final List<Message> msgs=readMessageList(dis);
+               /* ThreadPoolExecutor pool=(ThreadPoolExecutor)(oob? oob_thread_pool : thread_pool);
+
+                pool.execute(new Runnable() {
+                    public void run() {
+                        for(Message msg: msgs)
+                            handleIncomingMessage(msg, multicast);
+                    }
+                });*/
+
+
+                //System.out.println(Thread.currentThread().getId() + ": *** received " + msgs.size() + " msgs");
+                for(Message msg: msgs) {
+                    boolean is_oob=msg.isFlagSet(Message.Flag.OOB);
+                    //if(is_oob)
+                      //  log.warn("bundled message should not be marked as OOB"); // obsolete soon (hopefully !)
+
+
+                    ThreadPoolExecutor pool=(ThreadPoolExecutor)(is_oob? oob_thread_pool : thread_pool);
+
+                    //System.out.println(Thread.currentThread().getId() + ": *** dispatching to " + (oob? "OOB" : "regular") +
+                      //                   " pool, pool size=" + pool.getPoolSize() + ", active=" + pool.getActiveCount());
+
+                    dispatchToThreadPool(pool, msg, multicast, is_oob);
+                }
             }
             else {
-                num_incoming_msgs_received++;
-                dispatchToThreadPool(thread_pool, sender, data, offset, length);
+                Message msg=readMessage(dis);
+                boolean is_oob=msg.isFlagSet(Message.Flag.OOB);
+                dispatchToThreadPool(is_oob? oob_thread_pool : thread_pool, msg, multicast, is_oob);
             }
         }
         catch(Throwable t) {
             if(log.isErrorEnabled())
-                log.error(new StringBuilder("failed handling data from ").append(sender).toString(), t);
+                log.error("failed handling incoming message", t);
+        }
+        finally {
+            Util.close(dis);
         }
     }
 
 
+    protected void handleIncomingMessage(final Message msg, final boolean multicast, final boolean oob) {
+        if(stats) {
+            num_msgs_received++;
+            num_bytes_received+=msg.getLength();
+        }
 
-    protected void dispatchToThreadPool(Executor pool, Address sender, byte[] data, int offset, int length) {
-        if(pool instanceof DirectExecutor) {
-            // we don't make a copy of the buffer if we execute on this thread
-            pool.execute(new IncomingPacket(sender, data, offset, length));
+        if(!multicast) {
+            Address dest=msg.getDest(), target=local_addr;
+            if(dest != null && target != null && !dest.equals(target)) {
+                if(log.isWarnEnabled())
+                    log.warn("dropping unicast message to wrong destination " + dest + "; my local_addr is " + target);
+                return;
+            }
         }
-        else {
-            byte[] tmp=new byte[length];
-            System.arraycopy(data, offset, tmp, 0, length);
-            pool.execute(new IncomingPacket(sender, tmp, 0, length));
-        }
+        passMessageUp(msg, true, multicast, true);
+
+        if(oob)
+            num_oob_msgs_received++;
+        else
+            num_incoming_msgs_received++;
+    }
+
+
+    protected void dispatchToThreadPool(Executor pool, final Message msg, final boolean multicast, final boolean oob) {
+        pool.execute(new Runnable() {
+            public void run() {
+                handleIncomingMessage(msg, multicast, oob);
+            }
+        });
     }
 
 
@@ -1752,76 +1813,16 @@ public abstract class TP extends Protocol {
 
     /* ----------------------------- Inner Classes ---------------------------------------- */
 
-    class IncomingPacket implements Runnable {
-        final Address   sender;
-        final byte[]    buf;
-        final int       offset, length;
+    protected class IncomingPacket implements Runnable {
+        protected final Message msg;
+        protected final boolean multicast;
 
-        IncomingPacket(Address sender, byte[] buf, int offset, int length) {
-            this.sender=sender;
-            this.buf=buf;
-            this.offset=offset;
-            this.length=length;
+        public IncomingPacket(Message msg, boolean multicast) {
+            this.msg=msg;
+            this.multicast=multicast;
         }
 
-
-        /** Code copied from handleIncomingPacket */
         public void run() {
-            short                        version;
-            byte                         flags;
-            ExposedByteArrayInputStream  in_stream;
-            DataInputStream              dis=null;
-
-            try {
-                in_stream=new ExposedByteArrayInputStream(buf, offset, length);
-                dis=new DataInputStream(in_stream);
-                try {
-                    version=dis.readShort();
-                }
-                catch(IOException ex) {
-                    return;
-                }
-                if(Version.isBinaryCompatible(version) == false) {
-                    if(log_discard_msgs_version && log.isWarnEnabled()) {
-                        if(suppress_log_different_version != null)
-                            suppress_log_different_version.log(SuppressLog.Level.warn, sender,
-                                                               suppress_time_different_version_warnings,
-                                                               sender, Version.print(version), Version.printVersion());
-                        else
-                            log.warn(Util.getMessage("VersionMismatch", sender, Version.print(version), Version.printVersion()));
-                    }
-                    return;
-                }
-
-                flags=dis.readByte();
-                boolean is_message_list=(flags & LIST) == LIST;
-                boolean multicast=(flags & MULTICAST) == MULTICAST;
-
-                if(is_message_list) { // used if message bundling is enabled
-                    List<Message> msgs=readMessageList(dis);
-                    for(Message msg: msgs) {
-                        if(msg.isFlagSet(Message.OOB)) {
-                            log.warn("bundled message should not be marked as OOB");
-                        }
-                        handleMyMessage(msg, multicast);
-                    }
-                }
-                else {
-                    Message msg=readMessage(dis);
-                    handleMyMessage(msg, multicast);
-                }
-            }
-            catch(Throwable t) {
-                if(log.isErrorEnabled())
-                    log.error("failed handling incoming message", t);
-            }
-            finally {
-                Util.close(dis);
-            }
-        }
-
-
-        private void handleMyMessage(Message msg, boolean multicast) {
             if(stats) {
                 num_msgs_received++;
                 num_bytes_received+=msg.getLength();

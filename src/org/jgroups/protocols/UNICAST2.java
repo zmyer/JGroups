@@ -767,8 +767,12 @@ public class UNICAST2 extends Protocol implements AgeOutCache.Handler<Address> {
         }
 
         final AtomicBoolean processing=win.getProcessing();
-        if(!processing.compareAndSet(false, true))
+        if(!processing.compareAndSet(false, true)) {
+           // System.out.print(".");
             return true;
+        }
+
+        //System.out.println(Thread.currentThread().getId() + " ==> removing messages");
 
         // Try to remove as many messages as possible and pass them up.
         // Prevents concurrent passing up of messages by different threads (http://jira.jboss.com/jira/browse/JGRP-198);
@@ -783,8 +787,10 @@ public class UNICAST2 extends Protocol implements AgeOutCache.Handler<Address> {
                 List<Message> msgs=win.removeMany(processing, true, max_msg_batch_size); // remove my own messages
                 if(msgs == null || msgs.isEmpty()) {
                     released_processing=true;
+                    //System.out.println(Thread.currentThread().getId() + " ======> done with batch, win: " + win);
                     return true;
                 }
+                //System.out.println(Thread.currentThread().getId() + " ==> processing " + msgs.size() + " msgs");
 
                 for(Message m: msgs) {
                     // discard OOB msg: it has already been delivered (http://jira.jboss.com/jira/browse/JGRP-377)
