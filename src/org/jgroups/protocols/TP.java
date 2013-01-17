@@ -1319,6 +1319,8 @@ public abstract class TP extends Protocol {
                     boolean is_oob=msg.isFlagSet(Message.Flag.OOB);
                     //if(is_oob)
                       //  log.warn("bundled message should not be marked as OOB"); // obsolete soon (hopefully !)
+                    if(is_oob) num_oob_msgs_received++;
+                    else       num_incoming_msgs_received++;
 
 
                     ThreadPoolExecutor pool=(ThreadPoolExecutor)(is_oob? oob_thread_pool : thread_pool);
@@ -1326,13 +1328,15 @@ public abstract class TP extends Protocol {
                     //System.out.println(Thread.currentThread().getId() + ": *** dispatching to " + (oob? "OOB" : "regular") +
                       //                   " pool, pool size=" + pool.getPoolSize() + ", active=" + pool.getActiveCount());
 
-                    dispatchToThreadPool(pool, msg, multicast, is_oob);
+                    dispatchToThreadPool(pool, msg, multicast);
                 }
             }
             else {
                 Message msg=readMessage(dis);
                 boolean is_oob=msg.isFlagSet(Message.Flag.OOB);
-                dispatchToThreadPool(is_oob? oob_thread_pool : thread_pool, msg, multicast, is_oob);
+                if(is_oob) num_oob_msgs_received++;
+                else       num_incoming_msgs_received++;
+                dispatchToThreadPool(is_oob? oob_thread_pool : thread_pool, msg, multicast);
             }
         }
         catch(Throwable t) {
@@ -1345,7 +1349,7 @@ public abstract class TP extends Protocol {
     }
 
 
-    protected void handleIncomingMessage(final Message msg, final boolean multicast, final boolean oob) {
+   /* protected void handleIncomingMessage(final Message msg, final boolean multicast) {
         if(stats) {
             num_msgs_received++;
             num_bytes_received+=msg.getLength();
@@ -1360,23 +1364,40 @@ public abstract class TP extends Protocol {
             }
         }
         passMessageUp(msg, true, multicast, true);
+    }*/
 
-        if(oob)
-            num_oob_msgs_received++;
-        else
-            num_incoming_msgs_received++;
+
+    protected void dispatchToThreadPool(Executor pool, final Message msg, final boolean multicast) {
+        pool.execute(new MyHandler(msg, multicast));
     }
 
 
-    protected void dispatchToThreadPool(Executor pool, final Message msg, final boolean multicast, final boolean oob) {
-        pool.execute(new Runnable() {
-            public void run() {
-                handleIncomingMessage(msg, multicast, oob);
+    protected class MyHandler implements Runnable {
+        protected final Message msg;
+        protected final boolean multicast;
+
+        public MyHandler(Message msg, boolean multicast) {
+            this.msg=msg;
+            this.multicast=multicast;
+        }
+
+        public void run() {
+            if(stats) {
+                num_msgs_received++;
+                num_bytes_received+=msg.getLength();
             }
-        });
+
+            if(!multicast) {
+                Address dest=msg.getDest(), target=local_addr;
+                if(dest != null && target != null && !dest.equals(target)) {
+                    if(log.isWarnEnabled())
+                        log.warn("dropping unicast message to wrong destination " + dest + "; my local_addr is " + target);
+                    return;
+                }
+            }
+            passMessageUp(msg, true, multicast, true);
+        }
     }
-
-
 
 
     /** Serializes and sends a message. This method is not reentrant */
