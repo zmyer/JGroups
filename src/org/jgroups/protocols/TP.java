@@ -1298,7 +1298,7 @@ public abstract class TP extends Protocol {
             }
 
             byte flags=dis.readByte();
-            // boolean oob=(flags & OOB) == OOB;
+            //boolean oob=(flags & OOB) == OOB;
             boolean is_message_list=(flags & LIST) == LIST;
             final boolean multicast=(flags & MULTICAST) == MULTICAST;
 
@@ -1308,13 +1308,14 @@ public abstract class TP extends Protocol {
 
                 pool.execute(new Runnable() {
                     public void run() {
-                        for(Message msg: msgs)
+                        for(Message msg: msgs) {
                             handleIncomingMessage(msg, multicast);
+                        }
                     }
                 });*/
 
 
-                //System.out.println(Thread.currentThread().getId() + ": *** received " + msgs.size() + " msgs");
+                System.out.println(Thread.currentThread().getId() + ": *** received " + msgs.size() + " msgs");
                 for(Message msg: msgs) {
                     boolean is_oob=msg.isFlagSet(Message.Flag.OOB);
                     //if(is_oob)
@@ -1325,9 +1326,6 @@ public abstract class TP extends Protocol {
 
                     ThreadPoolExecutor pool=(ThreadPoolExecutor)(is_oob? oob_thread_pool : thread_pool);
 
-                    //System.out.println(Thread.currentThread().getId() + ": *** dispatching to " + (oob? "OOB" : "regular") +
-                      //                   " pool, pool size=" + pool.getPoolSize() + ", active=" + pool.getActiveCount());
-
                     dispatchToThreadPool(pool, msg, multicast);
                 }
             }
@@ -1336,7 +1334,7 @@ public abstract class TP extends Protocol {
                 boolean is_oob=msg.isFlagSet(Message.Flag.OOB);
                 if(is_oob) num_oob_msgs_received++;
                 else       num_incoming_msgs_received++;
-                dispatchToThreadPool(is_oob? oob_thread_pool : thread_pool, msg, multicast);
+                dispatchToThreadPool(is_oob? oob_thread_pool : thread_pool,msg,multicast);
             }
         }
         catch(Throwable t) {
@@ -1349,7 +1347,7 @@ public abstract class TP extends Protocol {
     }
 
 
-   /* protected void handleIncomingMessage(final Message msg, final boolean multicast) {
+   protected void handleIncomingMessage(final Message msg, final boolean multicast) {
         if(stats) {
             num_msgs_received++;
             num_bytes_received+=msg.getLength();
@@ -1364,7 +1362,7 @@ public abstract class TP extends Protocol {
             }
         }
         passMessageUp(msg, true, multicast, true);
-    }*/
+    }
 
 
     protected void dispatchToThreadPool(Executor pool, final Message msg, final boolean multicast) {
