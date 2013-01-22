@@ -1315,7 +1315,7 @@ public abstract class TP extends Protocol {
                 });*/
 
 
-                System.out.println(Thread.currentThread().getId() + ": *** received " + msgs.size() + " msgs");
+                // System.out.println(Thread.currentThread().getId() + ": *** received " + msgs.size() + " msgs");
                 for(Message msg: msgs) {
                     boolean is_oob=msg.isFlagSet(Message.Flag.OOB);
                     //if(is_oob)
@@ -1516,8 +1516,8 @@ public abstract class TP extends Protocol {
 
 
     /**
-     * Write a lits of messages with the same destination and *mostly* the same src addresses. The message list is
-     * marshalled as follows:
+     * Write a list of messages with the *same* destination and src addresses. The message list is
+     * marshalled as follows (see doc/design/MarshallingFormat.txt for details):
      * <pre>
      * List: * | version | flags | dest | src | [Message*] |
      *
@@ -1545,14 +1545,12 @@ public abstract class TP extends Protocol {
 
         Util.writeAddress(src, dos);
 
-        if(msgs != null) {
-            for(Message msg: msgs) {
-                dos.writeBoolean(true);
-                msg.writeToNoAddrs(src, dos);
-            }
-        }
+        // Number of messages (0 == no messages)
+        dos.writeInt(msgs != null? msgs.size() : 0);
 
-        dos.writeBoolean(false); // terminating presence - no more messages will follow
+        if(msgs != null)
+            for(Message msg: msgs)
+                msg.writeToNoAddrs(src, dos);
     }
 
 
@@ -1562,7 +1560,9 @@ public abstract class TP extends Protocol {
         Address dest=Util.readAddress(in);
         Address src=Util.readAddress(in);
 
-        while(in.readBoolean()) {
+        int len=in.readInt();
+
+        for(int i=0; i < len; i++) {
             Message msg=new Message(false);
             msg.readFrom(in);
             msg.setDest(dest);

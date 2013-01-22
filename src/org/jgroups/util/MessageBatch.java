@@ -1,0 +1,173 @@
+package org.jgroups.util;
+
+import org.jgroups.Address;
+import org.jgroups.Message;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+
+/**
+ * Represents a message batch; multiple messages from the same sender to the same receiver(s). This class is unsynchronized.
+ * @author Bela Ban
+ * @since  3.3
+ * @todo More efficient way to remove all messages with a given header ID, perhaps an ID --> list[headers] mapping
+ */
+public class MessageBatch implements Iterable<Message> {
+
+    /** The destination address. Null if this is a multicast message batch, non-null if the batch is sent to a specific member */
+    protected Address          dest;
+
+    /** The sender of the message batch */
+    protected Address          sender;
+
+    /** The name of the cluster in which the message batch is sent, this is equivalent to TpHeader.channel_name */
+    protected String           cluster_name;
+
+    /** The storage of the messages; removed messages have a null element */
+    protected Message[]        messages;
+
+    /** Index of the next message to be inserted */
+    protected int              index;
+
+    protected static final int INCR=5; // number of elements to add when resizing
+
+
+    public MessageBatch(int capacity) {
+        this.messages=new Message[capacity];
+    }
+
+    public MessageBatch(Collection<Message> msgs) {
+        messages=new Message[msgs.size()];
+        for(Message msg: msgs)
+            messages[index++]=msg;
+    }
+
+    public Message get(int index) {
+        if(index >= 0 && index < messages.length)
+            return messages[index];
+        return null;
+    }
+
+    public MessageBatch set(int index, final Message msg) {
+        if(index >= 0 && index < messages.length)
+            messages[index]=msg;
+        return this;
+    }
+
+    public MessageBatch add(final Message msg) {
+        if(msg == null) return this;
+        if(index >= messages.length)
+            resize();
+        messages[index++]=msg;
+        return this;
+    }
+
+    public MessageBatch remove(int index) {
+        if(index >= 0 && index < messages.length)
+            messages[index]=null;
+        return this;
+    }
+
+    /** Removes and returns all messages which have a header with ID == id */
+    public Collection<Message> getMatchingMessages(final short id, final boolean remove) {
+        return map(new Visitor<Message>() {
+            public Message visit(int index, Message msg, MessageBatch batch) {
+                if(msg != null && msg.getHeader(id) != null) {
+                    if(remove)
+                        batch.remove(index);
+                    return msg;
+                }
+                return null;
+            }
+        });
+    }
+
+
+    /** Applies a function to all messages and returns a list of the function results */
+    public <T> Collection<T> map(Visitor<T> visitor) {
+        Collection<T> retval=null;
+        for(int i=0; i < messages.length; i++) {
+            T result=visitor.visit(i, messages[i], this);
+            if(result != null) {
+                if(retval == null)
+                    retval=new ArrayList<T>();
+                retval.add(result);
+            }
+        }
+        return retval;
+    }
+
+
+
+    /** Returns the number of non-null messages */
+    public int size() {
+        int retval=0;
+        Visitor<Integer> visitor=new Visitor<Integer>() {
+            public Integer visit(int index, Message msg, MessageBatch batch) {
+                return msg != null? 1 : 0;
+            }
+        };
+        for(int i=0; i < messages.length; i++)
+            retval+=visitor.visit(i, messages[i], this);
+        return retval;
+    }
+
+
+    /** Returns the size of the message batch (by calling {@link org.jgroups.Message#size()} on all messages) */
+    public long totalSize() {
+        long retval=0;
+        Visitor<Long> visitor=new Visitor<Long>() {
+            public Long visit(int index, Message msg, MessageBatch batch) {
+                return msg != null? msg.size() : 0;
+            }
+        };
+        for(int i=0; i < messages.length; i++)
+            retval+=visitor.visit(i, messages[i], this);
+        return retval;
+    }
+
+
+
+    public Iterator<Message> iterator() {
+        return new BatchIterator();
+    }
+
+    public String toString() {
+        return size() + " messages [capacity=" + messages.length + "]";
+    }
+
+    protected void resize() {
+        Message[] tmp=new Message[messages.length + INCR];
+        System.arraycopy(messages, 0, tmp, 0, messages.length);
+        messages=tmp;
+    }
+
+
+    /** Used for iteration over the messages */
+    public interface Visitor<T> {
+        T visit(int index, final Message msg, final MessageBatch batch);
+    }
+
+
+
+
+    protected class BatchIterator implements Iterator<Message> {
+        protected int current_index;
+
+        public boolean hasNext() {
+            return current_index < messages.length;
+        }
+
+        public Message next() {
+            if(current_index >= messages.length)
+                throw new NoSuchElementException();
+            return messages[current_index++];
+        }
+
+        public void remove() {
+            MessageBatch.this.remove(current_index);
+        }
+    }
+}
