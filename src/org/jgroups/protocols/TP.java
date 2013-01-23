@@ -1242,29 +1242,29 @@ public abstract class TP extends Protocol {
         String ch_name=hdr.channel_name;
 
         final Protocol tmp_prot=isSingleton()? up_prots.get(ch_name) : up_prot;
-        if(tmp_prot != null) {
-            boolean is_protocol_adapter=tmp_prot instanceof ProtocolAdapter;
-            // Discard if message's cluster name is not the same as our cluster name
-            if(!is_protocol_adapter && perform_cluster_name_matching && channel_name != null && !channel_name.equals(ch_name)) {
-                if(log_discard_msgs && log.isWarnEnabled()) {
-                    Address sender=msg.getSrc();
-                    if(suppress_log_different_cluster != null)
-                        suppress_log_different_cluster.log(SuppressLog.Level.warn, sender,
-                                                           suppress_time_different_cluster_warnings,
-                                                           ch_name, channel_name, sender);
-                    else
-                        log.warn(Util.getMessage("MsgDroppedDiffCluster",ch_name,channel_name,sender));
-                }
-                return;
+        if(tmp_prot == null)
+            return;
+        boolean is_protocol_adapter=tmp_prot instanceof ProtocolAdapter;
+        // Discard if message's cluster name is not the same as our cluster name
+        if(!is_protocol_adapter && perform_cluster_name_matching && channel_name != null && !channel_name.equals(ch_name)) {
+            if(log_discard_msgs && log.isWarnEnabled()) {
+                Address sender=msg.getSrc();
+                if(suppress_log_different_cluster != null)
+                    suppress_log_different_cluster.log(SuppressLog.Level.warn, sender,
+                                                       suppress_time_different_cluster_warnings,
+                                                       ch_name, channel_name, sender);
+                else
+                    log.warn(Util.getMessage("MsgDroppedDiffCluster",ch_name,channel_name,sender));
             }
-
-            if(loopback && multicast && discard_own_mcast) {
-                Address local=is_protocol_adapter? ((ProtocolAdapter)tmp_prot).getAddress() : local_addr;
-                if(local != null && local.equals(msg.getSrc()))
-                    return;
-            }
-            tmp_prot.up(new Event(Event.MSG, msg));
+            return;
         }
+
+        if(loopback && multicast && discard_own_mcast) {
+            Address local=is_protocol_adapter? ((ProtocolAdapter)tmp_prot).getAddress() : local_addr;
+            if(local != null && local.equals(msg.getSrc()))
+                return;
+        }
+        tmp_prot.up(new Event(Event.MSG, msg));
     }
 
 
@@ -1531,8 +1531,8 @@ public abstract class TP extends Protocol {
      * @param multicast
      * @throws Exception
      */
-    protected static void writeMessageList(Address dest, Address src,
-                                         List<Message> msgs, DataOutputStream dos, boolean multicast) throws Exception {
+    public static void writeMessageList(Address dest, Address src,
+                                        List<Message> msgs, DataOutputStream dos, boolean multicast) throws Exception {
         dos.writeShort(Version.version);
 
         byte flags=LIST;
@@ -1555,7 +1555,7 @@ public abstract class TP extends Protocol {
 
 
 
-    protected static List<Message> readMessageList(DataInputStream in) throws Exception {
+    public static List<Message> readMessageList(DataInputStream in) throws Exception {
         List<Message> list=new LinkedList<Message>();
         Address dest=Util.readAddress(in);
         Address src=Util.readAddress(in);
@@ -1571,6 +1571,38 @@ public abstract class TP extends Protocol {
             list.add(msg);
         }
         return list;
+    }
+
+    /**
+     * Reads a list of messages into 2 MessageBatches: a regular one and an OOB one
+     * @param in
+     * @return an array of 2 MessageBatches, the regular is at index 0 and the OOB at index 1 (either can be null)
+     * @throws Exception
+     */
+    public static MessageBatch[] readMessageBatch(DataInputStream in) throws Exception {
+        MessageBatch[] mbs=new MessageBatch[2];
+        Address dest=Util.readAddress(in);
+        Address src=Util.readAddress(in);
+
+        int len=in.readInt();
+        for(int i=0; i < len; i++) {
+            Message msg=new Message(false);
+            msg.readFrom(in);
+            msg.setDest(dest);
+            if(msg.getSrc() == null)
+                msg.setSrc(src);
+            if(msg.isFlagSet(Message.Flag.OOB)) {
+                if(mbs[1] == null)
+                    mbs[1]=new MessageBatch(dest, src, null /** for now ! */, len);
+                mbs[1].add(msg);
+            }
+            else {
+                if(mbs[0] == null)
+                    mbs[0]=new MessageBatch(dest, src, null /** for now ! */, len);
+                mbs[0].add(msg);
+            }
+        }
+        return mbs;
     }
 
 
