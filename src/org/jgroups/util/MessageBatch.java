@@ -44,6 +44,21 @@ public class MessageBatch implements Iterable<Message> {
             messages[index++]=msg;
     }
 
+    public MessageBatch(Address dest, Address sender, String cluster_name, int capacity) {
+        this(capacity);
+        this.dest=dest;
+        this.sender=sender;
+        this.cluster_name=cluster_name;
+    }
+
+    public Address      dest()                   {return dest;}
+    public MessageBatch dest(Address dest)       {this.dest=dest; return this;}
+    public Address      sender()                 {return sender;}
+    public MessageBatch sender(Address sender)   {this.sender=sender; return this;}
+    public String       clusterName()            {return cluster_name;}
+    public MessageBatch clusterName(String name) {this.cluster_name=name; return this;}
+
+
     public Message get(int index) {
         if(index >= 0 && index < messages.length)
             return messages[index];
@@ -135,7 +150,17 @@ public class MessageBatch implements Iterable<Message> {
     }
 
     public String toString() {
-        return size() + " messages [capacity=" + messages.length + "]";
+        StringBuilder sb=new StringBuilder();
+        sb.append("dest=" + dest);
+        if(sender != null)
+            sb.append(", sender=").append(sender);
+        if(cluster_name != null)
+            sb.append("cluster=").append(cluster_name);
+        if(sb.length() > 0)
+            sb.append(", ");
+        sb.append(size() + " messages [capacity=" + messages.length + "]");
+
+        return sb.toString();
     }
 
     protected void resize() {

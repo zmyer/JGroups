@@ -8,6 +8,10 @@ import org.jgroups.util.MessageBatch;
 import org.jgroups.util.Util;
 import org.testng.annotations.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -98,7 +102,7 @@ public class MessageBatchTest {
     }
 
 
-    /*public void testSize() throws Exception {
+    public void testSize() throws Exception {
         List<Message> msgs=createMessages();
         ByteArrayOutputStream output=new ByteArrayOutputStream();
         DataOutputStream out=new DataOutputStream(output);
@@ -111,7 +115,7 @@ public class MessageBatchTest {
         DataInputStream in=new DataInputStream(new ByteArrayInputStream(buf));
         List<Message> list=TP.readMessageList(in);
         assert msgs.size() == list.size();
-    }*/
+    }
 
 
     public void testIterator() {
