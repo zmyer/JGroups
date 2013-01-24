@@ -1268,6 +1268,39 @@ public abstract class TP extends Protocol {
     }
 
 
+    protected void passBatchUp(MessageBatch batch, boolean perform_cluster_name_matching, boolean discard_own_mcast) {
+        if(log.isTraceEnabled())
+            log.trace(new StringBuilder("received message batch of " + batch.size() + " messages from " + batch.sender()));
+
+        String ch_name=batch.clusterName();
+        final Protocol tmp_prot=isSingleton()? up_prots.get(ch_name) : up_prot;
+        if(tmp_prot == null)
+            return;
+
+        boolean is_protocol_adapter=tmp_prot instanceof ProtocolAdapter;
+        // Discard if message's cluster name is not the same as our cluster name
+        if(!is_protocol_adapter && perform_cluster_name_matching && channel_name != null && !channel_name.equals(ch_name)) {
+            if(log_discard_msgs && log.isWarnEnabled()) {
+                Address sender=batch.sender();
+                if(suppress_log_different_cluster != null)
+                    suppress_log_different_cluster.log(SuppressLog.Level.warn, sender,
+                                                       suppress_time_different_cluster_warnings,
+                                                       ch_name, channel_name, sender);
+                else
+                    log.warn(Util.getMessage("BatchDroppedDiffCluster", ch_name, channel_name, sender));
+            }
+            return;
+        }
+
+        if(loopback && batch.multicast() && discard_own_mcast) {
+            Address local=is_protocol_adapter? ((ProtocolAdapter)tmp_prot).getAddress() : local_addr;
+            if(local != null && local.equals(batch.sender()))
+                return;
+        }
+        tmp_prot.up(batch);
+    }
+
+
 
 
     /**
@@ -1298,35 +1331,21 @@ public abstract class TP extends Protocol {
             }
 
             byte flags=dis.readByte();
-            //boolean oob=(flags & OOB) == OOB;
             boolean is_message_list=(flags & LIST) == LIST;
             final boolean multicast=(flags & MULTICAST) == MULTICAST;
 
             if(is_message_list) { // used if message bundling is enabled
-                final List<Message> msgs=readMessageList(dis);
-               /* ThreadPoolExecutor pool=(ThreadPoolExecutor)(oob? oob_thread_pool : thread_pool);
+                final MessageBatch[] batches=readMessageBatch(dis, multicast);
+                final MessageBatch batch=batches[0], oob_batch=batches[1];
 
-                pool.execute(new Runnable() {
-                    public void run() {
-                        for(Message msg: msgs) {
-                            handleIncomingMessage(msg, multicast);
-                        }
-                    }
-                });*/
+                if(oob_batch != null) {
+                    num_oob_msgs_received+=oob_batch.size();
+                    oob_thread_pool.execute(new BatchHandler(oob_batch));
+                }
 
-
-                // System.out.println(Thread.currentThread().getId() + ": *** received " + msgs.size() + " msgs");
-                for(Message msg: msgs) {
-                    boolean is_oob=msg.isFlagSet(Message.Flag.OOB);
-                    //if(is_oob)
-                      //  log.warn("bundled message should not be marked as OOB"); // obsolete soon (hopefully !)
-                    if(is_oob) num_oob_msgs_received++;
-                    else       num_incoming_msgs_received++;
-
-
-                    ThreadPoolExecutor pool=(ThreadPoolExecutor)(is_oob? oob_thread_pool : thread_pool);
-
-                    dispatchToThreadPool(pool, msg, multicast);
+                if(batch != null) {
+                    num_incoming_msgs_received+=batch.size();
+                    thread_pool.execute(new BatchHandler(batch));
                 }
             }
             else {
@@ -1334,7 +1353,8 @@ public abstract class TP extends Protocol {
                 boolean is_oob=msg.isFlagSet(Message.Flag.OOB);
                 if(is_oob) num_oob_msgs_received++;
                 else       num_incoming_msgs_received++;
-                dispatchToThreadPool(is_oob? oob_thread_pool : thread_pool,msg,multicast);
+                Executor pool=is_oob? oob_thread_pool : thread_pool;
+                pool.execute(new MyHandler(msg, multicast));
             }
         }
         catch(Throwable t) {
@@ -1346,28 +1366,6 @@ public abstract class TP extends Protocol {
         }
     }
 
-
-   protected void handleIncomingMessage(final Message msg, final boolean multicast) {
-        if(stats) {
-            num_msgs_received++;
-            num_bytes_received+=msg.getLength();
-        }
-
-        if(!multicast) {
-            Address dest=msg.getDest(), target=local_addr;
-            if(dest != null && target != null && !dest.equals(target)) {
-                if(log.isWarnEnabled())
-                    log.warn("dropping unicast message to wrong destination " + dest + "; my local_addr is " + target);
-                return;
-            }
-        }
-        passMessageUp(msg, true, multicast, true);
-    }
-
-
-    protected void dispatchToThreadPool(Executor pool, final Message msg, final boolean multicast) {
-        pool.execute(new MyHandler(msg, multicast));
-    }
 
 
     protected class MyHandler implements Runnable {
@@ -1394,6 +1392,32 @@ public abstract class TP extends Protocol {
                 }
             }
             passMessageUp(msg, true, multicast, true);
+        }
+    }
+
+
+    protected class BatchHandler implements Runnable {
+        protected final MessageBatch batch;
+
+        public BatchHandler(final MessageBatch batch) {
+            this.batch=batch;
+        }
+
+        public void run() {
+            if(stats) {
+                num_msgs_received+=batch.size();
+                num_bytes_received+=batch.length();
+            }
+
+            if(!batch.multicast()) {
+                Address dest=batch.dest(), target=local_addr;
+                if(dest != null && target != null && !dest.equals(target)) {
+                    if(log.isWarnEnabled())
+                        log.warn("dropping unicast message batch to wrong destination " + dest + "; my local_addr is " + target);
+                    return;
+                }
+            }
+            passBatchUp(batch, true, true);
         }
     }
 
@@ -1519,7 +1543,7 @@ public abstract class TP extends Protocol {
      * Write a list of messages with the *same* destination and src addresses. The message list is
      * marshalled as follows (see doc/design/MarshallingFormat.txt for details):
      * <pre>
-     * List: * | version | flags | dest | src | [Message*] |
+     * List: * | version | flags | dest | src | cluster-name | [Message*] |
      *
      * Message:  | presence | leading | flags | [src] | length | [buffer] | size | [Headers*] |
      *
@@ -1531,8 +1555,8 @@ public abstract class TP extends Protocol {
      * @param multicast
      * @throws Exception
      */
-    public static void writeMessageList(Address dest, Address src,
-                                        List<Message> msgs, DataOutputStream dos, boolean multicast) throws Exception {
+    public static void writeMessageList(Address dest, Address src, String cluster_name,
+                                        List<Message> msgs, DataOutputStream dos, boolean multicast, short transport_id) throws Exception {
         dos.writeShort(Version.version);
 
         byte flags=LIST;
@@ -1545,20 +1569,24 @@ public abstract class TP extends Protocol {
 
         Util.writeAddress(src, dos);
 
+        Util.writeString(cluster_name, dos);
+
         // Number of messages (0 == no messages)
         dos.writeInt(msgs != null? msgs.size() : 0);
 
         if(msgs != null)
             for(Message msg: msgs)
-                msg.writeToNoAddrs(src, dos);
+                msg.writeToNoAddrs(src, dos, transport_id); // exclude the transport header
     }
 
 
 
-    public static List<Message> readMessageList(DataInputStream in) throws Exception {
+    public static List<Message> readMessageList(DataInputStream in, short transport_id) throws Exception {
         List<Message> list=new LinkedList<Message>();
         Address dest=Util.readAddress(in);
         Address src=Util.readAddress(in);
+        String cluster_name=Util.readString(in); // not used here
+        TpHeader transport_header=new TpHeader(cluster_name);
 
         int len=in.readInt();
 
@@ -1568,6 +1596,10 @@ public abstract class TP extends Protocol {
             msg.setDest(dest);
             if(msg.getSrc() == null)
                 msg.setSrc(src);
+
+            // Now add a TpHeader back on, was not marshalled. Every message references the *same* TpHeader, saving memory !
+            msg.putHeader(transport_id, transport_header);
+
             list.add(msg);
         }
         return list;
@@ -1579,10 +1611,11 @@ public abstract class TP extends Protocol {
      * @return an array of 2 MessageBatches, the regular is at index 0 and the OOB at index 1 (either can be null)
      * @throws Exception
      */
-    public static MessageBatch[] readMessageBatch(DataInputStream in) throws Exception {
+    public static MessageBatch[] readMessageBatch(DataInputStream in, boolean multicast) throws Exception {
         MessageBatch[] mbs=new MessageBatch[2];
         Address dest=Util.readAddress(in);
         Address src=Util.readAddress(in);
+        String cluster_name=Util.readString(in);
 
         int len=in.readInt();
         for(int i=0; i < len; i++) {
@@ -1593,12 +1626,12 @@ public abstract class TP extends Protocol {
                 msg.setSrc(src);
             if(msg.isFlagSet(Message.Flag.OOB)) {
                 if(mbs[1] == null)
-                    mbs[1]=new MessageBatch(dest, src, null /** for now ! */, len);
+                    mbs[1]=new MessageBatch(dest, src, cluster_name, multicast, true, len);
                 mbs[1].add(msg);
             }
             else {
                 if(mbs[0] == null)
-                    mbs[0]=new MessageBatch(dest, src, null /** for now ! */, len);
+                    mbs[0]=new MessageBatch(dest, src, cluster_name, multicast, false, len);
                 mbs[0].add(msg);
             }
         }
@@ -2008,13 +2041,14 @@ public abstract class TP extends Protocol {
                     continue;
                 SingletonAddress dst=entry.getKey();
                 Address dest=dst.getAddress();
+                String cluster_name=dst.getClusterName();
                 Address src_addr=list.get(0).getSrc();
 
                 boolean multicast=dest == null;
                 try {
                     bundler_out_stream.reset();
                     bundler_dos.reset();
-                    writeMessageList(dest, src_addr, list, bundler_dos, multicast); // flushes output stream when done
+                    writeMessageList(dest, src_addr, cluster_name, list, bundler_dos, multicast, id); // flushes output stream when done
                     Buffer buffer=new Buffer(bundler_out_stream.getRawBuffer(), 0, bundler_out_stream.size());
                     doSend(buffer, dest, multicast);
                 }
@@ -2165,13 +2199,14 @@ public abstract class TP extends Protocol {
                     continue;
                 SingletonAddress dst=entry.getKey();
                 Address dest=dst.getAddress();
+                String cluster_name=dst.getClusterName();
                 Address src_addr=list.get(0).getSrc();
 
                 boolean multicast=dest == null;
                 try {
                     bundler_out_stream.reset();
                     bundler_dos.reset();
-                    writeMessageList(dest, src_addr, list, bundler_dos, multicast); // flushes output stream when done
+                    writeMessageList(dest, src_addr, cluster_name, list, bundler_dos, multicast, id); // flushes output stream when done
                     Buffer buffer=new Buffer(bundler_out_stream.getRawBuffer(), 0, bundler_out_stream.size());
                     doSend(buffer, dest, multicast);
                 }
@@ -2374,13 +2409,14 @@ public abstract class TP extends Protocol {
 
                 SingletonAddress dst=entry.getKey();
                 Address dest=dst.getAddress();
+                String cluster_name=dst.getClusterName();
                 Address src_addr=list.get(0).getSrc();
 
                 multicast=dest == null;
                 try {
                     bundler_out_stream.reset();
                     bundler_dos.reset();
-                    writeMessageList(dest, src_addr, list, bundler_dos, multicast); // flushes output stream when done
+                    writeMessageList(dest, src_addr, cluster_name, list, bundler_dos, multicast, id); // flushes output stream when done
                     Buffer buf=new Buffer(bundler_out_stream.getRawBuffer(), 0, bundler_out_stream.size());
                     doSend(buf, dest, multicast);
                 }
@@ -2546,13 +2582,14 @@ public abstract class TP extends Protocol {
 
                 SingletonAddress dst=entry.getKey();
                 Address dest=dst.getAddress();
+                String cluster_name=dst.getClusterName();
                 Address src_addr=list.get(0).getSrc();
 
                 multicast=dest == null;
                 try {
                     bundler_out_stream.reset();
                     bundler_dos.reset();
-                    writeMessageList(dest, src_addr, list, bundler_dos, multicast); // flushes output stream when done
+                    writeMessageList(dest, src_addr, cluster_name, list, bundler_dos, multicast, id); // flushes output stream when done
                     Buffer buf=new Buffer(bundler_out_stream.getRawBuffer(), 0, bundler_out_stream.size());
                     doSend(buf, dest, multicast);
                 }

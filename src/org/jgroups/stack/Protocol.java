@@ -4,6 +4,7 @@ package org.jgroups.stack;
 
 
 import org.jgroups.Event;
+import org.jgroups.Message;
 import org.jgroups.annotations.ManagedAttribute;
 import org.jgroups.annotations.ManagedOperation;
 import org.jgroups.annotations.Property;
@@ -12,16 +13,14 @@ import org.jgroups.jmx.ResourceDMBean;
 import org.jgroups.logging.Log;
 import org.jgroups.logging.LogFactory;
 import org.jgroups.protocols.TP;
+import org.jgroups.util.MessageBatch;
 import org.jgroups.util.SocketFactory;
 import org.jgroups.util.ThreadFactory;
 import org.jgroups.util.Util;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 
 /**
@@ -358,6 +357,36 @@ public abstract class Protocol {
      */
     public Object up(Event evt) {
         return up_prot.up(evt);
+    }
+
+
+    /**
+     * Sends up a multiple messages in a {@link MessageBatch}. The sender of the batch is always the same, and so is the
+     * destination (null == multicast messages). All messages in a batch are either OOB messages, or regular messages,
+     * but a batch never contains both regular and OOB messages.<p/>
+     * The default processing below removes messages from the batch which have headers that correspond to the protocol
+     * handling the batch, and calls {@link #up(org.jgroups.Event)} for each removed message.<p/>
+     * Protocols should typically check if there are any messages destined for them (e.g. using
+     * {@link MessageBatch#getMatchingMessages(short,boolean)}), then possibly remove and process them and finally pass
+     * the batch up to the next protocol. Protocols can also modify messages in place, e.g. ENCRYPT could decrypt all
+     * encrypted messages in the batch, not remove them, and pass the batch up when done.
+     * @param batch The message batch
+     */
+    public void up(MessageBatch batch) {
+        // remove all msgs with a header matching our prot ID; this potentially modifies batch
+        Collection<Message> msgs=id > 0? batch.getMatchingMessages(id, true) : null;
+        if(msgs != null && !msgs.isEmpty()) {
+            for(Message msg: msgs) {
+                try {
+                    up(new Event(Event.MSG, msg));
+                }
+                catch(Throwable t) {
+                    log.error("failed passing message up", t);
+                }
+            }
+        }
+        if(!batch.isEmpty())
+            up_prot.up(batch);
     }
 
 

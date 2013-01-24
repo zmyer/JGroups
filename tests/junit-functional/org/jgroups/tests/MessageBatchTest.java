@@ -3,6 +3,7 @@ package org.jgroups.tests;
 import org.jgroups.Address;
 import org.jgroups.Global;
 import org.jgroups.Message;
+import org.jgroups.conf.ClassConfigurator;
 import org.jgroups.protocols.*;
 import org.jgroups.util.MessageBatch;
 import org.jgroups.util.Util;
@@ -24,7 +25,11 @@ import java.util.List;
  */
 @Test(groups=Global.FUNCTIONAL,sequential=true)
 public class MessageBatchTest {
-    protected static final short UNICAST=1, DISCOVERY=2, FD=3, MERGE=4, TP_ID=5;
+    protected static final short UNICAST2_ID=ClassConfigurator.getProtocolId(UNICAST2.class),
+      PING_ID=ClassConfigurator.getProtocolId(PING.class),
+      FD_ID=ClassConfigurator.getProtocolId(FD.class),
+      MERGE_ID=ClassConfigurator.getProtocolId(MERGE3.class),
+      UDP_ID=ClassConfigurator.getProtocolId(UDP.class);
     protected final Address a=Util.createRandomAddress("A"), b=Util.createRandomAddress("B");
 
 
@@ -41,7 +46,14 @@ public class MessageBatchTest {
 
     public void testCapacityConstructor() {
         MessageBatch batch=new MessageBatch(3);
-        assert batch.size() == 0;
+        assert batch.isEmpty();
+    }
+
+    public void testIsEmpty() {
+        MessageBatch batch=new MessageBatch(3);
+        assert batch.isEmpty();
+        batch.set(2, new Message());
+        assert !batch.isEmpty();
     }
 
     public void testGet() {
@@ -76,18 +88,18 @@ public class MessageBatchTest {
     public void testGetMatchingMessages() {
         List<Message> msgs=createMessages();
         MessageBatch batch=new MessageBatch(msgs);
-        Collection<Message> matching=batch.getMatchingMessages(TP_ID, false);
+        Collection<Message> matching=batch.getMatchingMessages(UDP_ID, false);
         assert matching.size() == batch.size();
         assert batch.size() == msgs.size();
 
-        matching=batch.getMatchingMessages(FD, true);
+        matching=batch.getMatchingMessages(FD_ID, true);
         assert matching.size() == 1;
         assert batch.size() == msgs.size() -1;
 
         int size=batch.size();
-        matching=batch.getMatchingMessages(TP_ID, true);
+        matching=batch.getMatchingMessages(UDP_ID, true);
         assert matching.size() == size;
-        assert batch.size() == 0;
+        assert batch.isEmpty();
     }
 
 
@@ -106,14 +118,16 @@ public class MessageBatchTest {
         List<Message> msgs=createMessages();
         ByteArrayOutputStream output=new ByteArrayOutputStream();
         DataOutputStream out=new DataOutputStream(output);
-        TP.writeMessageList(b, a, msgs, out, false);
+        TP.writeMessageList(b, a, "cluster", msgs, out, false, UDP_ID);
         out.flush();
 
         byte[] buf=output.toByteArray();
         System.out.println("size=" + buf.length + " bytes, " + msgs.size() + " messages");
 
         DataInputStream in=new DataInputStream(new ByteArrayInputStream(buf));
-        List<Message> list=TP.readMessageList(in);
+        short version=in.readShort();
+        byte flags=in.readByte();
+        List<Message> list=TP.readMessageList(in, UDP_ID);
         assert msgs.size() == list.size();
     }
 
@@ -152,17 +166,17 @@ public class MessageBatchTest {
         List<Message> retval=new ArrayList<Message>(10);
 
         for(long seqno=1; seqno <= 5; seqno++)
-            retval.add(new Message(b).putHeader(UNICAST, UNICAST2.Unicast2Header.createDataHeader(seqno, (short)22, false)));
+            retval.add(new Message(b).putHeader(UNICAST2_ID, UNICAST2.Unicast2Header.createDataHeader(seqno, (short)22, false)));
 
-        retval.add(new Message(b).putHeader(DISCOVERY, new PingHeader(PingHeader.GET_MBRS_RSP, "demo-cluster")));
-        retval.add(new Message(b).putHeader(FD, new FD.FdHeader(org.jgroups.protocols.FD.FdHeader.HEARTBEAT)));
-        retval.add(new Message(b).putHeader(MERGE, MERGE3.MergeHeader.createViewResponse(Util.createView(a, 22, a,b))));
+        retval.add(new Message(b).putHeader(PING_ID, new PingHeader(PingHeader.GET_MBRS_RSP, "demo-cluster")));
+        retval.add(new Message(b).putHeader(FD_ID, new FD.FdHeader(org.jgroups.protocols.FD.FdHeader.HEARTBEAT)));
+        retval.add(new Message(b).putHeader(MERGE_ID, MERGE3.MergeHeader.createViewResponse(Util.createView(a, 22, a,b))));
 
         for(long seqno=6; seqno <= 10; seqno++)
-            retval.add(new Message(b).putHeader(UNICAST, UNICAST2.Unicast2Header.createDataHeader(seqno, (short)22, false)));
+            retval.add(new Message(b).putHeader(UNICAST2_ID, UNICAST2.Unicast2Header.createDataHeader(seqno, (short)22, false)));
 
         for(Message msg: retval)
-            msg.putHeader(TP_ID, new TpHeader("demo-cluster"));
+            msg.putHeader(UDP_ID, new TpHeader("demo-cluster"));
 
         return retval;
     }

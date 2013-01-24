@@ -31,6 +31,12 @@ public class MessageBatch implements Iterable<Message> {
     /** Index of the next message to be inserted */
     protected int              index;
 
+    /** Whether all messages have dest == null (multicast) or not */
+    protected boolean          multicast;
+
+    /** Whether this message batch contains only OOB messages, or only regular messages */
+    protected boolean          oob;
+
     protected static final int INCR=5; // number of elements to add when resizing
 
 
@@ -44,11 +50,13 @@ public class MessageBatch implements Iterable<Message> {
             messages[index++]=msg;
     }
 
-    public MessageBatch(Address dest, Address sender, String cluster_name, int capacity) {
+    public MessageBatch(Address dest, Address sender, String cluster_name, boolean multicast, boolean oob, int capacity) {
         this(capacity);
         this.dest=dest;
         this.sender=sender;
         this.cluster_name=cluster_name;
+        this.multicast=multicast;
+        this.oob=oob;
     }
 
     public Address      dest()                   {return dest;}
@@ -57,6 +65,8 @@ public class MessageBatch implements Iterable<Message> {
     public MessageBatch sender(Address sender)   {this.sender=sender; return this;}
     public String       clusterName()            {return cluster_name;}
     public MessageBatch clusterName(String name) {this.cluster_name=name; return this;}
+    public boolean      multicast()              {return multicast;}
+    public boolean      oob()                    {return oob;}
 
 
     public Message get(int index) {
@@ -129,6 +139,13 @@ public class MessageBatch implements Iterable<Message> {
         return retval;
     }
 
+    public boolean isEmpty() {
+        for(Message msg: messages)
+            if(msg != null)
+                return false;
+        return true;
+    }
+
 
     /** Returns the size of the message batch (by calling {@link org.jgroups.Message#size()} on all messages) */
     public long totalSize() {
@@ -136,6 +153,19 @@ public class MessageBatch implements Iterable<Message> {
         Visitor<Long> visitor=new Visitor<Long>() {
             public Long visit(int index, Message msg, MessageBatch batch) {
                 return msg != null? msg.size() : 0;
+            }
+        };
+        for(int i=0; i < messages.length; i++)
+            retval+=visitor.visit(i, messages[i], this);
+        return retval;
+    }
+
+    /** Returns the total number of bytes of the message batch (by calling {@link org.jgroups.Message#getLength()} on all messages) */
+    public int length() {
+        int retval=0;
+        Visitor<Integer> visitor=new Visitor<Integer>() {
+            public Integer visit(int index, Message msg, MessageBatch batch) {
+                return msg != null? msg.getLength() : 0;
             }
         };
         for(int i=0; i < messages.length; i++)
