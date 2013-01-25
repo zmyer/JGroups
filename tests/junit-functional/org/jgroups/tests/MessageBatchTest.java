@@ -13,10 +13,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 
 /**
  * Tests {@link org.jgroups.util.MessageBatch}
@@ -160,6 +157,53 @@ public class MessageBatchTest {
                 count++;
         assert count == msgs.size() - 3;
     }
+
+    /** Test removal via iterator */
+    public void testIterator3() {
+        List<Message> msgs=createMessages();
+        MessageBatch batch=new MessageBatch(msgs);
+
+        int index=0;
+        for(Message msg: batch) {
+            if(msg != null && msg.getHeader(UNICAST2_ID) != null)
+                batch.remove(index);
+            index++;
+        }
+        System.out.println("batch = " + batch);
+        assert batch.size() == 3;
+     }
+
+    public void testIterator4() {
+        List<Message> msgs=createMessages();
+        MessageBatch batch=new MessageBatch(msgs);
+
+        for(int i=0; i < batch.capacity(); i++) {
+            Message msg=batch.get(i);
+            if(msg != null && msg.getHeader(UNICAST2_ID) != null)
+                batch.remove(i);
+        }
+
+        System.out.println("batch = " + batch);
+        assert batch.size() == 3;
+    }
+
+    public void testIterator5() {
+        List<Message> msgs=createMessages();
+        MessageBatch batch=new MessageBatch(msgs);
+
+        Iterator<Message> itr=batch.iterator();
+        itr.remove();
+        assert batch.size() == msgs.size(); // didn't remove anything
+
+        for(Iterator<Message> it=batch.iterator(); it.hasNext();) {
+            Message msg=it.next();
+            if(msg != null && msg.getHeader(UNICAST2_ID) != null)
+                it.remove();
+        }
+        System.out.println("batch = " + batch);
+        assert batch.size() == 3;
+    }
+
 
 
     protected List<Message> createMessages() {

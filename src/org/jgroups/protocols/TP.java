@@ -219,6 +219,12 @@ public abstract class TP extends Protocol {
     @Property(description="Enable bundling of smaller messages into bigger ones for unicast messages. Default is false")
     protected boolean enable_unicast_bundling=true;
 
+
+    @Property(description="Allows the transport to pass received messages batches up as MessagesBatch instances " +
+      "(up(MessageBatch)), rather than individual Message instances. This flag will be pulled in a future version " +
+      "when batching has been implemented by all protocols")
+    protected boolean enable_batching=true;
+
     @Property(description="Switch to enable diagnostic probing. Default is true")
     protected boolean enable_diagnostics=true;
 
@@ -1417,7 +1423,20 @@ public abstract class TP extends Protocol {
                     return;
                 }
             }
-            passBatchUp(batch, true, true);
+
+            if(enable_batching) {
+                passBatchUp(batch, true, true);
+                return;
+            }
+
+            for(Message msg: batch) {
+                try {
+                    passMessageUp(msg, true, batch.multicast(), true);
+                }
+                catch(Throwable t) {
+                    log.error("failed passing up message: " + t);
+                }
+            }
         }
     }
 

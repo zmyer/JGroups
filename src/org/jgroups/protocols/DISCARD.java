@@ -1,17 +1,18 @@
 
 package org.jgroups.protocols;
 
-import org.jgroups.*;
+import org.jgroups.Address;
 import org.jgroups.Event;
+import org.jgroups.Message;
+import org.jgroups.View;
 import org.jgroups.annotations.*;
 import org.jgroups.stack.Protocol;
-import org.jgroups.util.Util;
+import org.jgroups.util.MessageBatch;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.io.*;
 import java.util.*;
 import java.util.List;
 
@@ -25,39 +26,43 @@ import java.util.List;
 @MBean(description="Discards messages")
 public class DISCARD extends Protocol {
     @Property
-    double up=0.0;    // probability of dropping up   msgs
+    protected double                    up=0.0;    // probability of dropping up   msgs
 
     @Property
-    double down=0.0;  // probability of dropping down msgs
+    protected double                    down=0.0;  // probability of dropping down msgs
 
     @Property
-    boolean excludeItself=true;   // if true don't discard messages sent/received in this stack
-    Address localAddress;
+    protected boolean                   excludeItself=true;   // if true don't discard messages sent/received in this stack
+    protected Address                   localAddress;
 
     @ManagedAttribute(description="Number of dropped down messages",name="dropped_down_messages")
-    int num_down=0;
+    protected int                       num_down=0;
 
     @ManagedAttribute(description="Number of dropped up messages",name="dropped_up_messages")
-    int num_up=0;
+    protected int                       num_up=0;
     
-    final Set<Address> ignoredMembers = new HashSet<Address>();
+    protected final Set<Address>        ignoredMembers = new HashSet<Address>();
 
 
-    final Collection<Address> members=new ArrayList<Address>();
+    protected final Collection<Address> members=new ArrayList<Address>();
 
     @Property(description="drop all messages (up or down)",writable=true)
-    boolean discard_all=false;
+    protected boolean                   discard_all=false;
 
     @Property(description="Number of subsequent unicasts to drop in the down direction",writable=true)
-    int drop_down_unicasts=0;
+    protected int                       drop_down_unicasts=0;
 
     @Property(description="Number of subsequent multicasts to drop in the down direction",writable=true)
-    int drop_down_multicasts=0;
+    protected int                       drop_down_multicasts=0;
 
-    private DiscardDialog discard_dialog=null;
+    protected DiscardDialog             discard_dialog=null;
 
     @Property(name="gui", description="use a GUI or not")
-    protected boolean use_gui=false;
+    protected boolean                   use_gui=false;
+
+
+    public DISCARD                      localAddress(Address addr) {setLocalAddress(addr); return this;}
+    public Address                      localAddress()             {return localAddress;}
 
     public boolean isDiscardAll() {
         return discard_all;
@@ -157,9 +162,6 @@ public class DISCARD extends Protocol {
     }
 
     public Object up(Event evt) {
-        Message msg;
-        double r;
-
         if(evt.getType() == Event.SET_LOCAL_ADDRESS) {
             localAddress=(Address)evt.getArg();
             if(discard_dialog != null)
@@ -167,46 +169,24 @@ public class DISCARD extends Protocol {
         }
 
         if(evt.getType() == Event.MSG) {
-            msg=(Message)evt.getArg();
-            Address sender=msg.getSrc();
-
-            if(discard_all && !sender.equals(localAddress)) {                
+            Message msg=(Message)evt.getArg();
+            if(shouldDropUpMessage(msg, msg.getSrc()))
                 return null;
-            }
-
-            DiscardHeader dh = (DiscardHeader) msg.getHeader(this.id);
-			if (dh != null) {
-				ignoredMembers.clear();
-				ignoredMembers.addAll(dh.dropMessages);
-				if (log.isTraceEnabled())
-					log.trace("will potentially drop messages from " + ignoredMembers);
-			} else {
-                boolean dropMessage=ignoredMembers.contains(sender);
-                if (dropMessage) {
-                    if (log.isTraceEnabled())
-                        log.trace(localAddress + ": dropping message from " + sender);
-                    num_up++;
-                    return null;
-                }
-
-                if (up > 0) {
-					r = Math.random();
-					if (r < up) {
-						if (excludeItself && sender.equals(localAddress)) {
-							if (log.isTraceEnabled())
-								log.trace("excluding itself");
-						} else {						
-							if (log.isTraceEnabled())
-								log.trace(localAddress + ": dropping message from " + sender);
-							num_up++;
-							return null;							
-						}
-					}
-				}
-			}
         }
 
         return up_prot.up(evt);
+    }
+
+
+    public void up(MessageBatch batch) {
+        for(Iterator<Message> it=batch.iterator(); it.hasNext();) {
+            Message msg=it.next();
+            Address sender=msg.getSrc();
+            if(msg != null && shouldDropUpMessage(msg, sender))
+                it.remove();
+        }
+        if(!batch.isEmpty())
+            up_prot.up(batch);
     }
 
 
@@ -276,6 +256,39 @@ public class DISCARD extends Protocol {
         return down_prot.down(evt);
     }
 
+
+    /** Checks if a message should be passed up, or not */
+    protected boolean shouldDropUpMessage(Message msg, Address sender) {
+        if(discard_all && !sender.equals(localAddress))
+            return true;
+
+        if(ignoredMembers.contains(sender)) {
+            if(log.isTraceEnabled())
+                log.trace(localAddress + ": dropping message from " + sender);
+            num_up++;
+            return true;
+        }
+
+        if(up > 0) {
+            double r=Math.random();
+            if(r < up) {
+                if(excludeItself && sender.equals(localAddress)) {
+                    if(log.isTraceEnabled())
+                        log.trace("excluding myself");
+                }
+                else {
+                    if(log.isTraceEnabled())
+                        log.trace(localAddress + ": dropping message from " + sender);
+                    num_up++;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+
     private void loopback(Message msg) {
         final Message rsp=msg.copy(true);
         if(rsp.getSrc() == null)
@@ -297,53 +310,15 @@ public class DISCARD extends Protocol {
 
 
     
-    public static class DiscardHeader extends Header {
-		private final Set<Address> dropMessages;
-
-        public DiscardHeader() {
-			this.dropMessages= new HashSet<Address>();
-		}
-
-		public DiscardHeader(Set<Address> ignoredAddresses) {
-			super();
-			this.dropMessages= ignoredAddresses;
-		}
-
-		public void readFrom(DataInput in) throws Exception {
-			int size = in.readShort();
-			if (size > 0) {
-				dropMessages.clear();
-				for (int i = 0; i < size; i++) {
-					dropMessages.add(Util.readAddress(in));
-				}
-			}
-		}
-
-		public void writeTo(DataOutput out) throws Exception {
-			if (dropMessages != null && !dropMessages.isEmpty()) {
-				out.writeShort(dropMessages.size());
-				for (Address addr: dropMessages) {
-					Util.writeAddress(addr, out);
-				}
-			} else {
-				out.writeShort(0);
-			}
-
-		}
-
-        public int size() {
-            return (int)Util.size(dropMessages);
-        }
-    }
 
 
-    private class DiscardDialog extends JFrame implements ActionListener {
+    protected class DiscardDialog extends JFrame implements ActionListener {
         private JButton start_discarding_button=new JButton("start discarding");
         private JButton stop_discarding_button=new JButton("stop discarding");
         JPanel checkboxes=new JPanel();
 
 
-        private DiscardDialog() {
+        protected DiscardDialog() {
         }
 
         void init() {

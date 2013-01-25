@@ -67,6 +67,7 @@ public class MessageBatch implements Iterable<Message> {
     public MessageBatch clusterName(String name) {this.cluster_name=name; return this;}
     public boolean      multicast()              {return multicast;}
     public boolean      oob()                    {return oob;}
+    public int          capacity()               {return messages.length;}
 
 
     public Message get(int index) {
@@ -185,7 +186,7 @@ public class MessageBatch implements Iterable<Message> {
         if(sender != null)
             sb.append(", sender=").append(sender);
         if(cluster_name != null)
-            sb.append("cluster=").append(cluster_name);
+            sb.append(", cluster=").append(cluster_name);
         if(sb.length() > 0)
             sb.append(", ");
         sb.append(size() + " messages [capacity=" + messages.length + "]");
@@ -209,20 +210,21 @@ public class MessageBatch implements Iterable<Message> {
 
 
     protected class BatchIterator implements Iterator<Message> {
-        protected int current_index;
+        protected int current_index=-1;
 
         public boolean hasNext() {
-            return current_index < messages.length;
+            return current_index +1 < messages.length;
         }
 
         public Message next() {
-            if(current_index >= messages.length)
+            if(current_index +1 >= messages.length)
                 throw new NoSuchElementException();
-            return messages[current_index++];
+            return messages[++current_index];
         }
 
         public void remove() {
-            MessageBatch.this.remove(current_index);
+            if(current_index >= 0)
+                MessageBatch.this.remove(current_index);
         }
     }
 }
