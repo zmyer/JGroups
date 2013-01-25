@@ -196,45 +196,43 @@ public class DISCARD extends Protocol {
 
         switch(evt.getType()) {
             case Event.MSG:
-            msg=(Message)evt.getArg();
-            Address dest=msg.getDest();
-            boolean multicast=dest == null;
+                msg=(Message)evt.getArg();
+                Address dest=msg.getDest();
+                boolean multicast=dest == null;
 
-            if(msg.getSrc() == null)
-                msg.setSrc(localAddress);
+                if(msg.getSrc() == null)
+                    msg.setSrc(localAddress);
 
-            if(discard_all) {
-                if(dest == null || dest.equals(localAddress)) {
-                    //System.out.println("[" + localAddress + "] down(): looping back " + msg + ", hdrs:\n" + msg.getHeaders());
-                    loopback(msg);
+                if(discard_all) {
+                    if(dest == null || dest.equals(localAddress))
+                        loopback(msg);
+                    return null;
                 }
-                return null;
-            }
 
-            if(!multicast && drop_down_unicasts > 0) {
-                drop_down_unicasts=Math.max(0, drop_down_unicasts -1);
-                return null;
-            }
+                if(!multicast && drop_down_unicasts > 0) {
+                    drop_down_unicasts=Math.max(0, drop_down_unicasts -1);
+                    return null;
+                }
 
-            if(multicast && drop_down_multicasts > 0) {
-                drop_down_multicasts=Math.max(0, drop_down_multicasts -1);
-                return null;
-            }
+                if(multicast && drop_down_multicasts > 0) {
+                    drop_down_multicasts=Math.max(0, drop_down_multicasts -1);
+                    return null;
+                }
 
-            if(down > 0) {
-                r=Math.random();
-                if(r < down) {
-                    if(excludeItself && msg.getSrc().equals(localAddress)) {
-                        if(log.isTraceEnabled()) log.trace("excluding itself");
-                    }
-                    else {
-                        if(log.isTraceEnabled())
-                            log.trace("dropping message");
-                        num_down++;
-                        return null;
+                if(down > 0) {
+                    r=Math.random();
+                    if(r < down) {
+                        if(excludeItself && dest != null && dest.equals(localAddress)) {
+                            if(log.isTraceEnabled()) log.trace("excluding itself");
+                        }
+                        else {
+                            if(log.isTraceEnabled())
+                                log.trace("dropping message");
+                            num_down++;
+                            return null;
+                        }
                     }
                 }
-            }
                 break;
             case Event.VIEW_CHANGE:
                 View view=(View)evt.getArg();

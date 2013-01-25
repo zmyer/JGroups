@@ -1160,9 +1160,8 @@ public abstract class TP extends Protocol {
 
         if(!isSingleton())
             setSourceAddress(msg); // very important !! listToBuffer() will fail with a null src address !!
-        if(log.isTraceEnabled()) {
+        if(log.isTraceEnabled())
             log.trace("sending msg to " + msg.getDest() + ", src=" + msg.getSrc() + ", headers are " + msg.printHeaders());
-        }
 
         // Don't send if destination is local address. Instead, switch dst and src and send it up the stack.
         // If multicast message, loopback a copy directly to us (but still multicast). Once we receive this,
@@ -1183,11 +1182,14 @@ public abstract class TP extends Protocol {
             final Message copy=msg.copy();
             if(log.isTraceEnabled()) log.trace("looping back message " + copy);
 
+            TpHeader hdr=(TpHeader)msg.getHeader(this.id); // added by the code above *or* by ProtocolAdapter.down()
+            final String cluster_name=hdr.channel_name;
+
             // changed to fix http://jira.jboss.com/jira/browse/JGRP-506
             Executor pool=msg.isFlagSet(Message.OOB)? oob_thread_pool : thread_pool;
             pool.execute(new Runnable() {
                 public void run() {
-                    passMessageUp(copy, false, multicast, false);
+                    passMessageUp(copy, cluster_name, false, multicast, false);
                 }
             });
 
@@ -1233,34 +1235,25 @@ public abstract class TP extends Protocol {
     }
 
 
-    protected void passMessageUp(Message msg, boolean perform_cluster_name_matching, boolean multicast, boolean discard_own_mcast) {
-        TpHeader hdr=(TpHeader)msg.getHeader(this.id);
-        if(hdr == null) {
-            if(log.isErrorEnabled())
-                log.error(new StringBuilder("message does not have a transport header, msg is ").append(msg).
-                        append(", headers are ").append(msg.printHeaders()).append(", will be discarded").toString());
-            return;
-        }
-
+    protected void passMessageUp(Message msg, String cluster_name, boolean perform_cluster_name_matching,
+                                 boolean multicast, boolean discard_own_mcast) {
         if(log.isTraceEnabled())
             log.trace(new StringBuilder("received ").append(msg).append(", headers are ").append(msg.printHeaders()));
 
-        String ch_name=hdr.channel_name;
-
-        final Protocol tmp_prot=isSingleton()? up_prots.get(ch_name) : up_prot;
+        final Protocol tmp_prot=isSingleton()? up_prots.get(cluster_name) : up_prot;
         if(tmp_prot == null)
             return;
         boolean is_protocol_adapter=tmp_prot instanceof ProtocolAdapter;
         // Discard if message's cluster name is not the same as our cluster name
-        if(!is_protocol_adapter && perform_cluster_name_matching && channel_name != null && !channel_name.equals(ch_name)) {
+        if(!is_protocol_adapter && perform_cluster_name_matching && channel_name != null && !channel_name.equals(cluster_name)) {
             if(log_discard_msgs && log.isWarnEnabled()) {
                 Address sender=msg.getSrc();
                 if(suppress_log_different_cluster != null)
                     suppress_log_different_cluster.log(SuppressLog.Level.warn, sender,
                                                        suppress_time_different_cluster_warnings,
-                                                       ch_name, channel_name, sender);
+                                                       cluster_name, channel_name, sender);
                 else
-                    log.warn(Util.getMessage("MsgDroppedDiffCluster",ch_name,channel_name,sender));
+                    log.warn(Util.getMessage("MsgDroppedDiffCluster", cluster_name, channel_name, sender));
             }
             return;
         }
@@ -1360,7 +1353,9 @@ public abstract class TP extends Protocol {
                 if(is_oob) num_oob_msgs_received++;
                 else       num_incoming_msgs_received++;
                 Executor pool=is_oob? oob_thread_pool : thread_pool;
-                pool.execute(new MyHandler(msg, multicast));
+                TpHeader hdr=(TpHeader)msg.getHeader(id);
+                String cluster_name=hdr.channel_name;
+                pool.execute(new MyHandler(msg, cluster_name, multicast));
             }
         }
         catch(Throwable t) {
@@ -1376,10 +1371,12 @@ public abstract class TP extends Protocol {
 
     protected class MyHandler implements Runnable {
         protected final Message msg;
+        protected final String  cluster_name;
         protected final boolean multicast;
 
-        public MyHandler(Message msg, boolean multicast) {
+        public MyHandler(Message msg, String cluster_name, boolean multicast) {
             this.msg=msg;
+            this.cluster_name=cluster_name;
             this.multicast=multicast;
         }
 
@@ -1397,7 +1394,7 @@ public abstract class TP extends Protocol {
                     return;
                 }
             }
-            passMessageUp(msg, true, multicast, true);
+            passMessageUp(msg, cluster_name, true, multicast, true);
         }
     }
 
@@ -1431,7 +1428,7 @@ public abstract class TP extends Protocol {
 
             for(Message msg: batch) {
                 try {
-                    passMessageUp(msg, true, batch.multicast(), true);
+                    passMessageUp(msg, batch.clusterName(), true, batch.multicast(), true);
                 }
                 catch(Throwable t) {
                     log.error("failed passing up message: " + t);
@@ -1916,32 +1913,6 @@ public abstract class TP extends Protocol {
 
     /* ----------------------------- Inner Classes ---------------------------------------- */
 
-    protected class IncomingPacket implements Runnable {
-        protected final Message msg;
-        protected final boolean multicast;
-
-        public IncomingPacket(Message msg, boolean multicast) {
-            this.msg=msg;
-            this.multicast=multicast;
-        }
-
-        public void run() {
-            if(stats) {
-                num_msgs_received++;
-                num_bytes_received+=msg.getLength();
-            }
-
-            if(!multicast) {
-                Address dest=msg.getDest(), target=local_addr;
-                if(dest != null && target != null && !dest.equals(target)) {
-                    if(log.isWarnEnabled())
-                        log.warn("dropping unicast message to wrong destination " + dest + "; my local_addr is " + target);
-                    return;
-                }
-            }
-            passMessageUp(msg, true, multicast, true);
-        }
-    }
 
 
 
