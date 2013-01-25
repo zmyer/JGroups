@@ -1645,12 +1645,12 @@ public abstract class TP extends Protocol {
                 msg.setSrc(src);
             if(msg.isFlagSet(Message.Flag.OOB)) {
                 if(mbs[1] == null)
-                    mbs[1]=new MessageBatch(dest, src, cluster_name, multicast, true, len);
+                    mbs[1]=new MessageBatch(dest, src, cluster_name, multicast, MessageBatch.Mode.OOB, len);
                 mbs[1].add(msg);
             }
             else {
                 if(mbs[0] == null)
-                    mbs[0]=new MessageBatch(dest, src, cluster_name, multicast, false, len);
+                    mbs[0]=new MessageBatch(dest, src, cluster_name, multicast, MessageBatch.Mode.REG, len);
                 mbs[0].add(msg);
             }
         }

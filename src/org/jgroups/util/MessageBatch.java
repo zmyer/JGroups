@@ -35,7 +35,7 @@ public class MessageBatch implements Iterable<Message> {
     protected boolean          multicast;
 
     /** Whether this message batch contains only OOB messages, or only regular messages */
-    protected boolean          oob;
+    protected Mode             mode;
 
     protected static final int INCR=5; // number of elements to add when resizing
 
@@ -50,13 +50,13 @@ public class MessageBatch implements Iterable<Message> {
             messages[index++]=msg;
     }
 
-    public MessageBatch(Address dest, Address sender, String cluster_name, boolean multicast, boolean oob, int capacity) {
+    public MessageBatch(Address dest, Address sender, String cluster_name, boolean multicast, Mode mode, int capacity) {
         this(capacity);
         this.dest=dest;
         this.sender=sender;
         this.cluster_name=cluster_name;
         this.multicast=multicast;
-        this.oob=oob;
+        this.mode=mode;
     }
 
     public Address      dest()                   {return dest;}
@@ -66,7 +66,7 @@ public class MessageBatch implements Iterable<Message> {
     public String       clusterName()            {return cluster_name;}
     public MessageBatch clusterName(String name) {this.cluster_name=name; return this;}
     public boolean      multicast()              {return multicast;}
-    public boolean      oob()                    {return oob;}
+    public Mode         mode()                   {return mode;}
     public int          capacity()               {return messages.length;}
 
 
@@ -206,7 +206,7 @@ public class MessageBatch implements Iterable<Message> {
         T visit(int index, final Message msg, final MessageBatch batch);
     }
 
-
+    public enum Mode {OOB, REG, MIXED}
 
 
     protected class BatchIterator implements Iterator<Message> {
