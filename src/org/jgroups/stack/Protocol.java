@@ -13,10 +13,7 @@ import org.jgroups.jmx.ResourceDMBean;
 import org.jgroups.logging.Log;
 import org.jgroups.logging.LogFactory;
 import org.jgroups.protocols.TP;
-import org.jgroups.util.MessageBatch;
-import org.jgroups.util.SocketFactory;
-import org.jgroups.util.ThreadFactory;
-import org.jgroups.util.Util;
+import org.jgroups.util.*;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -62,6 +59,8 @@ public abstract class Protocol {
     protected short            id=ClassConfigurator.getProtocolId(getClass());
 
     protected final Log        log=LogFactory.getLog(this.getClass());
+
+    protected final SuppressLog<Class<?>> batching=new SuppressLog<Class<?>>(log, "BatchingNotImplemented", "SuppressMsg");
 
 
 
@@ -362,31 +361,26 @@ public abstract class Protocol {
 
     /**
      * Sends up a multiple messages in a {@link MessageBatch}. The sender of the batch is always the same, and so is the
-     * destination (null == multicast messages). All messages in a batch are either OOB messages, or regular messages,
-     * but a batch never contains both regular and OOB messages.<p/>
-     * The default processing below removes messages from the batch which have headers that correspond to the protocol
-     * handling the batch, and calls {@link #up(org.jgroups.Event)} for each removed message.<p/>
-     * Protocols should typically check if there are any messages destined for them (e.g. using
+     * destination (null == multicast messages). Messages in a batch can be OOB messages, regular messages, or mixed
+     * messages. The transport will create MessageBatches that only contain either OOB or regular messages.<p/>
+     * The default processing below sends messages up the stack individually, calling {@link #up(org.jgroups.Event)}
+     * for each message, and then the batch is dropped.<p/>
+     * Subclasses should check if there are any messages destined for them (e.g. using
      * {@link MessageBatch#getMatchingMessages(short,boolean)}), then possibly remove and process them and finally pass
      * the batch up to the next protocol. Protocols can also modify messages in place, e.g. ENCRYPT could decrypt all
      * encrypted messages in the batch, not remove them, and pass the batch up when done.
      * @param batch The message batch
      */
     public void up(MessageBatch batch) {
-        // remove all msgs with a header matching our prot ID; this potentially modifies batch
-        Collection<Message> msgs=id > 0? batch.getMatchingMessages(id, true) : null;
-        if(msgs != null && !msgs.isEmpty()) {
-            for(Message msg: msgs) {
-                try {
-                    up(new Event(Event.MSG, msg));
-                }
-                catch(Throwable t) {
-                    log.error("failed passing message up", t);
-                }
+        for(Message msg: batch) {
+            try {
+                up(new Event(Event.MSG, msg));
+            }
+            catch(Throwable t) {
+                log.error("failed passing message up", t);
             }
         }
-        if(!batch.isEmpty())
-            up_prot.up(batch);
+        batching.log(SuppressLog.Level.warn, this.getClass(), 60000, this.getClass().getSimpleName());
     }
 
 
