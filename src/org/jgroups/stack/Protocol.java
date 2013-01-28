@@ -372,6 +372,8 @@ public abstract class Protocol {
      * @param batch The message batch
      */
     public void up(MessageBatch batch) {
+        if(batch.isEmpty())
+            return;
         for(Message msg: batch) {
             try {
                 up(new Event(Event.MSG, msg));

@@ -514,6 +514,20 @@ public abstract class Discovery extends Protocol {
     }
 
 
+    public void up(MessageBatch batch) {
+        for(Iterator<Message> it=batch.iterator(); it.hasNext();) {
+            Message msg=it.next();
+            PingHeader hdr=(PingHeader)msg.getHeader(this.id);
+            if(hdr != null) {
+                it.remove(); // we consumed the message, so remove it from the batch
+                if(!is_leaving) // prevents merging back a leaving member (https://issues.jboss.org/browse/JGRP-1336)
+                    up(new Event(Event.MSG, msg));
+            }
+        }
+        if(!batch.isEmpty())
+            up_prot.up(batch);
+    }
+
     /**
      * An event is to be sent down the stack. The layer may want to examine its type and perform
      * some action on it, depending on the event's type. If the event is a message MSG, then
