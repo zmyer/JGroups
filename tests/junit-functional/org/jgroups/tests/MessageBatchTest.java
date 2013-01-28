@@ -204,6 +204,16 @@ public class MessageBatchTest {
         assert batch.size() == 3;
     }
 
+    public void testIteratorOnEmptyBatch() {
+        MessageBatch batch=new MessageBatch(3);
+        int count=0;
+        for(Message msg: batch)
+            if(msg != null)
+                count++;
+
+        assert count == 0;
+    }
+
 
 
     protected List<Message> createMessages() {

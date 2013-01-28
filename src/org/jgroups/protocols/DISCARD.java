@@ -181,8 +181,7 @@ public class DISCARD extends Protocol {
     public void up(MessageBatch batch) {
         for(Iterator<Message> it=batch.iterator(); it.hasNext();) {
             Message msg=it.next();
-            Address sender=msg.getSrc();
-            if(msg != null && shouldDropUpMessage(msg, sender))
+            if(msg != null && shouldDropUpMessage(msg, msg.getSrc()))
                 it.remove();
         }
         if(!batch.isEmpty())

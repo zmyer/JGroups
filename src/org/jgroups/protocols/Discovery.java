@@ -369,11 +369,11 @@ public abstract class Discovery extends Protocol {
                 if(hdr == null)
                     return up_prot.up(evt);
 
-                PingData data=hdr.data;
-                Address logical_addr=data != null? data.getAddress() : null;
-
                 if(is_leaving)
                     return null; // prevents merging back a leaving member (https://issues.jboss.org/browse/JGRP-1336)
+
+                PingData data=hdr.data;
+                Address logical_addr=data != null? data.getAddress() : null;
 
                 switch(hdr.type) {
 
@@ -514,19 +514,6 @@ public abstract class Discovery extends Protocol {
     }
 
 
-    public void up(MessageBatch batch) {
-        for(Iterator<Message> it=batch.iterator(); it.hasNext();) {
-            Message msg=it.next();
-            PingHeader hdr=(PingHeader)msg.getHeader(this.id);
-            if(hdr != null) {
-                it.remove(); // we consumed the message, so remove it from the batch
-                if(!is_leaving) // prevents merging back a leaving member (https://issues.jboss.org/browse/JGRP-1336)
-                    up(new Event(Event.MSG, msg));
-            }
-        }
-        if(!batch.isEmpty())
-            up_prot.up(batch);
-    }
 
     /**
      * An event is to be sent down the stack. The layer may want to examine its type and perform
