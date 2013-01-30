@@ -12,7 +12,6 @@ import java.util.NoSuchElementException;
  * Represents a message batch; multiple messages from the same sender to the same receiver(s). This class is unsynchronized.
  * @author Bela Ban
  * @since  3.3
- * @todo More efficient way to remove all messages with a given header ID, perhaps an ID --> list[headers] mapping
  */
 public class MessageBatch implements Iterable<Message> {
 
