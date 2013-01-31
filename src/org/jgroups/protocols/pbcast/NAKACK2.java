@@ -819,7 +819,8 @@ public class NAKACK2 extends Protocol implements DiagnosticsHandler.ProbeHandler
 
         if(added && log.isTraceEnabled())
             log.trace(new StringBuilder().append(local_addr).append(": received ").append(sender).append('#')
-                        .append(msgs.get(0).getVal1()).append(" - #").append(msgs.get(size-1)));
+                        .append(msgs.get(0).getVal1()).append(" - #").append(msgs.get(size-1).getVal1())
+                        .append(" (" + msgs.size() + " messages)"));
 
 
         // OOB msg is passed up. When removed, we discard it. Affects ordering: http://jira.jboss.com/jira/browse/JGRP-379
