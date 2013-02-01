@@ -176,7 +176,7 @@ public class OOBTest extends ChannelTestBase {
         discard.setDownDiscardRate(0.5);
         ProtocolStack stack=a.getProtocolStack();
         stack.insertProtocol(discard, ProtocolStack.BELOW, NAKACK2.class);
-        MyReceiver r1=new MyReceiver("C1"), r2=new MyReceiver("C2");
+        MyReceiver r1=new MyReceiver("A"), r2=new MyReceiver("B");
         a.setReceiver(r1);
         b.setReceiver(r2);
         final int NUM_MSGS=20;
@@ -189,19 +189,13 @@ public class OOBTest extends ChannelTestBase {
             if(one.size() == NUM_MSGS && two.size() == NUM_MSGS)
                 break;
             System.out.println("one size " + one.size() + ", two size " + two.size());
-            Util.sleep(1000);
             sendStableMessages(a,b);
+            Util.sleep(1000);
         }
         System.out.println("one size " + one.size() + ", two size " + two.size());
 
         stack.removeProtocol("DISCARD");
 
-        for(int i=0; i < 5; i++) {
-            if(one.size() == NUM_MSGS && two.size() == NUM_MSGS)
-                break;
-            sendStableMessages(a,b);
-            Util.sleep(500);
-        }
         System.out.println("C1 received " + one.size() + " messages ("+ NUM_MSGS + " expected)" +
                 "\nC2 received " + two.size() + " messages ("+ NUM_MSGS + " expected)");
 
@@ -299,7 +293,7 @@ public class OOBTest extends ChannelTestBase {
                             Channel sender=Util.tossWeightedCoin(0.5) ? a : b;
                             boolean oob=Util.tossWeightedCoin(oob_prob);
                             int num=counter.incrementAndGet();
-                            Message msg=new Message(dest, null, num);
+                            Message msg=new Message(dest, num);
                             if(oob)
                                msg.setFlag(Message.OOB);
                             try {
