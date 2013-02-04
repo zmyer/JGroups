@@ -261,13 +261,14 @@ public class FD extends Protocol {
         boolean updated=false;
         if(msgs != null) {
             for(Message msg: msgs) {
-                FdHeader hdr=(FdHeader)msg.getHeader(id);
+                FdHeader hdr=(FdHeader)msg.getHeader(id); // header is not null at this point
                 if(hdr.type == FdHeader.HEARTBEAT_ACK)
                     updated=true;
-                up(new Event(Event.MSG, msg));
+                else
+                    up(new Event(Event.MSG, msg)); // SUSPECT and HEARTBEAT
             }
         }
-        if(msg_counts_as_heartbeat && !updated && batch.sender() != null)
+        if(updated || (msg_counts_as_heartbeat && batch.sender() != null))
             updateTimestamp(batch.sender());
         if(!batch.isEmpty())
             up_prot.up(batch);
