@@ -73,6 +73,27 @@ public class MessageBatchTest {
         assert batch.get(4) == msg;
     }
 
+
+    public void testRemove() {
+        List<Message> msgs=createMessages();
+        MessageBatch batch=new MessageBatch(msgs);
+        int prev_size=batch.size();
+        batch.remove(1).remove(4);
+        System.out.println("batch = " + batch);
+        assert batch.size() == prev_size - 2;
+
+        batch.removeAll();
+        System.out.println("batch = " + batch);
+        assert batch.isEmpty();
+
+        for(Message msg: msgs)
+            batch.add(msg);
+        System.out.println("batch = " + batch);
+        assert batch.size() == prev_size;
+        assert batch.capacity() == prev_size;
+    }
+
+
     public void testAdd() {
         MessageBatch batch=new MessageBatch(3);
         List<Message> msgs=createMessages();

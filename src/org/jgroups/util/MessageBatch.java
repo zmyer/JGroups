@@ -95,6 +95,13 @@ public class MessageBatch implements Iterable<Message> {
         return this;
     }
 
+    public MessageBatch removeAll() {
+        for(int i=0; i < messages.length; i++)
+            messages[i]=null;
+        index=0;
+        return this;
+    }
+
     /** Removes and returns all messages which have a header with ID == id */
     public Collection<Message> getMatchingMessages(final short id, final boolean remove) {
         return map(new Visitor<Message>() {
