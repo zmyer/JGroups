@@ -1165,7 +1165,7 @@ public class NAKACK2 extends Protocol implements DiagnosticsHandler.ProbeHandler
                 Table<Message> buf=xmit_table.remove(member);
                 if(buf != null) {
                     if(log.isDebugEnabled())
-                        log.debug("removed " + member + " from xmit_table (not member anymore)");
+                        log.debug(local_addr + ": removed " + member + " from xmit_table (not member anymore)");
                 }
             }
         }
