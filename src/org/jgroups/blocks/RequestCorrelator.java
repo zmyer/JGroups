@@ -336,21 +336,16 @@ public class RequestCorrelator {
      * @return true if the message was consumed, don't pass it further up, else false
      */
     public boolean receiveMessage(Message msg) {
-
-        // i. If header is not an instance of request correlator header, ignore
-        //
-        // ii. Check whether the message was sent by a request correlator with
-        // the same name (there may be multiple request correlators in the same
-        // protocol stack...)
         Header hdr=(Header)msg.getHeader(this.id);
         if(hdr == null)
             return false;
 
+        // Check if the message was sent by a request correlator with the same name;
+        // there may be multiple request correlators in the same protocol stack
         if(hdr.corrId != this.id) {
-            if(log.isTraceEnabled()) {
+            if(log.isTraceEnabled())
                 log.trace(new StringBuilder("id of request correlator header (").append(hdr.corrId).
                           append(") is different from ours (").append(this.id).append("). Msg not accepted, passed up"));
-            }
             return false;
         }
 
@@ -379,13 +374,6 @@ public class RequestCorrelator {
         // <tt>RspCollector</tt> that a reply has been received
         switch(hdr.type) {
             case Header.REQ:
-                if(request_handler == null) {
-                    if(log.isWarnEnabled()) {
-                        log.warn("there is no request handler installed to deliver request");
-                    }
-                    return true;
-                }
-
                 handleRequest(msg, hdr);
                 break;
 
@@ -487,7 +475,6 @@ public class RequestCorrelator {
             threw_exception=true;
             retval=t;
         }
-
         if(hdr.rsp_expected)
             sendReply(req, hdr.id, retval, threw_exception);
     }

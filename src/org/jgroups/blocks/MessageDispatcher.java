@@ -443,44 +443,19 @@ public class MessageDispatcher implements AsyncRequestHandler, ChannelListener {
     /* -------------------- AsyncRequestHandler Interface --------------------- */
     public void handle(Message request, Response response) throws Exception {
         if(req_handler != null) {
-            if(req_handler instanceof AsyncRequestHandler) {
-                try {
-                    ((AsyncRequestHandler)req_handler).handle(request, response);
-                }
-                catch(Throwable t) {
-                    if(response != null)
-                        response.send(t, true);
-                    else
-                        log.error(local_addr + ": failed handling request asynchronously: " + t);
-                }
-            }
+            if(req_handler instanceof AsyncRequestHandler)
+                ((AsyncRequestHandler)req_handler).handle(request, response);
             else {
-                Object retval=null;
-                boolean is_exception=false;
-                try {
-                    retval=handle(request);
-                }
-                catch(Throwable t) {
-                    retval=t;
-                    is_exception=true;
-                }
+                Object retval=req_handler.handle(request);
                 if(response != null)
-                    response.send(retval, is_exception);
+                    response.send(retval, false);
             }
             return;
         }
 
-        Object retval=null;
-        boolean is_exception=false;
-        try {
-            retval=handle(request);
-        }
-        catch(Throwable t) {
-            retval=t;
-            is_exception=true;
-        }
+        Object retval=handle(request);
         if(response != null)
-            response.send(retval, is_exception);
+            response.send(retval, false);
     }
     /* ------------------ End of AsyncRequestHandler Interface----------------- */
 
