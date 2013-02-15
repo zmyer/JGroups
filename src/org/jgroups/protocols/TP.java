@@ -1152,28 +1152,26 @@ public abstract class TP extends Protocol {
             return handleDownEvent(evt);
 
         Message msg=(Message)evt.getArg();
-        if(header != null) {
-            // added patch by Roland Kurmann (March 20 2003)
-            // msg.putHeader(this.id, new TpHeader(channel_name));
-            msg.putHeaderIfAbsent(this.id, header);
-        }
+        if(header != null)
+            msg.putHeaderIfAbsent(this.id, header); // added patch by Roland Kurmann (March 20 2003)
 
         if(!isSingleton())
             setSourceAddress(msg); // very important !! listToBuffer() will fail with a null src address !!
         if(log.isTraceEnabled())
             log.trace("sending msg to " + msg.getDest() + ", src=" + msg.getSrc() + ", headers are " + msg.printHeaders());
 
-        // Don't send if destination is local address. Instead, switch dst and src and send it up the stack.
-        // If multicast message, loopback a copy directly to us (but still multicast). Once we receive this,
-        // we will discard our own multicast message
+
         Address dest=msg.getDest();
         if(dest instanceof PhysicalAddress) {
             // We can modify the message because it won't get retransmitted. The only time we have a physical address
             // as dest is when TCPPING sends the initial discovery requests to initial_hosts: this is below UNICAST,
             // so no retransmission
-            msg.setDest(null);
+            msg.dest(null).setFlag(Message.Flag.DONT_BUNDLE);
         }
 
+        // Don't send if destination is local address. Instead, switch dst and src and send it up the stack.
+        // If multicast message, loopback a copy directly to us (but still multicast). Once we receive this,
+        // we will discard our own multicast message
         final boolean multicast=dest == null;
         if(loopback && (multicast || dest.equals(msg.getSrc()))) {
 
