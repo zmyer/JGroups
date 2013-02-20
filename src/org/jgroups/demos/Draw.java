@@ -428,29 +428,33 @@ public class Draw extends ReceiverAdapter implements ActionListener, ChannelList
                 for(Map.Entry<Point,Color> entry: state.entrySet()) {
                     Point point=entry.getKey();
                     Color col=entry.getValue();
+                    // System.out.println(point + ": " + col);
                     dos.writeInt(point.x);
                     dos.writeInt(point.y);
                     dos.writeInt(col.getRGB());
                 }
                 dos.flush();
+
+                System.out.println(state.size() + " elements:");
             }
         }
 
 
         public void readState(InputStream instream) throws IOException {
             DataInputStream in=new DataInputStream(instream);
-            Map<Point,Color> new_state=new HashMap<Point,Color>();
+            Map<Point,Color> new_state=new LinkedHashMap<Point,Color>();
             int num=in.readInt();
             for(int i=0; i < num; i++) {
                 Point point=new Point(in.readInt(), in.readInt());
                 Color col=new Color(in.readInt());
+                // System.out.println(point + ": " + col);
                 new_state.put(point, col);
             }
 
             synchronized(state) {
                 state.clear();
                 state.putAll(new_state);
-                System.out.println("read state: " + state.size() + " entries");
+                System.out.println("read state: " + state.size() + " entries (num=" + num + ")");
                 createOffscreenImage(true);
             }
         }
@@ -574,6 +578,27 @@ public class Draw extends ReceiverAdapter implements ActionListener, ChannelList
         }
 
     }
+
+
+   /* protected class MyPoint extends Point implements Comparable<Point> {
+        private static final long serialVersionUID=4171855995316340839L;
+
+        public MyPoint() {
+        }
+
+        public MyPoint(Point p) {
+            super(p);
+        }
+
+        public MyPoint(int x, int y) {
+            super(x,y);
+        }
+
+
+        public int compareTo(Point o) {
+            return x > o.x? 1 : x < o.x? -1 : y > o.y? 1 : y < o.y ? -1 :0;
+        }
+    }*/
 
 }
 

@@ -38,11 +38,9 @@ public class LargeStateTransferTest extends ChannelTestBase {
 
     @BeforeMethod
     protected void setUp() throws Exception {
-        provider=createChannel(true, 2);
-        provider.setName("provider");
+        provider=createChannel(true, 2, "provider");
         modifyStack(provider);
-        requester=createChannel(provider);
-        requester.setName("requester");
+        requester=createChannel(provider, "requester");
         setOOBPoolSize(provider, requester);
     }
 
@@ -95,6 +93,7 @@ public class LargeStateTransferTest extends ChannelTestBase {
             TP transport=channel.getProtocolStack().getTransport();
             transport.setOOBThreadPoolMinThreads(1);
             transport.setOOBThreadPoolMaxThreads(2);
+            transport.setOOBThreadPoolQueueEnabled(false);
         }
     }
 

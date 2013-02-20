@@ -403,17 +403,20 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
 
 
     public void up(MessageBatch batch) {
+        if(batch.dest() == null) { // not a unicast batch
+            up_prot.up(batch);
+            return;
+        }
+
         int                       size=batch.size();
         Map<Short,List<Message>>  msgs=new TreeMap<Short,List<Message>>(); // map of messages, keyed by conn-id
-
-        for(Iterator<Message> it=batch.iterator(); it.hasNext();) {
-            final Message msg=it.next();
+        for(Message msg: batch) {
             if(msg == null || msg.isFlagSet(Message.Flag.NO_RELIABILITY))
                 continue;
             Header hdr=(Header)msg.getHeader(id);
             if(hdr == null)
                 continue;
-            it.remove(); // remove the message from the batch, so it won't be passed up the stack
+            batch.remove(msg); // remove the message from the batch, so it won't be passed up the stack
 
             if(hdr.type != Header.DATA) {
                 try {
@@ -631,7 +634,7 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
 
         final AtomicBoolean processing=win.getProcessing();
         if(processing.compareAndSet(false, true)) {
-            removeAndDeliver(processing, win);
+            removeAndDeliver(processing, win, sender);
             entry.sendAck(true); // will be sent delayed (on the next xmit_interval)
         }
     }
@@ -686,7 +689,7 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
                 else
                     entry.sendAck(true);
 
-                removeAndDeliver(processing, win);
+                removeAndDeliver(processing, win, sender);
             }
         }
     }
@@ -701,7 +704,7 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
      * delivery of P1, Q1, Q2, P2: FIFO (implemented by UNICAST) says messages need to be delivered in the
      * order in which they were sent
      */
-    protected int removeAndDeliver(final AtomicBoolean processing, Table<Message> win) {
+    protected int removeAndDeliver(final AtomicBoolean processing, Table<Message> win, Address sender) {
         int retval=0;
         boolean released_processing=false;
         try {
@@ -712,7 +715,34 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
                     return retval;
                 }
 
-                for(Message m: list) {
+
+                MessageBatch batch=new MessageBatch(local_addr, sender, null, false, list);
+                for(Message msg_to_deliver: batch) {
+                    // discard OOB msg: it has already been delivered (http://jira.jboss.com/jira/browse/JGRP-377)
+                    if(msg_to_deliver.isFlagSet(Message.OOB))
+                        batch.remove(msg_to_deliver);
+                }
+
+                try {
+                    if(log.isTraceEnabled()) {
+                        Message first=batch.first(), last=batch.last();
+                        StringBuilder sb=new StringBuilder(local_addr + ": delivering");
+                        if(first != null && last != null) {
+                            Header hdr1=(Header)first.getHeader(id), hdr2=(Header)last.getHeader(id);
+                            sb.append(" #").append(hdr1.seqno).append(" - #").append(hdr2.seqno);
+                        }
+                        sb.append(" (" + batch.size()).append(" messages)");
+                        log.trace(sb);
+                    }
+                    up_prot.up(batch);
+                }
+                catch(Throwable t) {
+                    log.error("failed to deliver batch " + batch, t);
+                }
+
+
+
+                /* for(Message m: list) {
                     retval++;
                     // discard OOB msg: it has already been delivered (http://jira.jboss.com/jira/browse/JGRP-377)
                     if(m.isFlagSet(Message.OOB))
@@ -723,7 +753,7 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
                     catch(Throwable t) {
                         log.error("couldn't deliver message " + m, t);
                     }
-                }
+                }*/
             }
         }
         finally {

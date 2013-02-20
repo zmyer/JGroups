@@ -39,7 +39,8 @@ public class STATE extends StreamingStateTransfer {
     */
 
     /** If use_default_transport is true, we consume bytes off of this blocking queue. Used on the state
-     * <em>requester</em> side only */
+     * <em>requester</em> side only. Note that we cannot use a PipedInputStream as we have multiple writer threads
+     * pushing data into the input stream */
     protected volatile BlockingInputStream input_stream=null;
 
 
