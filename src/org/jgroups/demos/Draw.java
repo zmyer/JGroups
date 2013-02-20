@@ -422,39 +422,36 @@ public class Draw extends ReceiverAdapter implements ActionListener, ChannelList
             if(state == null)
                 return;
             synchronized(state) {
-                DataOutputStream dos=new DataOutputStream(new BufferedOutputStream(outstream, 4096));
+                DataOutputStream dos=new DataOutputStream(new BufferedOutputStream(outstream));
                 // DataOutputStream dos=new DataOutputStream(outstream);
                 dos.writeInt(state.size());
                 for(Map.Entry<Point,Color> entry: state.entrySet()) {
                     Point point=entry.getKey();
                     Color col=entry.getValue();
-                    // System.out.println(point + ": " + col);
                     dos.writeInt(point.x);
                     dos.writeInt(point.y);
                     dos.writeInt(col.getRGB());
                 }
                 dos.flush();
-
-                System.out.println(state.size() + " elements:");
+                System.out.println("wrote " + state.size() + " elements");
             }
         }
 
 
         public void readState(InputStream instream) throws IOException {
-            DataInputStream in=new DataInputStream(instream);
+            DataInputStream in=new DataInputStream(new BufferedInputStream(instream));
             Map<Point,Color> new_state=new LinkedHashMap<Point,Color>();
             int num=in.readInt();
             for(int i=0; i < num; i++) {
                 Point point=new Point(in.readInt(), in.readInt());
                 Color col=new Color(in.readInt());
-                // System.out.println(point + ": " + col);
                 new_state.put(point, col);
             }
 
             synchronized(state) {
                 state.clear();
                 state.putAll(new_state);
-                System.out.println("read state: " + state.size() + " entries (num=" + num + ")");
+                System.out.println("read " + state.size() + " elements");
                 createOffscreenImage(true);
             }
         }
