@@ -262,31 +262,16 @@ public class STABLE extends Protocol {
         }
     }
 
-    @ManagedAttribute int num_stable_batch_events=0;
-
-    @ManagedAttribute int num_stability_batch_events=0;
-
 
     public void up(MessageBatch batch) {
         StableHeader hdr;
 
-        int stable=0, stability=0;
         for(Message msg: batch) { // remove and handle messages with flow control headers (STABLE_GOSSIP, STABILITY)
             if((hdr=(StableHeader)msg.getHeader(id)) != null) {
                 batch.remove(msg);
-                if(hdr.type == StableHeader.STABLE_GOSSIP)
-                    stable++;
-                if(hdr.type == StableHeader.STABILITY)
-                    stability++;
-
                 handleUpEvent(hdr, batch.sender());
             }
         }
-
-        if(stable > 1)
-            num_stable_batch_events++;
-        if(stability > 1)
-            num_stability_batch_events++;
 
 
         // only if message counting is on, and only for multicast messages (http://jira.jboss.com/jira/browse/JGRP-233)
