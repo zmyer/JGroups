@@ -220,7 +220,7 @@ public class RSVP extends Protocol {
     protected void sendResponse(Address dest, short id) {
         try {
             Message msg=new Message(dest);
-            msg.setFlag(Message.Flag.RSVP, Message.Flag.OOB);
+            msg.setFlag(Message.Flag.RSVP, Message.Flag.DONT_BUNDLE);
             RsvpHeader hdr=new RsvpHeader(RsvpHeader.RSP,id);
             msg.putHeader(this.id, hdr);
             if(log.isTraceEnabled())
