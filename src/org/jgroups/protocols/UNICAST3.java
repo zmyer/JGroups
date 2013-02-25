@@ -739,21 +739,6 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
                 catch(Throwable t) {
                     log.error("failed to deliver batch " + batch, t);
                 }
-
-
-
-                /* for(Message m: list) {
-                    retval++;
-                    // discard OOB msg: it has already been delivered (http://jira.jboss.com/jira/browse/JGRP-377)
-                    if(m.isFlagSet(Message.OOB))
-                        continue;
-                    try {
-                        up_prot.up(new Event(Event.MSG, m));
-                    }
-                    catch(Throwable t) {
-                        log.error("couldn't deliver message " + m, t);
-                    }
-                }*/
             }
         }
         finally {
@@ -1265,7 +1250,7 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
             Table<Message> win=val != null? val.received_msgs : null;
 
             // send acks if needed
-            if(win != null && val.sendAck()) // sendAck() sets send_ack to false
+            if(win != null && val.sendAck()) // sendAck() resets send_ack to false
                 sendAck(target, win.getHighestDelivered(), val.recv_conn_id);
 
             // retransmit missing messages
