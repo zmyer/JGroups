@@ -224,7 +224,7 @@ public class MessageBatch implements Iterable<Message> {
 
     /** Iterator which iterates only over non-null messages, skipping null messages */
     public Iterator<Message> iterator() {
-        return new BatchIterator();
+        return new BatchIterator(index);
     }
 
     public String toString() {
@@ -264,13 +264,18 @@ public class MessageBatch implements Iterable<Message> {
 
     /** Iterates over <em>non-null</em> elements of a batch, skipping null elements */
     protected class BatchIterator implements Iterator<Message> {
-        protected int current_index=-1;
+        protected int       current_index=-1;
+        protected final int saved_index; // index at creation time of the iterator
+
+        public BatchIterator(int saved_index) {
+            this.saved_index=saved_index;
+        }
 
         public boolean hasNext() {
             // skip null elements
-            while(current_index +1 < index && messages[current_index+1] == null)
+            while(current_index +1 < saved_index && messages[current_index+1] == null)
                 current_index++;
-            return current_index +1 < index;
+            return current_index +1 < saved_index;
         }
 
         public Message next() {

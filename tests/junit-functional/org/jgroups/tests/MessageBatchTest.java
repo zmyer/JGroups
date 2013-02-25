@@ -336,6 +336,41 @@ public class MessageBatchTest {
     }
 
 
+    public void testIterationWithAddition() {
+        List<Message> msgs=createMessages();
+        MessageBatch batch=new MessageBatch(msgs);
+
+        int count=0;
+        for(Message msg: batch) {
+            count++;
+            if(count % 2 == 0)
+                batch.add(new Message());
+        }
+
+        System.out.println("batch = " + batch);
+        assert count == msgs.size() : "the added messages should *not* have been included";
+
+    }
+
+
+    public void testIterationWithAddition2() {
+        List<Message> msgs=createMessages();
+        MessageBatch batch=new MessageBatch(msgs);
+
+        int count=0;
+        for(Iterator<Message> it=batch.iterator(); it.hasNext();) {
+            Message msg=it.next();
+            count++;
+            if(count % 2 == 0)
+                batch.add(new Message());
+        }
+
+        System.out.println("batch = " + batch);
+        assert count == msgs.size() : "the added messages should *not* have been included";
+
+    }
+
+
     protected MessageBatch remove(MessageBatch batch, int ... indices) {
         Message[] msgs=batch.array();
         for(int index: indices)
