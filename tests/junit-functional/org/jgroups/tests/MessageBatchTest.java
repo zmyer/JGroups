@@ -14,6 +14,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.util.*;
+import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * Tests {@link org.jgroups.util.MessageBatch}
@@ -118,6 +119,25 @@ public class MessageBatchTest {
 
         batch.replace(get(batch, 5), null);
         assert batch.size() == msgs.size() -1;
+    }
+
+    public void testReplace3() {
+        MessageBatch batch=new MessageBatch(1).add(new Message(null, "Bela")).add(new Message(null, "Michi"))
+          .add(new Message(null, "Nicole"));
+        System.out.println("batch = " + batch);
+        for(Message msg: batch) {
+            if("Michi".equals(msg.getObject())) {
+                msg.setObject("Michelle");
+                batch.replace(msg, msg); // tests replacing the message with itself (with changed buffer though)
+            }
+        }
+        Queue<String> names=new LinkedBlockingQueue<String>(Arrays.asList("Bela", "Michelle", "Nicole"));
+        for(Message msg: batch) {
+            String expected=names.poll();
+            String name=(String)msg.getObject();
+            System.out.println("found=" + name + ", expected=" + expected);
+            assert name.equals(expected) : "found=" + name + ", expected=" + expected;
+        }
     }
 
 
