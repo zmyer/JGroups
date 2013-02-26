@@ -43,7 +43,7 @@ public class FCTest {
         ch=new JChannel(new SHARED_LOOPBACK().setValue("thread_pool_rejection_policy", "run").setValue("loopback", true),
                         new PING(),
                         new NAKACK2().setValue("use_mcast_xmit", false),
-                        new UNICAST2(),
+                        new UNICAST3(),
                         new STABLE().setValue("max_bytes", 50000),
                         new GMS().setValue("print_local_addr", false),
                         flow_control_prot,
