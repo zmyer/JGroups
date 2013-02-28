@@ -64,7 +64,7 @@ public class Message implements Streamable {
         NO_TOTAL_ORDER((short)(1 << 5)),    // bypass total order (e.g. SEQUENCER)
         NO_RELAY(      (short)(1 << 6)),    // bypass relaying (RELAY)
         RSVP(          (short)(1 << 7)),    // ack of a multicast (https://issues.jboss.org/browse/JGRP-1389)
-        INTERNAL(      (short)(1 << 8));
+        INTERNAL(      (short)(1 << 8));    // for internal use by JGroups only, don't use !
 
         final short value;
         Flag(short value) {this.value=value;}
