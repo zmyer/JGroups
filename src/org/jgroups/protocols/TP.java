@@ -1442,7 +1442,7 @@ public abstract class TP extends Protocol {
     /** Serializes and sends a message. This method is not reentrant */
     protected void send(Message msg, Address dest, boolean multicast) throws Exception {
         // bundle all messages except when tagged with DONT_BUNDLE
-        if(!msg.isFlagSet(Message.DONT_BUNDLE)) {
+        if(!msg.isFlagSet(Message.Flag.DONT_BUNDLE)) {
             bundler.send(msg);
             return;
         }

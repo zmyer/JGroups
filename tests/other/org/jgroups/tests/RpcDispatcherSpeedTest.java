@@ -114,7 +114,7 @@ public class RpcDispatcherSpeedTest implements MembershipListener {
 
         measure_method_call=new MethodCall((short)0);
         RequestOptions opts=new RequestOptions(request_type, TIMEOUT, false, null,
-                                               Message.DONT_BUNDLE, Message.NO_FC);
+                                               Message.Flag.DONT_BUNDLE, Message.NO_FC);
         if(oob)
             opts.setFlags(Message.Flag.OOB);
 

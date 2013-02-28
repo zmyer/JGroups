@@ -71,14 +71,14 @@ public class Message implements Streamable {
         public short value() {return value;}
     }
 
-    public static final Flag OOB=Flag.OOB;
-    public static final Flag DONT_BUNDLE=Flag.DONT_BUNDLE;
-    public static final Flag NO_FC=Flag.NO_FC;
-    public static final Flag SCOPED=Flag.SCOPED;
-    public static final Flag NO_RELIABILITY=Flag.NO_RELIABILITY;
-    public static final Flag NO_TOTAL_ORDER=Flag.NO_TOTAL_ORDER;
-    public static final Flag NO_RELAY=Flag.NO_RELAY;
-    public static final Flag RSVP=Flag.RSVP;
+    @Deprecated public static final Flag OOB=Flag.OOB;
+    @Deprecated public static final Flag DONT_BUNDLE=Flag.DONT_BUNDLE;
+    @Deprecated public static final Flag NO_FC=Flag.NO_FC;
+    @Deprecated public static final Flag SCOPED=Flag.SCOPED;
+    @Deprecated public static final Flag NO_RELIABILITY=Flag.NO_RELIABILITY;
+    @Deprecated public static final Flag NO_TOTAL_ORDER=Flag.NO_TOTAL_ORDER;
+    @Deprecated public static final Flag NO_RELAY=Flag.NO_RELAY;
+    @Deprecated public static final Flag RSVP=Flag.RSVP;
 
 
 
@@ -91,7 +91,8 @@ public class Message implements Streamable {
 
         public short value() {return value;}
     }
-    
+
+    @Deprecated
     public static final TransientFlag OOB_DELIVERED=TransientFlag.OOB_DELIVERED; // OOB which has already been delivered up the stack
 
 

@@ -176,7 +176,7 @@ public class UnicastTestRpc extends ReceiverAdapter {
         
         // The first call needs to be synchronous with OOB !
         RequestOptions options=new RequestOptions(ResponseMode.GET_ALL, 15000, anycasting, null);
-        if(sync) options.setFlags(Message.DONT_BUNDLE);
+        if(sync) options.setFlags(Message.Flag.DONT_BUNDLE);
         if(oob) options.setFlags(Message.Flag.OOB);
 
         options.setMode(sync? ResponseMode.GET_ALL : ResponseMode.GET_NONE);

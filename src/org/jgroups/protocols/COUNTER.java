@@ -434,7 +434,7 @@ public class COUNTER extends Protocol {
             Message msg=new Message(dest, null, buffer);
             msg.putHeader(id, new CounterHeader());
             if(bypass_bundling)
-                msg.setFlag(Message.DONT_BUNDLE);
+                msg.setFlag(Message.Flag.DONT_BUNDLE);
             if(log.isTraceEnabled())
                 log.trace("[" + local_addr + "] --> [" + (dest == null? "ALL" : dest) + "] " + req);
 
@@ -452,7 +452,7 @@ public class COUNTER extends Protocol {
             Message rsp_msg=new Message(dest, null, buffer);
             rsp_msg.putHeader(id, new CounterHeader());
             if(bypass_bundling)
-                rsp_msg.setFlag(Message.DONT_BUNDLE);
+                rsp_msg.setFlag(Message.Flag.DONT_BUNDLE);
 
             if(log.isTraceEnabled())
                 log.trace("[" + local_addr + "] --> [" + dest + "] " + rsp);
@@ -483,7 +483,7 @@ public class COUNTER extends Protocol {
             Message rsp_msg=new Message(dest, null, buffer);
             rsp_msg.putHeader(id, new CounterHeader());
             if(bypass_bundling)
-                rsp_msg.setFlag(Message.DONT_BUNDLE);
+                rsp_msg.setFlag(Message.Flag.DONT_BUNDLE);
             down_prot.down(new Event(Event.MSG, rsp_msg));
         }
         catch(Exception ex) {

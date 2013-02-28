@@ -904,7 +904,7 @@ abstract public class Executing extends Protocol {
         Message msg=new Message(dest, null, req);
         msg.putHeader(id, new ExecutorHeader());
         if(bypass_bundling)
-            msg.setFlag(Message.DONT_BUNDLE);
+            msg.setFlag(Message.Flag.DONT_BUNDLE);
         if(log.isTraceEnabled())
             log.trace("[" + local_addr + "] --> [" + (dest == null? "ALL" : dest) + "] " + req);
         try {
@@ -921,7 +921,7 @@ abstract public class Executing extends Protocol {
         Message msg=new Message(dest, null, req);
         msg.putHeader(id, new ExecutorHeader());
         if(bypass_bundling)
-            msg.setFlag(Message.DONT_BUNDLE);
+            msg.setFlag(Message.Flag.DONT_BUNDLE);
         if(log.isTraceEnabled())
             log.trace("[" + local_addr + "] --> [" + (dest == null? "ALL" : dest) + "] " + req);
         try {

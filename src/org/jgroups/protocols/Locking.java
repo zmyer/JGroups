@@ -363,7 +363,7 @@ abstract public class Locking extends Protocol {
         Message msg=new Message(dest, null, req);
         msg.putHeader(id, new LockingHeader());
         if(bypass_bundling)
-            msg.setFlag(Message.DONT_BUNDLE);
+            msg.setFlag(Message.Flag.DONT_BUNDLE);
         if(log.isTraceEnabled())
             log.trace("[" + local_addr + "] --> [" + (dest == null? "ALL" : dest) + "] " + req);
         try {
@@ -380,7 +380,7 @@ abstract public class Locking extends Protocol {
         Message lock_granted_rsp=new Message(dest.getAddress(), null, rsp);
         lock_granted_rsp.putHeader(id, new LockingHeader());
         if(bypass_bundling)
-            lock_granted_rsp.setFlag(Message.DONT_BUNDLE);
+            lock_granted_rsp.setFlag(Message.Flag.DONT_BUNDLE);
 
         if(log.isTraceEnabled())
             log.trace("[" + local_addr + "] --> [" + dest.getAddress() + "] " + rsp);
@@ -399,7 +399,7 @@ abstract public class Locking extends Protocol {
         Message lock_granted_rsp=new Message(dest.getAddress(), null, rsp);
         lock_granted_rsp.putHeader(id, new LockingHeader());
         if(bypass_bundling)
-            lock_granted_rsp.setFlag(Message.DONT_BUNDLE);
+            lock_granted_rsp.setFlag(Message.Flag.DONT_BUNDLE);
 
         if(log.isTraceEnabled())
             log.trace("[" + local_addr + "] --> [" + dest.getAddress() + "] " + rsp);
