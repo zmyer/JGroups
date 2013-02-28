@@ -260,7 +260,7 @@ public abstract class Discovery extends Protocol {
         Collection<PhysicalAddress> cluster_members=fetchClusterMembers(cluster_name);
         if(cluster_members == null) {
             // multicast msg
-            Message msg=new Message(null).setFlag(Message.OOB, Message.Flag.DONT_BUNDLE).putHeader(getId(), hdr);
+            Message msg=new Message(null).setFlag(Message.Flag.OOB, Message.Flag.DONT_BUNDLE).putHeader(getId(), hdr);
             sendMcastDiscoveryRequest(msg);
         }
         else {
@@ -281,7 +281,7 @@ public abstract class Discovery extends Protocol {
                 for(final Address addr: cluster_members) {
                     if(addr.equals(physical_addr)) // no need to send the request to myself
                         continue;
-                    final Message msg=new Message(addr).setFlag(Message.OOB, Message.Flag.DONT_BUNDLE).putHeader(this.id, hdr);
+                    final Message msg=new Message(addr).setFlag(Message.Flag.OOB, Message.Flag.DONT_BUNDLE).putHeader(this.id, hdr);
                     if(log.isTraceEnabled())
                         log.trace(local_addr + ": sending discovery request to " + msg.getDest());
                     if(!sendDiscoveryRequestsInParallel()) {
@@ -634,7 +634,7 @@ public abstract class Discovery extends Protocol {
             data=new PingData(logical_addr, null, view_id, is_server, logical_name, physical_addrs);
         }
 
-        final Message rsp_msg=new Message(sender).setFlag(Message.OOB);
+        final Message rsp_msg=new Message(sender).setFlag(Message.Flag.OOB);
         final PingHeader rsp_hdr=new PingHeader(PingHeader.GET_MBRS_RSP, data);
         rsp_msg.putHeader(this.id, rsp_hdr);
 

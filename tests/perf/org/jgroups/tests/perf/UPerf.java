@@ -364,7 +364,7 @@ public class UPerf extends ReceiverAdapter {
     /** Kicks off the benchmark on all cluster nodes */
     void startBenchmark() throws Throwable {
         RequestOptions options=new RequestOptions(ResponseMode.GET_ALL, 0);
-        options.setFlags(Message.OOB, Message.DONT_BUNDLE, Message.NO_FC);
+        options.setFlags(Message.Flag.OOB, Message.DONT_BUNDLE, Message.NO_FC);
         RspList<Object> responses=disp.callRemoteMethods(null, new MethodCall(START), options);
 
         long total_reqs=0;
@@ -485,8 +485,8 @@ public class UPerf extends ReceiverAdapter {
             put_options.setFlags(Message.DONT_BUNDLE);
 
             if(oob) {
-                get_options.setFlags(Message.OOB);
-                put_options.setFlags(Message.OOB);
+                get_options.setFlags(Message.Flag.OOB);
+                put_options.setFlags(Message.Flag.OOB);
             }
             if(sync) {
                 get_options.setFlags(Message.DONT_BUNDLE, Message.NO_FC);

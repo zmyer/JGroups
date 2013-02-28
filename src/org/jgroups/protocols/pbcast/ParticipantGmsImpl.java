@@ -173,7 +173,7 @@ public class ParticipantGmsImpl extends ServerGmsImpl {
 
     void sendLeaveMessage(Address coord, Address mbr) {
         Message msg=new Message(coord, null, null);
-        msg.setFlag(Message.OOB);
+        msg.setFlag(Message.Flag.OOB);
         GMS.GmsHeader hdr=new GMS.GmsHeader(GMS.GmsHeader.LEAVE_REQ, mbr);
 
         msg.putHeader(gms.getId(), hdr);

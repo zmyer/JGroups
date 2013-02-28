@@ -636,7 +636,7 @@ public class UNICAST2 extends Protocol implements AgeOutCache.Handler<Address> {
         Message stable_msg=new Message(dest, null, null);
         Unicast2Header hdr=Unicast2Header.createStableHeader(conn_id, hd, hr);
         stable_msg.putHeader(this.id, hdr);
-        stable_msg.setFlag(Message.OOB);
+        stable_msg.setFlag(Message.Flag.OOB);
         if(log.isTraceEnabled()) {
             StringBuilder sb=new StringBuilder();
             sb.append(local_addr).append(" --> STABLE(").append(dest).append(": ")
@@ -729,7 +729,7 @@ public class UNICAST2 extends Protocol implements AgeOutCache.Handler<Address> {
     public void retransmit(SeqnoList missing, Address sender) {
         Unicast2Header hdr=Unicast2Header.createXmitReqHeader();
         Message retransmit_msg=new Message(sender, null, missing);
-        retransmit_msg.setFlag(Message.OOB);
+        retransmit_msg.setFlag(Message.Flag.OOB);
         if(log.isTraceEnabled())
             log.trace(local_addr + ": sending XMIT_REQ (" + missing + ") to " + sender);
         retransmit_msg.putHeader(this.id, hdr);
@@ -786,7 +786,7 @@ public class UNICAST2 extends Protocol implements AgeOutCache.Handler<Address> {
 
         // An OOB message is passed up immediately. Later, when remove() is called, we discard it. This affects ordering !
         // http://jira.jboss.com/jira/browse/JGRP-377
-        if(msg.isFlagSet(Message.OOB) && added) {
+        if(msg.isFlagSet(Message.Flag.OOB) && added) {
             try {
                 up_prot.up(evt);
             }
@@ -830,7 +830,7 @@ public class UNICAST2 extends Protocol implements AgeOutCache.Handler<Address> {
 
                 // An OOB message is passed up immediately. Later, when remove() is called, we discard it. This affects ordering !
                 // http://jira.jboss.com/jira/browse/JGRP-377
-                if(msg.isFlagSet(Message.OOB) && msg_added) {
+                if(msg.isFlagSet(Message.Flag.OOB) && msg_added) {
                     try {
                         up_prot.up(new Event(Event.MSG, msg));
                     }
@@ -899,7 +899,7 @@ public class UNICAST2 extends Protocol implements AgeOutCache.Handler<Address> {
                 MessageBatch batch=new MessageBatch(local_addr, sender, null, false, msgs);
                 for(Message msg_to_deliver: batch) {
                     // discard OOB msg: it has already been delivered (http://jira.jboss.com/jira/browse/JGRP-377)
-                    if(msg_to_deliver.isFlagSet(Message.OOB))
+                    if(msg_to_deliver.isFlagSet(Message.Flag.OOB))
                         batch.remove(msg_to_deliver);
                 }
 
@@ -924,7 +924,7 @@ public class UNICAST2 extends Protocol implements AgeOutCache.Handler<Address> {
 
                 /*for(Message m: msgs) {
                     // discard OOB msg: it has already been delivered (http://jira.jboss.com/jira/browse/JGRP-377)
-                    if(m.isFlagSet(Message.OOB))
+                    if(m.isFlagSet(Message.Flag.OOB))
                         continue;
                     try {
                         up_prot.up(new Event(Event.MSG, m));
@@ -1091,7 +1091,7 @@ public class UNICAST2 extends Protocol implements AgeOutCache.Handler<Address> {
 
     protected void sendRequestForFirstSeqno(Address dest, long seqno_received) {
         Message msg=new Message(dest);
-        msg.setFlag(Message.OOB);
+        msg.setFlag(Message.Flag.OOB);
         Unicast2Header hdr=Unicast2Header.createSendFirstSeqnoHeader(seqno_received);
         msg.putHeader(this.id, hdr);
         if(log.isTraceEnabled())
@@ -1100,7 +1100,7 @@ public class UNICAST2 extends Protocol implements AgeOutCache.Handler<Address> {
     }
 
     protected void sendAck(Address dest, long seqno, short conn_id) {
-        Message msg=new Message(dest).setFlag(Message.OOB).putHeader(this.id, Unicast2Header.createAckHeader(seqno, conn_id));
+        Message msg=new Message(dest).setFlag(Message.Flag.OOB).putHeader(this.id, Unicast2Header.createAckHeader(seqno, conn_id));
         if(log.isTraceEnabled())
             log.trace(local_addr + " --> ACK(" + dest + "," + seqno + " [conn_id=" + conn_id + "])");
         down_prot.down(new Event(Event.MSG, msg));

@@ -549,7 +549,7 @@ public class FLUSH extends Protocol {
                     + " sending RECONCILE_OK to " + requester);
 
         Message reconcileOk = new Message(requester);
-        reconcileOk.setFlag(Message.OOB);
+        reconcileOk.setFlag(Message.Flag.OOB);
         reconcileOk.putHeader(this.id, new FlushHeader(FlushHeader.FLUSH_RECONCILE_OK));
         down_prot.down(new Event(Event.MSG, reconcileOk));
     }
@@ -581,7 +581,7 @@ public class FLUSH extends Protocol {
             if(flushMember == null)
                 continue;
             Message reject = new Message(flushMember, localAddress, null);   
-            reject.setFlag(Message.OOB);
+            reject.setFlag(Message.Flag.OOB);
             reject.putHeader(this.id, new FlushHeader(FlushHeader.ABORT_FLUSH, viewId,participants));
             down_prot.down(new Event(Event.MSG, reject));
         }
@@ -808,7 +808,7 @@ public class FLUSH extends Protocol {
             if (needsReconciliationPhase) {
                 Digest d = findHighestSequences();
                 msg = new Message();
-                msg.setFlag(Message.OOB);
+                msg.setFlag(Message.Flag.OOB);
                 FlushHeader fh = new FlushHeader(FlushHeader.FLUSH_RECONCILE, currentViewId(),flushMembers);
                 reconcileOks.clear();
                 fh.addDigest(d);

@@ -53,7 +53,7 @@ public abstract class TP extends Protocol {
 
     protected static final byte LIST=1; // we have a list of messages rather than a single message when set
     protected static final byte MULTICAST=2; // message is a multicast (versus a unicast) message when set
-    protected static final byte OOB=4; // message has OOB flag set (Message.OOB)
+    protected static final byte OOB=4; // message has OOB flag set (Message.Flag.OOB)
 
     protected static final boolean can_bind_to_mcast_addr; // are we running on Linux ?
 
@@ -1187,7 +1187,7 @@ public abstract class TP extends Protocol {
             final String cluster_name=hdr.channel_name;
 
             // changed to fix http://jira.jboss.com/jira/browse/JGRP-506
-            Executor pool=msg.isFlagSet(Message.OOB)? oob_thread_pool : thread_pool;
+            Executor pool=msg.isFlagSet(Message.Flag.OOB)? oob_thread_pool : thread_pool;
             pool.execute(new Runnable() {
                 public void run() {
                     passMessageUp(copy, cluster_name, false, multicast, false);
@@ -1535,7 +1535,7 @@ public abstract class TP extends Protocol {
         dos.writeShort(Version.version); // write the version
         if(multicast)
             flags+=MULTICAST;
-        if(msg.isFlagSet(Message.OOB))
+        if(msg.isFlagSet(Message.Flag.OOB))
             flags+=OOB;
         dos.writeByte(flags);
         msg.writeTo(dos);

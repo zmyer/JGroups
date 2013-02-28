@@ -529,7 +529,7 @@ public abstract class FlowControl extends Protocol {
         if(log.isTraceEnabled())
             if(log.isTraceEnabled()) log.trace("sending " + credits + " credits to " + dest);
         Message msg=new Message(dest, null,credits);
-        msg.setFlag(Message.OOB, Message.Flag.DONT_BUNDLE);
+        msg.setFlag(Message.Flag.OOB, Message.Flag.DONT_BUNDLE);
         msg.putHeader(this.id, REPLENISH_HDR);
         down_prot.down(new Event(Event.MSG, msg));
         num_credit_responses_sent++;

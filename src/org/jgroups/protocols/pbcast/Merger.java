@@ -181,7 +181,7 @@ public class Merger {
             // if we have flush in stack send ack back to merge coordinator
             if(gms.flushProtocolInStack) { //[JGRP-700] - FLUSH: flushing should span merge
                 Message ack=new Message(data.getSender(), null, null);
-                ack.setFlag(Message.OOB);
+                ack.setFlag(Message.Flag.OOB);
                 GMS.GmsHeader ack_hdr=new GMS.GmsHeader(GMS.GmsHeader.INSTALL_MERGE_VIEW_OK);
                 ack.putHeader(gms.getId(), ack_hdr);
                 gms.getDownProtocol().down(new Event(Event.MSG, ack));
@@ -255,7 +255,7 @@ public class Merger {
     /** Send back a response containing view and digest to sender */
     private void sendMergeResponse(Address sender, View view, Digest digest, MergeId merge_id) {
         Message msg=new Message(sender, null, null);
-        msg.setFlag(Message.OOB);
+        msg.setFlag(Message.Flag.OOB);
         GMS.GmsHeader hdr=new GMS.GmsHeader(GMS.GmsHeader.MERGE_RSP);
         hdr.merge_id=merge_id;
         hdr.view=view;
@@ -319,7 +319,7 @@ public class Merger {
 
     protected void sendMergeRejectedResponse(Address sender, MergeId merge_id) {
         Message msg=new Message(sender, null, null);
-        msg.setFlag(Message.OOB);
+        msg.setFlag(Message.Flag.OOB);
         GMS.GmsHeader hdr=new GMS.GmsHeader(GMS.GmsHeader.MERGE_RSP);
         hdr.merge_rejected=true;
         hdr.merge_id=merge_id;
@@ -333,7 +333,7 @@ public class Merger {
 
         for(Address coord: coords) {
             Message msg=new Message(coord, null, null);
-            // msg.setFlag(Message.OOB);
+            // msg.setFlag(Message.Flag.OOB);
             GMS.GmsHeader hdr=new GMS.GmsHeader(GMS.GmsHeader.CANCEL_MERGE);
             hdr.merge_id=merge_id;
             msg.putHeader(gms.getId(), hdr);
@@ -357,7 +357,7 @@ public class Merger {
         GMS.GmsHeader hdr=new GMS.GmsHeader(GMS.GmsHeader.GET_DIGEST_REQ);
         hdr.merge_id=merge_id;
         Message get_digest_req=new Message();
-        get_digest_req.setFlag(Message.OOB);
+        get_digest_req.setFlag(Message.Flag.OOB);
         get_digest_req.putHeader(gms.getId(), hdr);
 
         long max_wait_time=gms.merge_timeout / 2; // gms.merge_timeout is guaranteed to be > 0, verified in init()
@@ -682,7 +682,7 @@ public class Merger {
                 Address coord=entry.getKey();
                 Collection<Address> mbrs=entry.getValue();
                 Message msg=new Message(coord, null, null);
-                msg.setFlag(Message.OOB);
+                msg.setFlag(Message.Flag.OOB);
                 GMS.GmsHeader hdr=new GMS.GmsHeader(GMS.GmsHeader.MERGE_REQ, mbrs);
                 hdr.mbr=gms.local_addr;
                 hdr.merge_id=new_merge_id;

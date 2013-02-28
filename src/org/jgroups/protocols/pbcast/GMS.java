@@ -858,7 +858,7 @@ public class GMS extends Protocol implements DiagnosticsHandler.ProbeHandler {
                             GmsHeader rsp_hdr=new GmsHeader(GmsHeader.GET_DIGEST_RSP);
                             rsp_hdr.my_digest=digest;
                             Message get_digest_rsp=new Message(msg.getSrc(), null, null);
-                            get_digest_rsp.setFlag(Message.OOB);
+                            get_digest_rsp.setFlag(Message.Flag.OOB);
                             get_digest_rsp.putHeader(this.id, rsp_hdr);
                             down_prot.down(new Event(Event.MSG, get_digest_rsp));
                         }
@@ -985,7 +985,7 @@ public class GMS extends Protocol implements DiagnosticsHandler.ProbeHandler {
 
     private void sendViewAck(Address dest) {
         Message view_ack=new Message(dest, null, null);
-        view_ack.setFlag(Message.OOB);
+        view_ack.setFlag(Message.Flag.OOB);
         GmsHeader tmphdr=new GmsHeader(GmsHeader.VIEW_ACK);
         view_ack.putHeader(this.id, tmphdr);
         down_prot.down(new Event(Event.MSG,view_ack));

@@ -262,7 +262,7 @@ public class CoordGmsImpl extends ServerGmsImpl {
     private void sendLeaveResponses(Collection<Address> leaving_members) {
         for(Address address: leaving_members){
             Message msg=new Message(address, null, null); // send an ack to the leaving member
-            msg.setFlag(Message.OOB);
+            msg.setFlag(Message.Flag.OOB);
             GMS.GmsHeader hdr=new GMS.GmsHeader(GMS.GmsHeader.LEAVE_RSP);
             msg.putHeader(gms.getId(), hdr);
             gms.getDownProtocol().down(new Event(Event.MSG, msg));

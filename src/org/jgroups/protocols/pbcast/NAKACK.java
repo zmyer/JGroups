@@ -740,10 +740,10 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
 
 
         // OOB msg is passed up. When removed, we discard it. Affects ordering: http://jira.jboss.com/jira/browse/JGRP-379
-        if(added && msg.isFlagSet(Message.OOB)) {
+        if(added && msg.isFlagSet(Message.Flag.OOB)) {
             if(loopback)
                 msg=win.get(hdr.seqno); // we *have* to get a message, because loopback means we didn't add it to win !
-            if(msg != null && msg.isFlagSet(Message.OOB)) {
+            if(msg != null && msg.isFlagSet(Message.Flag.OOB)) {
                 if(msg.setTransientFlagIfAbsent(Message.OOB_DELIVERED)) {
                     if(log.isTraceEnabled())
                         log.trace(new StringBuilder().append(local_addr).append(": delivering ").append(sender).append('#').append(hdr.seqno));
@@ -781,7 +781,7 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
 
                 for(final Message msg_to_deliver: msgs) {
                     // discard OOB msg if it has already been delivered (http://jira.jboss.com/jira/browse/JGRP-379)
-                    if(msg_to_deliver.isFlagSet(Message.OOB) && !msg_to_deliver.setTransientFlagIfAbsent(Message.OOB_DELIVERED))
+                    if(msg_to_deliver.isFlagSet(Message.Flag.OOB) && !msg_to_deliver.setTransientFlagIfAbsent(Message.OOB_DELIVERED))
                         continue;
 
                     //msg_to_deliver.removeHeader(getName()); // Changed by bela Jan 29 2003: not needed (see above)
@@ -1333,7 +1333,7 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
 
         hdr=NakAckHeader.createXmitRequestHeader(first_seqno, last_seqno, sender);
         retransmit_msg=new Message(dest, null, null);
-        retransmit_msg.setFlag(Message.OOB);
+        retransmit_msg.setFlag(Message.Flag.OOB);
         if(log.isTraceEnabled())
             log.trace(local_addr + ": sending XMIT_REQ ([" + first_seqno + ", " + last_seqno + "]) to " + dest);
         retransmit_msg.putHeader(this.id, hdr);

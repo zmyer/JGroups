@@ -781,7 +781,7 @@ public class FC extends Protocol {
             number=(int)credit;
         else
             number=credit;
-        Message msg=new Message(dest, number).setFlag(Message.OOB, Message.Flag.DONT_BUNDLE).putHeader(this.id,REPLENISH_HDR);
+        Message msg=new Message(dest, number).setFlag(Message.Flag.OOB, Message.Flag.DONT_BUNDLE).putHeader(this.id,REPLENISH_HDR);
         down_prot.down(new Event(Event.MSG, msg));
         num_credit_responses_sent++;
     }

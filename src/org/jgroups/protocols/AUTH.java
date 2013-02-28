@@ -195,7 +195,7 @@ public class AUTH extends Protocol {
 
     protected void sendMergeRejectionMessage(Address dest) {
         Message msg=new Message(dest, null, null);
-        msg.setFlag(Message.OOB);
+        msg.setFlag(Message.Flag.OOB);
         GMS.GmsHeader hdr=new GMS.GmsHeader(GMS.GmsHeader.MERGE_RSP);
         hdr.setMergeRejected(true);
         msg.putHeader(gms_id, hdr);
