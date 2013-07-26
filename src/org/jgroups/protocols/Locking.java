@@ -52,10 +52,11 @@ abstract public class Locking extends Protocol {
     // server side locks
     protected final ConcurrentMap<String,ServerLock> server_locks=Util.createConcurrentMap(20);
 
+    // protected access to the same locks in server_locks
     protected Lock[] locks;
 
     // client side locks
-    protected final ConcurrentMap<String,Map<Owner,ClientLock>> client_locks=Util.createConcurrentMap(20);
+    protected final ClientLockTable       client_lock_table=new ClientLockTable();
 
     protected final Set<LockNotification> lock_listeners=new HashSet<LockNotification>();
     
@@ -271,21 +272,16 @@ abstract public class Locking extends Protocol {
     }
 
     protected ClientLock getLock(String name) {
-        return getLock(name, getOwner(), true);
+        return client_lock_table.getLock(name,getOwner(),true);
     }
 
     protected ClientLock getLock(String name, boolean create_if_absent) {
-        return getLock(name, getOwner(), create_if_absent);
+        return client_lock_table.getLock(name,getOwner(),create_if_absent);
     }
 
     @ManagedOperation(description="Unlocks all currently held locks")
     public void unlockAll() {
-        List<ClientLock> lock_list=new ArrayList<ClientLock>();
-        Collection<Map<Owner,ClientLock>> maps=client_locks.values();
-        for(Map<Owner,ClientLock> map: maps)
-            lock_list.addAll(map.values());
-        for(ClientLock lock: lock_list)
-            lock.unlock();
+        client_lock_table.unlockAll();
     }
 
 
@@ -293,32 +289,10 @@ abstract public class Locking extends Protocol {
     public String printLocks() {
         StringBuilder sb=new StringBuilder();
         sb.append("server locks:\n");
-        for(Map.Entry<String,ServerLock> entry: server_locks.entrySet()) {
+        for(Map.Entry<String,ServerLock> entry: server_locks.entrySet())
             sb.append(entry.getKey()).append(": ").append(entry.getValue()).append("\n");
-        }
 
-        sb.append("\nmy locks: ");
-        boolean first_element=true;
-        for(Map.Entry<String,Map<Owner,ClientLock>> entry: client_locks.entrySet()) {
-            if(first_element)
-                first_element=false;
-            else
-                sb.append(", ");
-            sb.append(entry.getKey()).append(" (");
-            Map<Owner,ClientLock> owners=entry.getValue();
-            boolean first=true;
-            for(Map.Entry<Owner,ClientLock> entry2: owners.entrySet()) {
-                if(first)
-                    first=false;
-                else
-                    sb.append(", ");
-                sb.append(entry2.getKey());
-                ClientLock cl=entry2.getValue();
-                if(!cl.acquired || cl.denied)
-                    sb.append(", unlocked");
-            }
-            sb.append(")");
-        }
+        sb.append("\nmy locks: ").append(client_lock_table.toString());
         return sb.toString();
     }
 
@@ -368,7 +342,8 @@ abstract public class Locking extends Protocol {
 
     protected void sendRequest(Address dest, Type type, String lock_name, Owner owner, long timeout, boolean is_trylock) {
         Request req=new Request(type, lock_name, owner, timeout, is_trylock);
-        Message msg=new Message(dest, req).putHeader(id, new LockingHeader());
+        Message msg=new Message(dest, req).putHeader(id, new LockingHeader())
+          .setFlag(Message.Flag.OOB);
         if(bypass_bundling)
             msg.setFlag(Message.Flag.DONT_BUNDLE);
         if(log.isTraceEnabled())
@@ -384,7 +359,7 @@ abstract public class Locking extends Protocol {
 
     protected void sendLockResponse(Type type, Owner dest, String lock_name) {
         Request rsp=new Request(type, lock_name, dest, 0);
-        Message lock_granted_rsp=new Message(dest.getAddress(),  rsp).putHeader(id,new LockingHeader())
+        Message lock_granted_rsp=new Message(dest.getAddress(), rsp).putHeader(id, new LockingHeader())
           .setFlag(Message.Flag.OOB);
         if(bypass_bundling)
             lock_granted_rsp.setFlag(Message.Flag.DONT_BUNDLE);
@@ -446,13 +421,13 @@ abstract public class Locking extends Protocol {
 
 
     protected void handleLockGrantedResponse(String lock_name, Owner owner, Address sender) {
-        ClientLock lock=getLock(lock_name,owner,false);
+        ClientLock lock=client_lock_table.getLock(lock_name,owner,false);
         if(lock != null)
             lock.handleLockGrantedResponse(owner, sender);
     }
 
     protected void handleLockDeniedResponse(String lock_name, Owner owner) {
-         ClientLock lock=getLock(lock_name,owner,false);
+         ClientLock lock=client_lock_table.getLock(lock_name,owner,false);
          if(lock != null)
              lock.lockDenied();
     }
@@ -488,7 +463,7 @@ abstract public class Locking extends Protocol {
     }
     
     protected void handleSignalResponse(String lock_name, Owner owner) {
-        ClientLock lock=getLock(lock_name,owner,false);
+        ClientLock lock=client_lock_table.getLock(lock_name,owner,false);
         if(lock != null) {
             synchronized (lock.condition) {
                 lock.condition.signaled();
@@ -584,37 +559,6 @@ abstract public class Locking extends Protocol {
         }
     }
 
-
-    protected ClientLock getLock(String name, Owner owner, boolean create_if_absent) {
-        Map<Owner,ClientLock> owners=client_locks.get(name);
-        if(owners == null) {
-            if(!create_if_absent)
-                return null;
-            owners=new HashMap<Owner,ClientLock>();
-            Map<Owner,ClientLock> existing=client_locks.putIfAbsent(name,owners);
-            if(existing != null)
-                owners=existing;
-        }
-        ClientLock lock=owners.get(owner);
-        if(lock == null) {
-            if(!create_if_absent)
-                return null;
-            lock=createLock(name, owner);
-            owners.put(owner, lock);
-        }
-        return lock;
-    }
-
-    protected void removeClientLock(String lock_name, Owner owner) {
-        Map<Owner,ClientLock> owners=client_locks.get(lock_name);
-        if(owners != null) {
-            ClientLock lock=owners.remove(owner);
-            if(lock != null) {
-                if(owners.isEmpty())
-                    client_locks.remove(lock_name);
-            }
-        }
-    }
 
 
     protected void notifyLockCreated(String lock_name) {
@@ -910,7 +854,11 @@ abstract public class Locking extends Protocol {
     }
 
 
-
+    /**
+     * Implementation of {@link Lock}. This is a client stub communicates with a server equivalent. The semantics are
+     * more or less those of {@link Lock}, but may differ slightly.
+     * For details see {@link org.jgroups.blocks.locking.LockService}.
+     */
     protected class ClientLock implements Lock {
         protected final String      name;
         protected Owner             owner;
@@ -935,8 +883,8 @@ abstract public class Locking extends Protocol {
             try {
                 acquire(false);
             }
-            catch(InterruptedException e) {
-                // This should never happen
+            catch(InterruptedException e) { // should never happen
+               Thread.currentThread().interrupt(); // just a second line of defense
             }
         }
 
@@ -949,6 +897,7 @@ abstract public class Locking extends Protocol {
                 return acquireTryLock(0, false);
             }
             catch(InterruptedException e) {
+                Thread.currentThread().interrupt();
                 return false;
             }
         }
@@ -985,29 +934,28 @@ abstract public class Locking extends Protocol {
         }
 
         protected synchronized void acquire(boolean throwInterrupt) throws InterruptedException {
-            if(!acquired) {
-                owner=getOwner();
-                sendGrantLockRequest(name, owner, 0, false);
-                boolean interrupted=false;
-                while(!acquired) {
-                    try {
-                        this.wait();
-                    }
-                    catch (InterruptedException e) {
-                        // If we haven't acquired the lock yet and were interrupted, then we have to clean up the lock
-                        // request and throw the exception
-                        if (throwInterrupt && !acquired) {
-                            _unlock(true);
-                            throw e;
-                        }
-                        // If we did get the lock then we will return with the lock and interrupt status.
-                        // If we don't throw exceptions then we just set the interrupt flag and let it loop around
-                        interrupted=true;
-                    }
+            if(acquired)
+                return;
+            if(throwInterrupt && Thread.interrupted())
+                throw new InterruptedException();
+            owner=getOwner();
+            sendGrantLockRequest(name, owner, 0, false);
+            boolean interrupted=false;
+            while(!acquired) {
+                try {
+                    this.wait();
                 }
-                if(interrupted)
-                    Thread.currentThread().interrupt();
+                catch(InterruptedException e) {
+                    if(throwInterrupt && !acquired) {
+                        _unlock(true);
+                        throw e;
+                    }
+                    // If we don't throw exceptions then we just set the interrupt flag and let it loop around
+                    interrupted=true;
+                }
             }
+            if(interrupted)
+                Thread.currentThread().interrupt();
         }
 
         protected synchronized void _unlock(boolean force) {
@@ -1020,7 +968,7 @@ abstract public class Locking extends Protocol {
             acquired=denied=false;
             notifyAll();
 
-            removeClientLock(name, owner);
+            client_lock_table.removeClientLock(name,owner);
             notifyLockDeleted(name);
             owner=null;
         }
@@ -1029,6 +977,8 @@ abstract public class Locking extends Protocol {
             if(denied)
                 return false;
             if(!acquired) {
+                if(use_timeout && Thread.interrupted())
+                    throw new InterruptedException();
                 is_trylock=true;
                 this.timeout=timeout;
                 if(owner == null)
@@ -1048,14 +998,10 @@ abstract public class Locking extends Protocol {
                                 this.wait(wait_time);
                             }
                             catch (InterruptedException e) {
-                                // If we were interrupted and haven't received a response yet then we try to
-                                // clean up the lock request and throw the exception
                                 if (!acquired && !denied) {
                                     _unlock(true);
                                     throw e;
                                 }
-                                // In the case that we were told if we acquired or denied the lock then return that, but
-                                // make sure we set the interrupt status
                                 interrupted = true;
                             }
                         }
@@ -1072,9 +1018,98 @@ abstract public class Locking extends Protocol {
                 if(interrupted)
                     Thread.currentThread().interrupt();
             }
+            boolean retval=acquired && !denied;
             if(!acquired || denied)
                 _unlock(true);
-            return acquired && !denied;
+            return retval;
+        }
+    }
+
+    /** Manages access to client locks */
+    protected class ClientLockTable {
+        protected final ConcurrentMap<String,Map<Owner,ClientLock>> table=Util.createConcurrentMap(20);
+
+
+        protected synchronized ClientLock getLock(String name, Owner owner, boolean create_if_absent) {
+            Map<Owner,ClientLock> owners=table.get(name);
+            if(owners == null) {
+                if(!create_if_absent)
+                    return null;
+                owners=new HashMap<Owner,ClientLock>();
+                Map<Owner,ClientLock> existing=table.putIfAbsent(name,owners);
+                if(existing != null)
+                    owners=existing;
+            }
+            ClientLock lock=owners.get(owner);
+            if(lock == null) {
+                if(!create_if_absent)
+                    return null;
+                lock=createLock(name, owner);
+                owners.put(owner, lock);
+            }
+            return lock;
+        }
+
+        protected synchronized void removeClientLock(String lock_name, Owner owner) {
+            Map<Owner,ClientLock> owners=table.get(lock_name);
+            if(owners != null) {
+                ClientLock lock=owners.remove(owner);
+                if(lock != null) {
+                    if(owners.isEmpty())
+                        table.remove(lock_name);
+                }
+            }
+        }
+
+        protected synchronized void unlockAll() {
+            List<ClientLock> lock_list=new ArrayList<ClientLock>();
+            Collection<Map<Owner,ClientLock>> maps=table.values();
+            for(Map<Owner,ClientLock> map: maps)
+                lock_list.addAll(map.values());
+            for(ClientLock lock: lock_list)
+                lock.unlock();
+        }
+
+        protected void resendPendingLockRequests() {
+            if(!table.isEmpty()) {
+                for(Map<Owner,ClientLock> map: table.values()) {
+                    for(ClientLock lock: map.values()) {
+                        if(!lock.acquired && !lock.denied)
+                            sendGrantLockRequest(lock.name, lock.owner, lock.timeout, lock.is_trylock);
+                    }
+                }
+            }
+        }
+
+        protected synchronized Collection<Map<Owner,ClientLock>> values() {
+            return table.values();
+        }
+
+
+        public String toString() {
+            StringBuilder sb=new StringBuilder();
+            boolean first_element=true;
+            for(Map.Entry<String,Map<Owner,ClientLock>> entry: table.entrySet()) {
+                if(first_element)
+                    first_element=false;
+                else
+                    sb.append(", ");
+                sb.append(entry.getKey()).append(" (");
+                Map<Owner,ClientLock> owners=entry.getValue();
+                boolean first=true;
+                for(Map.Entry<Owner,ClientLock> entry2: owners.entrySet()) {
+                    if(first)
+                        first=false;
+                    else
+                        sb.append(", ");
+                    sb.append(entry2.getKey());
+                    ClientLock cl=entry2.getValue();
+                    if(!cl.acquired || cl.denied)
+                        sb.append(", unlocked");
+                }
+                sb.append(")");
+            }
+            return sb.toString();
         }
     }
     
@@ -1279,8 +1314,8 @@ abstract public class Locking extends Protocol {
     protected static class Request implements Streamable {
         protected Type    type;
         protected String  lock_name;
-        protected Owner owner;
-        protected long    timeout=0;
+        protected Owner   owner;
+        protected long    timeout;
         protected boolean is_trylock;
 
 
