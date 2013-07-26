@@ -42,18 +42,18 @@ abstract public class Locking extends Protocol {
     protected boolean bypass_bundling=true;
 
     @Property(description="Number of locks to be used for lock striping (for synchronized access to the server_lock entries)")
-    protected int lock_striping_size=10;
+    protected int     lock_striping_size=10;
 
 
     protected Address local_addr;
 
-    protected View view;
+    protected View    view;
 
     // server side locks
     protected final ConcurrentMap<String,ServerLock> server_locks=Util.createConcurrentMap(20);
 
     // protected access to the same locks in server_locks
-    protected Lock[] locks;
+    protected Lock[]  lock_stripes;
 
     // client side locks
     protected final ClientLockTable       client_lock_table=new ClientLockTable();
@@ -114,9 +114,9 @@ abstract public class Locking extends Protocol {
 
     public void init() throws Exception {
         super.init();
-        locks=new Lock[lock_striping_size];
-        for(int i=0; i < locks.length; i++)
-            locks[i]=new ReentrantLock();
+        lock_stripes=new Lock[lock_striping_size];
+        for(int i=0; i < lock_stripes.length; i++)
+            lock_stripes[i]=new ReentrantLock();
     }
 
     public Object down(Event evt) {
@@ -324,8 +324,8 @@ abstract public class Locking extends Protocol {
 
     /** Gets a lock from locks based on the hash of the lock name */
     protected Lock _getLock(String lock_name) {
-        int index=lock_name != null? Math.abs(lock_name.hashCode() % locks.length) : 0;
-        return locks[index];
+        int index=lock_name != null? Math.abs(lock_name.hashCode() % lock_stripes.length) : 0;
+        return lock_stripes[index];
     }
 
     protected Owner getOwner() {
@@ -343,11 +343,9 @@ abstract public class Locking extends Protocol {
         send(dest, new Request(type, lock_name, owner, timeout, is_trylock));
     }
 
-
     protected void sendLockResponse(Type type, Owner dest, String lock_name) {
         send(dest.getAddress(), new Request(type, lock_name, dest, 0));
     }
-
 
     protected void sendSignalResponse(Owner dest, String lock_name) {
         send(dest.getAddress(), new Request(Type.SIG_RET, lock_name, dest, 0));
@@ -623,7 +621,7 @@ abstract public class Locking extends Protocol {
             this.condition=new ServerCondition(this);
         }
 
-        protected synchronized void handleRequest(Request req) {
+        protected void handleRequest(Request req) {
             switch(req.type) {
                 case GRANT_LOCK:
                     if(current_owner == null) {
@@ -663,7 +661,7 @@ abstract public class Locking extends Protocol {
             processQueue();
         }
 
-        protected synchronized void handleView(List<Address> members) {
+        protected void handleView(List<Address> members) {
             if(current_owner != null && !members.contains(current_owner.getAddress())) {
                 Owner tmp=current_owner;
                 setOwner(null);
@@ -772,7 +770,7 @@ abstract public class Locking extends Protocol {
     }
 
     protected class ServerCondition {
-        protected final ServerLock lock;
+        protected final ServerLock   lock;
         protected final Queue<Owner> queue=new ArrayDeque<Owner>();
         
         public ServerCondition(ServerLock lock) {
@@ -1088,7 +1086,7 @@ abstract public class Locking extends Protocol {
     
     protected class ClientCondition implements Condition {
 
-        protected final ClientLock lock;
+        protected final ClientLock    lock;
         protected final AtomicBoolean signaled = new AtomicBoolean(false);
         /**
          * This is okay only having 1 since a client condition is 1 per 
