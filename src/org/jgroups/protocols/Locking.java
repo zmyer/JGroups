@@ -300,13 +300,16 @@ abstract public class Locking extends Protocol {
         if(log.isDebugEnabled())
             log.debug("view=" + view);
         List<Address> members=view.getMembers();
+        List<Response> responses=new ArrayList<Response>();
         for(Map.Entry<String,ServerLock> entry: server_locks.entrySet()) {
             String lock_name=entry.getKey();
             ServerLock server_lock=entry.getValue();
             Lock lock=_getLock(lock_name);
             lock.lock();
             try {
-                server_lock.handleView(members);
+                Response rsp=server_lock.handleView(members);
+                if(rsp != null)
+                    responses.add(rsp);
                 if(server_lock.isEmpty() && server_lock.current_owner == null && server_lock.condition.queue.isEmpty())
                     server_locks.remove(lock_name);
             }
@@ -314,6 +317,10 @@ abstract public class Locking extends Protocol {
                 lock.unlock();
             }
         }
+
+        // do the sending outside the lock scope (might block on credits or TCP send)
+        for(Response rsp: responses)
+            sendLockResponse(rsp.type, rsp.owner, rsp.lock_name);
     }
 
 
@@ -367,6 +374,7 @@ abstract public class Locking extends Protocol {
 
 
     protected void handleLockRequest(Request req) {
+        Response rsp=null;
         Lock lock=_getLock(req.lock_name);
         lock.lock();
         try {
@@ -376,18 +384,20 @@ abstract public class Locking extends Protocol {
                 ServerLock tmp=server_locks.putIfAbsent(req.lock_name, server_lock);
                 if(tmp != null)
                     server_lock=tmp;
-                else {
+                else
                     notifyLockCreated(req.lock_name);
-                }
             }
-            server_lock.handleRequest(req);
-            if(server_lock.isEmpty() && server_lock.current_owner == null && server_lock.condition.queue.isEmpty()) {
+            rsp=server_lock.handleRequest(req);
+            if(server_lock.isEmpty() && server_lock.current_owner == null && server_lock.condition.queue.isEmpty())
                 server_locks.remove(req.lock_name);
-            }
         }
         finally {
             lock.unlock();
         }
+
+        // moved outside the lock scope
+        if(rsp != null)
+            sendLockResponse(rsp.type, rsp.owner, rsp.lock_name);
     }
 
 
@@ -446,18 +456,23 @@ abstract public class Locking extends Protocol {
     }
     
     protected void handleSignalRequest(Request req) {
+        Response rsp=null;
         Lock lock=_getLock(req.lock_name);
         lock.lock();
         try {
             ServerLock server_lock=server_locks.get(req.lock_name);
             if (server_lock != null)
-                server_lock.handleRequest(req);
+                rsp=server_lock.handleRequest(req);
             else
                 log.error("Condition signal was received but lock was not created.  Couldn't notify anyone.");
         }
         finally {
             lock.unlock();
         }
+
+        // moved outside the lock scope
+        if(rsp != null)
+            sendLockResponse(rsp.type, rsp.owner, rsp.lock_name);
     }
     
     protected void handleCreateLockRequest(String lock_name, Owner owner) {
@@ -621,23 +636,19 @@ abstract public class Locking extends Protocol {
             this.condition=new ServerCondition(this);
         }
 
-        protected void handleRequest(Request req) {
+        protected Response handleRequest(Request req) {
             switch(req.type) {
                 case GRANT_LOCK:
                     if(current_owner == null) {
                         setOwner(req.owner);
-                        sendLockResponse(Type.LOCK_GRANTED, req.owner, req.lock_name);
+                        return new Response(Type.LOCK_GRANTED, req.owner, req.lock_name);
                     }
-                    else {
-                        if(current_owner.equals(req.owner))
-                            sendLockResponse(Type.LOCK_GRANTED, req.owner, req.lock_name);
-                        else {
-                            if(req.is_trylock && req.timeout <= 0)
-                                sendLockResponse(Type.LOCK_DENIED, req.owner, req.lock_name);
-                            else
-                                addToQueue(req);
-                        }
-                    }
+                    if(current_owner.equals(req.owner))
+                        return new Response(Type.LOCK_GRANTED, req.owner, req.lock_name);
+
+                    if(req.is_trylock && req.timeout <= 0)
+                        return new Response(Type.LOCK_DENIED, req.owner, req.lock_name);
+                    addToQueue(req);
                     break;
                 case RELEASE_LOCK:
                 case LOCK_AWAIT:
@@ -658,10 +669,10 @@ abstract public class Locking extends Protocol {
                     throw new IllegalArgumentException("type " + req.type + " is invalid here");
             }
 
-            processQueue();
+            return processQueue();
         }
 
-        protected void handleView(List<Address> members) {
+        protected Response handleView(List<Address> members) {
             if(current_owner != null && !members.contains(current_owner.getAddress())) {
                 Owner tmp=current_owner;
                 setOwner(null);
@@ -677,12 +688,11 @@ abstract public class Locking extends Protocol {
             
             for(Iterator<Owner> it=condition.queue.iterator(); it.hasNext();) {
                 Owner own=it.next();
-                if(!members.contains(own.getAddress())) {
+                if(!members.contains(own.getAddress()))
                     it.remove();
-                }
             }
 
-            processQueue();
+            return processQueue();
         }
 
 
@@ -727,17 +737,17 @@ abstract public class Locking extends Protocol {
         }
 
 
-        protected void processQueue() {
-            if(current_owner == null) {
-                while(!queue.isEmpty()) {
-                    Request req=queue.remove(0);
-                    if(req.type == Type.GRANT_LOCK) {
-                        setOwner(req.owner);
-                        sendLockResponse(Type.LOCK_GRANTED, req.owner, req.lock_name);
-                        break;
-                    }
+        protected Response processQueue() {
+            if(current_owner != null)
+                return null;
+            while(!queue.isEmpty()) {
+                Request req=queue.remove(0);
+                if(req.type == Type.GRANT_LOCK) {
+                    setOwner(req.owner);
+                    return new Response(Type.LOCK_GRANTED, req.owner, req.lock_name);
                 }
             }
+            return null;
         }
 
         protected void setOwner(Owner owner) {
@@ -1344,6 +1354,19 @@ abstract public class Locking extends Protocol {
                 sb.append(",").append(timeout);
             sb.append(")");
             return sb.toString();
+        }
+    }
+
+    /** A response to a request, to be sent back to the requester as a message */
+    protected static class Response {
+        protected final Type   type;
+        protected final Owner  owner;
+        protected final String lock_name;
+
+        public Response(Type type, Owner owner, String lock_name) {
+            this.type=type;
+            this.owner=owner;
+            this.lock_name=lock_name;
         }
     }
 
