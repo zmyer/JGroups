@@ -145,9 +145,8 @@ abstract public class Locking extends Protocol {
                             Thread.currentThread().interrupt();
                         }
                     }
-                    else {
+                    else
                         return lock.tryLock();
-                    }
                 }
                 return null;
 
@@ -341,9 +340,21 @@ abstract public class Locking extends Protocol {
 
 
     protected void sendRequest(Address dest, Type type, String lock_name, Owner owner, long timeout, boolean is_trylock) {
-        Request req=new Request(type, lock_name, owner, timeout, is_trylock);
-        Message msg=new Message(dest, req).putHeader(id, new LockingHeader())
-          .setFlag(Message.Flag.OOB);
+        send(dest, new Request(type, lock_name, owner, timeout, is_trylock));
+    }
+
+
+    protected void sendLockResponse(Type type, Owner dest, String lock_name) {
+        send(dest.getAddress(), new Request(type, lock_name, dest, 0));
+    }
+
+
+    protected void sendSignalResponse(Owner dest, String lock_name) {
+        send(dest.getAddress(), new Request(Type.SIG_RET, lock_name, dest, 0));
+    }
+
+    protected void send(Address dest, Request req) {
+        Message msg=new Message(dest, req).putHeader(id, new LockingHeader()).setFlag(Message.Flag.OOB);
         if(bypass_bundling)
             msg.setFlag(Message.Flag.DONT_BUNDLE);
         if(log.isTraceEnabled())
@@ -352,45 +363,7 @@ abstract public class Locking extends Protocol {
             down_prot.down(new Event(Event.MSG, msg));
         }
         catch(Exception ex) {
-            log.error("failed sending " + type + " request: " + ex);
-        }
-    }
-
-
-    protected void sendLockResponse(Type type, Owner dest, String lock_name) {
-        Request rsp=new Request(type, lock_name, dest, 0);
-        Message lock_granted_rsp=new Message(dest.getAddress(), rsp).putHeader(id, new LockingHeader())
-          .setFlag(Message.Flag.OOB);
-        if(bypass_bundling)
-            lock_granted_rsp.setFlag(Message.Flag.DONT_BUNDLE);
-
-        if(log.isTraceEnabled())
-            log.trace("[" + local_addr + "] --> [" + dest.getAddress() + "] " + rsp);
-
-        try {
-            down_prot.down(new Event(Event.MSG, lock_granted_rsp));
-        }
-        catch(Exception ex) {
-            log.error("failed sending " + type + " message to " + dest + ": " + ex);
-        }
-    }
-
-
-    protected void sendSignalResponse(Owner dest, String lock_name) {
-        Request rsp=new Request(Type.SIG_RET, lock_name, dest, 0);
-        Message lock_granted_rsp=new Message(dest.getAddress(), rsp).putHeader(id, new LockingHeader())
-          .setFlag(Message.Flag.OOB);
-        if(bypass_bundling)
-            lock_granted_rsp.setFlag(Message.Flag.DONT_BUNDLE);
-
-        if(log.isTraceEnabled())
-            log.trace("[" + local_addr + "] --> [" + dest.getAddress() + "] " + rsp);
-
-        try {
-            down_prot.down(new Event(Event.MSG, lock_granted_rsp));
-        }
-        catch(Exception ex) {
-            log.error("failed sending " + Type.SIG_RET + " message to " + dest + ": " + ex);
+            log.error("failed sending " + req.type + " request: " + ex);
         }
     }
 
