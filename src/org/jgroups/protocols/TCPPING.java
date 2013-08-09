@@ -131,7 +131,7 @@ public class TCPPING extends Discovery {
             if(log.isTraceEnabled())
                 log.trace("[FIND_INITIAL_MBRS] sending PING request to " + msg.getDest());
             
-            down_prot.down(new Event(Event.MSG, msg));
+            // down_prot.down(new Event(Event.MSG, msg));
 
             timer.execute(new Runnable() {
                 public void run() {
