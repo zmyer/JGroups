@@ -359,7 +359,16 @@ public class FLUSH extends Protocol {
                             onFlushReconcileOK(msg);
                             break;
                         case FlushHeader.STOP_FLUSH:
-                            onStopFlush();
+                            Collection<Address> stopFlushParticipants = fh.flushParticipants;
+                            boolean amIStopFlushParticipant = stopFlushParticipants == null 
+                                            || stopFlushParticipants.contains(localAddress)
+                                            || msg.getSrc().equals(localAddress);
+                            if (amIStopFlushParticipant) {
+                                onStopFlush();
+                            } else {
+                                if (log.isDebugEnabled())
+                                    log.debug("Received STOP_FLUSH at " + localAddress + " but I am not flush participant, not responding");
+                            }
                             break;
                         case FlushHeader.ABORT_FLUSH:
                             Collection<Address> flushParticipants = fh.flushParticipants;
@@ -674,7 +683,7 @@ public class FLUSH extends Protocol {
             Message msg = new Message(null, localAddress, null);
             // Cannot be OOB since START_FLUSH is not OOB
             // we have to FIFO order two subsequent flushes
-            msg.putHeader(getName(), new FlushHeader(FlushHeader.STOP_FLUSH, viewID));
+            msg.putHeader(getName(), new FlushHeader(FlushHeader.STOP_FLUSH, viewID, flushMembers));
             down_prot.down(new Event(Event.MSG, msg));
             if (log.isDebugEnabled())
                 log.debug("Received RESUME at " + localAddress + ", sent STOP_FLUSH to all");
