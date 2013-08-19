@@ -361,6 +361,7 @@ public class FLUSH extends Protocol {
                         case FlushHeader.STOP_FLUSH:
                             Collection<Address> stopFlushParticipants = fh.flushParticipants;
                             boolean amIStopFlushParticipant = stopFlushParticipants == null 
+                                            || stopFlushParticipants.size() == 0
                                             || stopFlushParticipants.contains(localAddress)
                                             || msg.getSrc().equals(localAddress);
                             if (amIStopFlushParticipant) {
