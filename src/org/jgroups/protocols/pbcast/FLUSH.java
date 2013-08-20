@@ -361,7 +361,7 @@ public class FLUSH extends Protocol {
                         case FlushHeader.STOP_FLUSH:
                             Collection<Address> stopFlushParticipants = fh.flushParticipants;
                             boolean amIStopFlushParticipant = stopFlushParticipants == null 
-                                            || stopFlushParticipants.size() == 0
+                                            || stopFlushParticipants.isEmpty()
                                             || stopFlushParticipants.contains(localAddress)
                                             || msg.getSrc().equals(localAddress);
                             if (amIStopFlushParticipant) {
@@ -911,13 +911,11 @@ public class FLUSH extends Protocol {
 
         public static final byte FLUSH_NOT_COMPLETED = 9;
 
-        byte type;
+        protected byte                type;
+        protected long                viewID;
+        protected Collection<Address> flushParticipants;
+        protected Digest              digest;
 
-        long viewID;
-
-        Collection<Address> flushParticipants;
-
-        Digest digest = null;
         private static final long serialVersionUID = -6248843990215637687L;
 
         public FlushHeader() {
@@ -939,6 +937,11 @@ public class FLUSH extends Protocol {
                 this.flushParticipants = new ArrayList<Address>(flushView);
             }
         }
+
+        public byte getType()                             {return type;}
+        public long getViewID()                           {return viewID;}
+        public Collection<Address> getFlushParticipants() {return flushParticipants;}
+        public Digest getDigest()                         {return digest;}
 
         @Override
         public int size() {

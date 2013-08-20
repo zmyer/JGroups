@@ -2,17 +2,14 @@ package org.jgroups.tests;
 
 import junit.framework.TestCase;
 import org.jgroups.*;
-import org.jgroups.util.*;
-import org.jgroups.stack.*;
-import org.jgroups.stack.Protocol;
-import org.jgroups.protocols.TP;
 import org.jgroups.protocols.pbcast.FLUSH;
 import org.jgroups.protocols.pbcast.FLUSH.FlushHeader;
+import org.jgroups.stack.IpAddress;
+import org.jgroups.stack.Protocol;
 
-import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.ArrayList;
 import java.util.Vector;
 
 /**
@@ -38,19 +35,6 @@ public class FLUSH_STOP_FLUSH_Test extends TestCase {
         downInterceptor = new StopFlushInterceptor(a1, flush);
         downInterceptor.setUpProtocol(flush);
         flush.setDownProtocol(downInterceptor);
-
-/*
-        TP transport=new TP() {
-            public boolean supportsMulticasting() {return false;}
-            public void sendMulticast(byte[] data, int offset, int length) throws Exception {}
-            public void sendUnicast(PhysicalAddress dest, byte[] data, int offset, int length) throws Exception {}
-            public String getInfo() {return null;}
-            public Object down(Event evt) { return null; }
-            protected PhysicalAddress getPhysicalAddress() {return null;}
-            public TimeScheduler getTimer() {return new DefaultTimeScheduler(1);}
-        };
-        downInterceptor.setDownProtocol(transport);
-*/
 
         upInterceptor = new BlockInterceptor();
         flush.setUpProtocol(upInterceptor);
@@ -105,25 +89,9 @@ public class FLUSH_STOP_FLUSH_Test extends TestCase {
 
     static class StopFlushInterceptor extends Protocol {
         private Collection<Address> flushParticipants;
-        private Address address;
-        private FLUSH flush;
-        private static Field typeField;
-        private static Field flushParticipantsField;
+        private final Address address;
+        private final FLUSH flush;
 
-        static {
-            try {
-                typeField = FlushHeader.class.getDeclaredField("type");
-                typeField.setAccessible(true);
-
-                flushParticipantsField = FlushHeader.class.getDeclaredField("flushParticipants");
-                flushParticipantsField.setAccessible(true);
-            }
-            catch ( NoSuchFieldException e )
-            {
-                fail("FlushHeader is missing fields checked by test case");
-            }
-        }
-        
         public StopFlushInterceptor ( Address address, FLUSH flush ) {
             this.address = address;
             this.flush = flush;
@@ -137,18 +105,8 @@ public class FLUSH_STOP_FLUSH_Test extends TestCase {
             if(evt.getType() == Event.MSG) {
                 Message msg=(Message)evt.getArg();
                 FlushHeader hdr=(FlushHeader)msg.getHeader(flush.getName());
-                if(hdr != null) {
-                    try {
-                        byte type = typeField.getByte(hdr);
-                        if(type == FlushHeader.STOP_FLUSH) {
-                            this.flushParticipants = (Collection<Address>)flushParticipantsField.get(hdr);
-                        }
-                    }
-                    catch ( IllegalAccessException e )
-                    {
-                        fail("Could not make FlushHeader fields used by test accessible");
-                    }
-                }
+                if(hdr != null &&  hdr.getType() == FlushHeader.STOP_FLUSH)
+                    this.flushParticipants = hdr.getFlushParticipants();
 
                 // loopback
                 if(msg.getDest() == null || msg.getDest().equals(this.address))
