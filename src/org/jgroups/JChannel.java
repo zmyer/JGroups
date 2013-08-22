@@ -367,6 +367,8 @@ public class JChannel extends Channel {
 
         if(cluster_name != null) {    // only connect if we are not a unicast channel
 
+            flush_unblock_promise.reset();
+
             Event connect_event=new Event(Event.CONNECT, cluster_name);
             Object res=downcall(connect_event);  // waits forever until connected (or channel is closed)
             if(res != null && res instanceof Exception) { // the JOIN was rejected by the coordinator
