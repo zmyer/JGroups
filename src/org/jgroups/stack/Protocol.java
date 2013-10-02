@@ -267,6 +267,8 @@ public abstract class Protocol {
      *                      ProtocolStack to fail, so the channel constructor will throw an exception
      */
     public void init() throws Exception {
+        if(id != ClassConfigurator.getProtocolId(getClass()))
+            name=name+"-"+id;
     }
 
     /**
