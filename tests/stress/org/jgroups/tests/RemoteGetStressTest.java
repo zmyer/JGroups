@@ -19,6 +19,8 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Method;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -30,15 +32,16 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class RemoteGetStressTest {
     protected JChannel[]                  channels;
-    protected Address[]                   target_members; // B, C, D
+    protected List<Address>               target_members; // B, C, D
     protected RpcDispatcher[]             dispatchers;
     protected static final int            NUM_THREADS=500;
     protected static final int            SIZE=100 * 1000; // size of a GET response
     protected static final byte[]         BUF=new byte[SIZE];
     protected static final MethodCall     GET_METHOD;
-    protected static final long           TIMEOUT=60000; // ms
+    protected static final long           TIMEOUT=3 * 60 * 1000; // ms
     protected static final AtomicInteger  count=new AtomicInteger(1);
-    protected static final RequestOptions OPTIONS=RequestOptions.SYNC().setTimeout(TIMEOUT).setFlags(Message.Flag.OOB);
+    protected static final RequestOptions OPTIONS=RequestOptions.SYNC().setTimeout(TIMEOUT)
+      .setFlags(Message.Flag.OOB).setAnycasting(true);
 
     static {
         try {
@@ -63,11 +66,12 @@ public class RemoteGetStressTest {
         Util.waitUntilAllChannelsHaveSameSize(10000, 500, channels);
         System.out.println("view A: " + channels[0].getView());
 
-        target_members=new Address[]{channels[1].getAddress(), channels[2].getAddress(), channels[3].getAddress()};
+        target_members=Arrays.asList(channels[1].getAddress(), channels[2].getAddress(), channels[3].getAddress());
         final AtomicInteger success=new AtomicInteger(0), failure=new AtomicInteger(0);
 
         insertDISCARD(channels[0], 0.2);
 
+        long start=System.currentTimeMillis();
         Invoker[] invokers=new Invoker[NUM_THREADS];
         for(int i=0; i < invokers.length; i++) {
             invokers[i]=new Invoker(dispatchers[0], success, failure);
@@ -77,8 +81,10 @@ public class RemoteGetStressTest {
         for(Invoker invoker: invokers)
             invoker.join();
 
-        System.out.println("\n\n**** success: " + success + ", failure=" + failure);
+        long time=System.currentTimeMillis() - start;
 
+        System.out.println("\n\n**** success: " + success + ", failure=" + failure + ", time=" + time + " ms");
+        Util.keyPress("enter to terminate");
         stop();
     }
 
@@ -137,23 +143,32 @@ public class RemoteGetStressTest {
         }
 
         public void run() {
-            Address target=randomMember();
-            if(target == null) throw new IllegalArgumentException("target cannot be null");
+            Future<BigObject>[] futures=new Future[target_members.size()];
+            for(int i=0; i < target_members.size(); i++) {
+                Address target=target_members.get(i);
+                try {
+                    futures[i]=disp.callRemoteMethodWithFuture(target, GET_METHOD, OPTIONS);
+                }
+                catch(Exception e) {
+                    e.printStackTrace();
+                }
+            }
 
-            try {
-                Future<BigObject> future=disp.callRemoteMethodWithFuture(target, GET_METHOD, OPTIONS);
-                BigObject result=future.get(TIMEOUT,TimeUnit.MILLISECONDS);
-                if(result != null) {
-                    System.out.println("received object #" + result.num);
-                    success.incrementAndGet();
+            for(Future<BigObject> future: futures) {
+                if(future == null) continue;
+                try {
+                    BigObject result=future.get(TIMEOUT, TimeUnit.MILLISECONDS);
+                    if(result != null) {
+                        System.out.println("received object #" + result.num);
+                        success.incrementAndGet();
+                        return;
+                    }
                 }
-                else {
-                    failure.incrementAndGet();
+                catch(Exception e) {
+                    e.printStackTrace();
                 }
             }
-            catch(Exception e) {
-                e.printStackTrace();
-            }
+            failure.incrementAndGet();
         }
     }
 
