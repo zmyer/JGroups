@@ -14,6 +14,10 @@ import org.jgroups.stack.Protocol;
 import org.jgroups.stack.ProtocolStack;
 import org.jgroups.util.Util;
 
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.lang.reflect.Method;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -32,7 +36,8 @@ public class RemoteGetStressTest {
     protected static final int            SIZE=100 * 1000; // size of a GET response
     protected static final byte[]         BUF=new byte[SIZE];
     protected static final MethodCall     GET_METHOD;
-    protected static final long           TIMEOUT=30000; // ms
+    protected static final long           TIMEOUT=60000; // ms
+    protected static final AtomicInteger  count=new AtomicInteger(1);
     protected static final RequestOptions OPTIONS=RequestOptions.SYNC().setTimeout(TIMEOUT).setFlags(Message.Flag.OOB);
 
     static {
@@ -100,9 +105,8 @@ public class RemoteGetStressTest {
         return new JChannel(protocols).name(name);
     }
 
-    public static byte[] get() {
-        Util.sleepRandom(5, 15);
-        return BUF;
+    public static BigObject get() {
+        return new BigObject(count.getAndIncrement());
     }
 
 
@@ -137,10 +141,10 @@ public class RemoteGetStressTest {
             if(target == null) throw new IllegalArgumentException("target cannot be null");
 
             try {
-                Future<byte[]> future=disp.callRemoteMethodWithFuture(target, GET_METHOD, OPTIONS);
-                byte[] result=future.get(TIMEOUT,TimeUnit.MILLISECONDS);
+                Future<BigObject> future=disp.callRemoteMethodWithFuture(target, GET_METHOD, OPTIONS);
+                BigObject result=future.get(TIMEOUT,TimeUnit.MILLISECONDS);
                 if(result != null) {
-                    System.out.println("received " + result.length + " bytes");
+                    System.out.println("received object #" + result.num);
                     success.incrementAndGet();
                 }
                 else {
@@ -150,6 +154,36 @@ public class RemoteGetStressTest {
             catch(Exception e) {
                 e.printStackTrace();
             }
+        }
+    }
+
+    public static class BigObject implements Serializable {
+        private static final long serialVersionUID=1265292900051224502L;
+        int num;
+
+        public BigObject(int num) {
+            this.num = num;
+        }
+
+        public BigObject() {
+        }
+
+        private void writeObject(ObjectOutputStream out) throws IOException {
+            out.defaultWriteObject();
+            byte[] buf = new byte[SIZE];
+            out.write(buf);
+        }
+
+        private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+            in.defaultReadObject();
+            byte[] buf = new byte[SIZE];
+            in.read(buf);
+            Util.sleepRandom(1, 10);
+        }
+
+        @Override
+        public String toString() {
+            return "BigObject#" + num;
         }
     }
 
