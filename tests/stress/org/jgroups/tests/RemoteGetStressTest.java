@@ -42,6 +42,7 @@ public class RemoteGetStressTest {
     protected static final AtomicInteger  count=new AtomicInteger(1);
     protected static final RequestOptions OPTIONS=RequestOptions.SYNC().setTimeout(TIMEOUT)
       .setFlags(Message.Flag.OOB).setAnycasting(true);
+    protected static boolean              USE_SLEEPS=true;
 
     static {
         try {
@@ -69,7 +70,8 @@ public class RemoteGetStressTest {
         target_members=Arrays.asList(channels[1].getAddress(), channels[2].getAddress(), channels[3].getAddress());
         final AtomicInteger success=new AtomicInteger(0), failure=new AtomicInteger(0);
 
-        insertDISCARD(channels[0], 0.2);
+        if(USE_SLEEPS)
+            insertDISCARD(channels[0], 0.2);
 
         long start=System.currentTimeMillis();
         Invoker[] invokers=new Invoker[NUM_THREADS];
@@ -193,7 +195,8 @@ public class RemoteGetStressTest {
             in.defaultReadObject();
             byte[] buf = new byte[SIZE];
             in.read(buf);
-            Util.sleepRandom(1, 10);
+            if(USE_SLEEPS)
+                Util.sleepRandom(1, 10);
         }
 
         @Override
