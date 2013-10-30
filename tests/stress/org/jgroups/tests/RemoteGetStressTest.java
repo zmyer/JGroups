@@ -32,7 +32,7 @@ public class RemoteGetStressTest {
     protected static final int            SIZE=100 * 1000; // size of a GET response
     protected static final byte[]         BUF=new byte[SIZE];
     protected static final MethodCall     GET_METHOD;
-    protected static final long           TIMEOUT=10000; // ms
+    protected static final long           TIMEOUT=30000; // ms
     protected static final RequestOptions OPTIONS=RequestOptions.SYNC().setTimeout(TIMEOUT).setFlags(Message.Flag.OOB);
 
     static {
@@ -85,7 +85,9 @@ public class RemoteGetStressTest {
 
     protected static JChannel createChannel(String name) throws Exception {
         Protocol[] protocols={
-          new SHARED_LOOPBACK().setValue("oob_thread_pool_min_threads", 10).setValue("oob_thread_pool_max_threads", 50),
+          new SHARED_LOOPBACK().setValue("oob_thread_pool_min_threads", 1)
+            .setValue("oob_thread_pool_max_threads", 5)
+          .setValue("oob_thread_pool_queue_enabled", false),
           new PING().timeout(1000),
           new NAKACK2(),
           new UNICAST3(),
