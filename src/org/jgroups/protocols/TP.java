@@ -1194,6 +1194,9 @@ public abstract class TP extends Protocol {
         else if(bundler_type.startsWith("old")) {
             if(bundler_type.endsWith("old2"))
                 log.warn(Util.getMessage("OldBundlerType"), "old2", "DefaultBundler (old)");
+            bundler=new DefaultBundler();
+        }
+        else if(bundler_type.startsWith("latest")) {
             bundler=new DefaultBundler2();
         }
         else
