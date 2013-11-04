@@ -22,7 +22,6 @@ import java.text.NumberFormat;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
 
@@ -2265,7 +2264,6 @@ public abstract class TP extends Protocol {
         final AtomicInteger                            size_sent=new AtomicInteger(0);
         final AtomicInteger                            single_sent=new AtomicInteger(0);
         final AtomicInteger                            not_sent=new AtomicInteger(0);
-        final AtomicLong                               lock_wait_time=new AtomicLong(0); // ns
 
         public void start() {
             Runtime.getRuntime().addShutdownHook(new Thread() {
@@ -2293,7 +2291,7 @@ public abstract class TP extends Protocol {
                     decremented=true;
                     if(sender_count == 0) { // no other senders present at this time
                         single_sent.incrementAndGet();
-                        createNewMapAndSend(msg, length);
+                        createNewMapAndSend(msg, length, false);
                     }
                     else
                         not_sent.incrementAndGet();
@@ -2302,7 +2300,7 @@ public abstract class TP extends Protocol {
                     size_sent.incrementAndGet();
                     decremented=true;
                     num_senders.decrementAndGet();
-                    createNewMapAndSend(msg, length);
+                    createNewMapAndSend(msg, length, true);
                 }
             }
             finally {
@@ -2319,12 +2317,13 @@ public abstract class TP extends Protocol {
         }
 
         @GuardedBy("lock")
-        protected void createNewMapAndSend(final Message msg, long length) {
+        protected void createNewMapAndSend(final Message msg, long length, boolean add_msg) {
             Map<SingletonAddress,List<Message>> map=msgs;
             msgs=createHashMap();
             long old_count=count;
             count=0;
-            addMessage(msg, length);
+            if(add_msg)
+                addMessage(msg, length);
             lock.unlock(); // release lock *before* sending bundled messages
             sendBundledMessages(map, old_count);
         }
