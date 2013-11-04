@@ -23,7 +23,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * @since   3.5
  */
 public class ConcurrentLinkedBlockingQueue2<T> extends ConcurrentLinkedQueue<T> implements BlockingQueue<T> {
-    private static final long     serialVersionUID=7094985083335772755L;
+    private static final long     serialVersionUID=2539983016900218313L;
     protected final int           capacity;
     protected final AtomicInteger count=new AtomicInteger(0);
 
@@ -31,24 +31,30 @@ public class ConcurrentLinkedBlockingQueue2<T> extends ConcurrentLinkedQueue<T> 
     protected final Lock          not_empty_lock=new ReentrantLock();
     protected final Condition     not_empty=not_empty_lock.newCondition();
 
-    // not_full is signalled when the count goes from capacity to capacity-1
-    protected final Lock          not_full_lock=new ReentrantLock();
-    protected final Condition     not_full=not_full_lock.newCondition();
-
 
 
     public ConcurrentLinkedBlockingQueue2(int capacity) {
         this.capacity=capacity;
         Runtime.getRuntime().addShutdownHook(new Thread() {
             public void run() {
-                System.out.println("** num_awaits=" + not_empty_awaits + ", not_full_awaits=" + not_full_awaits);
+                System.out.println("** num_awaits=" + not_empty_awaits);
             }
         });
+
+       /* Thread thread=new Thread() {
+            public void run() {
+                while(true) {
+                    System.out.println("*** size=" + size());
+                    Util.sleep(1000);
+                }
+            }
+        };
+        thread.setDaemon(true);
+        thread.start();*/
     }
 
 
     int not_empty_awaits=0;
-    AtomicInteger not_full_awaits=new AtomicInteger(0);
 
     
     /**
@@ -58,15 +64,24 @@ public class ConcurrentLinkedBlockingQueue2<T> extends ConcurrentLinkedQueue<T> 
      * @return
      */
     public boolean offer(T t) {
-        return false;
+        boolean retval=super.offer(t);
+        if(retval) count.incrementAndGet();
+        return retval;
     }
 
     public T take() throws InterruptedException {
+        T val=super.poll();
+        if(val != null) {
+            decrCount();
+            return val;
+        }
+
         waitForNotEmpty();
 
         // at this stage, we are guaranteed to have a value
-        T val=super.poll();
-        decrCount();
+        val=super.poll();
+        if(val != null)
+            decrCount();
         return val;
     }
 
@@ -80,11 +95,14 @@ public class ConcurrentLinkedBlockingQueue2<T> extends ConcurrentLinkedQueue<T> 
     }
 
     public T poll(long timeout, TimeUnit unit) throws InterruptedException {
-        return null;
+       return null;
     }
 
     public boolean remove(Object o) {
-        return super.remove(o);
+        boolean retval=super.remove(o);
+        if(retval)
+            decrCount();
+        return retval;
     }
 
     public int remainingCapacity() {
@@ -104,14 +122,15 @@ public class ConcurrentLinkedBlockingQueue2<T> extends ConcurrentLinkedQueue<T> 
             cnt++;
         }
 
+        count.set(0);
+
         return cnt;
     }
 
     
     public void put(T t) throws InterruptedException {
-        waitForNotFull();
-        super.offer(t);
-        incrCount();
+        if(super.offer(t))
+            incrCount();
     }
 
     public boolean offer(T t, long timeout, TimeUnit unit) throws InterruptedException {
@@ -131,7 +150,10 @@ public class ConcurrentLinkedBlockingQueue2<T> extends ConcurrentLinkedQueue<T> 
         while(count.get() == 0) {
             not_empty_lock.lock();
             try {
-                System.out.println("-----> waiting for not empty: num_awaits=" + ++not_empty_awaits + ", count=" + count);
+                // System.out.println("-----> waiting for not empty: num_awaits=" + ++not_empty_awaits + ", count=" + count);
+                if(count.get() > 0)
+                    return;
+                not_empty_awaits++;
                 not_empty.await();
             }
             finally {
@@ -140,32 +162,9 @@ public class ConcurrentLinkedBlockingQueue2<T> extends ConcurrentLinkedQueue<T> 
         }
     }
 
-    protected void waitForNotFull() throws InterruptedException {
-        while(count.get() >= capacity) {
-            not_full_lock.lock();
-            try {
-                not_full_awaits.incrementAndGet();
-                not_full.await();
-            }
-            finally {
-                not_full_lock.unlock();
-            }
-        }
-    }
 
     protected void decrCount() {
-        int prev_count=count.getAndDecrement();
-        // if(prev_count == capacity) {
-        if(prev_count >= capacity) {
-            not_full_lock.lock();
-            try {
-               // not_full.signalAll();
-                not_full.signal();
-            }
-            finally {
-                not_full_lock.unlock();
-            }
-        }
+        count.getAndDecrement();
     }
 
     protected void incrCount() {
