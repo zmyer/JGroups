@@ -17,10 +17,7 @@ import java.io.DataOutput;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.text.NumberFormat;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 
@@ -29,23 +26,24 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * @author Bela Ban
  */
-public class UPerf extends ReceiverAdapter {
+public class UPerf2 extends ReceiverAdapter {
     private JChannel               channel;
     private Address                local_addr;
     private RpcDispatcher          disp;
     static final String            groupname="uperf";
     protected final List<Address>  members=new ArrayList<Address>();
     protected final List<Address>  site_masters=new ArrayList<Address>();
+    public static Random random = new Random();
 
 
     // ============ configurable properties ==================
-    private boolean sync=true, oob=false;
-    private int num_threads=25;
-    private int num_msgs=20000, msg_size=1000;
+    private boolean sync=false, oob=false;
+    private int num_threads=1;
+    private int num_msgs=5000, msg_size=1000;
     private int anycast_count=2;
     private boolean use_anycast_addrs;
     private boolean msg_bundling=true;
-    private double read_percentage=0.8; // 80% reads, 20% writes
+    private double read_percentage=0; // 80% reads, 20% writes
     // =======================================================
 
     private static final Method[] METHODS=new Method[16];
@@ -72,19 +70,19 @@ public class UPerf extends ReceiverAdapter {
 
     static {
         try {
-            METHODS[START]                 = UPerf.class.getMethod("startTest");
-            METHODS[SET_OOB]               = UPerf.class.getMethod("setOOB", boolean.class);
-            METHODS[SET_SYNC]              = UPerf.class.getMethod("setSync", boolean.class);
-            METHODS[SET_NUM_MSGS]          = UPerf.class.getMethod("setNumMessages", int.class);
-            METHODS[SET_NUM_THREADS]       = UPerf.class.getMethod("setNumThreads", int.class);
-            METHODS[SET_MSG_SIZE]          = UPerf.class.getMethod("setMessageSize", int.class);
-            METHODS[SET_ANYCAST_COUNT]     = UPerf.class.getMethod("setAnycastCount", int.class);
-            METHODS[SET_USE_ANYCAST_ADDRS] = UPerf.class.getMethod("setUseAnycastAddrs", boolean.class);
-            METHODS[SET_READ_PERCENTAGE]   = UPerf.class.getMethod("setReadPercentage", double.class);
-            METHODS[GET]                   = UPerf.class.getMethod("get", long.class);
-            METHODS[PUT]                   = UPerf.class.getMethod("put", long.class, byte[].class);
-            METHODS[GET_CONFIG]            = UPerf.class.getMethod("getConfig");
-            METHODS[SET_MSB_BUNDLING]       = UPerf.class.getMethod("setMsgBundling", boolean.class);
+            METHODS[START]                 = UPerf2.class.getMethod("startTest");
+            METHODS[SET_OOB]               = UPerf2.class.getMethod("setOOB", boolean.class);
+            METHODS[SET_SYNC]              = UPerf2.class.getMethod("setSync", boolean.class);
+            METHODS[SET_NUM_MSGS]          = UPerf2.class.getMethod("setNumMessages", int.class);
+            METHODS[SET_NUM_THREADS]       = UPerf2.class.getMethod("setNumThreads", int.class);
+            METHODS[SET_MSG_SIZE]          = UPerf2.class.getMethod("setMessageSize", int.class);
+            METHODS[SET_ANYCAST_COUNT]     = UPerf2.class.getMethod("setAnycastCount", int.class);
+            METHODS[SET_USE_ANYCAST_ADDRS] = UPerf2.class.getMethod("setUseAnycastAddrs", boolean.class);
+            METHODS[SET_READ_PERCENTAGE]   = UPerf2.class.getMethod("setReadPercentage", double.class);
+            METHODS[GET]                   = UPerf2.class.getMethod("get", long.class);
+            METHODS[PUT]                   = UPerf2.class.getMethod("put", long.class, byte[].class);
+            METHODS[GET_CONFIG]            = UPerf2.class.getMethod("getConfig");
+            METHODS[SET_MSB_BUNDLING]       = UPerf2.class.getMethod("setMsgBundling", boolean.class);
 
             ClassConfigurator.add((short)11000, Results.class);
             f=NumberFormat.getNumberInstance();
@@ -200,7 +198,7 @@ public class UPerf extends ReceiverAdapter {
         }
 
         long total_time=System.currentTimeMillis() - start;
-        System.out.println("done (in " + total_time + " ms)");
+        System.out.println("\ndone (in " + total_time + " ms)");
         return new Results(total_gets, total_puts, total_time);
     }
 
@@ -475,6 +473,7 @@ public class UPerf extends ReceiverAdapter {
         private final List<Address>  dests=new ArrayList<Address>();
         private final int            num_msgs_to_send;
         private final AtomicInteger  num_msgs_sent;
+        private final int            PRINT;
         private int                  num_gets=0;
         private int                  num_puts=0;
 
@@ -483,6 +482,7 @@ public class UPerf extends ReceiverAdapter {
             this.num_msgs_sent=num_msgs_sent;
             this.dests.addAll(dests);
             this.num_msgs_to_send=num_msgs_to_send;
+            PRINT=num_msgs_to_send / 10;
             setName("Invoker-" + COUNTER.getAndIncrement());
         }
 
@@ -499,38 +499,44 @@ public class UPerf extends ReceiverAdapter {
             MethodCall put_call=new MethodCall(PUT, put_args);
             RequestOptions get_options=new RequestOptions(ResponseMode.GET_ALL, 40000, false, null);
             RequestOptions put_options=new RequestOptions(sync ? ResponseMode.GET_ALL : ResponseMode.GET_NONE, 40000, true, null);
+            RequestOptions get_before_put_options = new RequestOptions(ResponseMode.GET_FIRST, 40000, true, null);
 
             if(oob) {
                 get_options.setFlags(Message.Flag.OOB);
                 put_options.setFlags(Message.Flag.OOB);
             }
+            get_before_put_options.setFlags(Message.Flag.OOB);
+
             if(!msg_bundling) {
                 get_options.setFlags(Message.Flag.DONT_BUNDLE);
                 put_options.setFlags(Message.Flag.DONT_BUNDLE);
             }
+            get_before_put_options.setFlags(Message.Flag.DONT_BUNDLE);
+
             if(use_anycast_addrs)
                 put_options.useAnycastAddresses(true);
+            get_before_put_options.setFlags(Message.Flag.DONT_BUNDLE);
 
             while(true) {
                 long i=num_msgs_sent.getAndIncrement();
                 if(i >= num_msgs_to_send)
                     break;
+                if(i % PRINT == 0)
+                    System.out.print(".");
                 
-                boolean get=Util.tossWeightedCoin(read_percentage);
-
                 try {
-                    if(get) { // sync GET
-                        Address target=pickTarget();
-                        get_args[0]=i;
-                        disp.callRemoteMethod(target, get_call, get_options);
-                        num_gets++;
-                    }
-                    else {    // sync or async (based on value of 'sync') PUT
-                        Collection<Address> targets=pickAnycastTargets();
-                        put_args[0]=i;
-                        disp.callRemoteMethods(targets, put_call, put_options);
-                        num_puts++;
-                    }
+                    // sync GET
+                    Collection<Address> targets=pickAnycastTargets();
+                    get_args[0]=i;
+                    //System.out.println("GET: targets=" + targets);
+                    disp.callRemoteMethods(targets, get_call, get_before_put_options);
+                    num_gets++;
+
+                    // sync or async (based on value of 'sync') PUT
+                    put_args[0]=i;
+                    //System.out.println("PUT: targets=" + targets);
+                    disp.callRemoteMethods(targets, put_call, put_options);
+                    num_puts++;
                 }
                 catch(Throwable throwable) {
                     throwable.printStackTrace();
@@ -555,6 +561,41 @@ public class UPerf extends ReceiverAdapter {
             }
             return anycast_targets;
         }
+
+        private List<Address> pickGetTargets() {
+            List<Address> members = dests;
+            int size = members.size() - 1;
+            int startIndex = random.nextInt(size);
+
+            // self also has the keys for the previous numOwners - 1 nodes
+            if (startIndex >= members.size() - anycast_count)
+                return null;
+
+            int numTargets = Math.min(anycast_count, members.size() - 1);
+            List<Address> targets = new ArrayList<Address>(numTargets);
+            for (int i = 0; i < numTargets; ++i) {
+                targets.add(members.get((startIndex + i) % size));
+            }
+            return targets;
+        }
+
+        private Collection<Address> pickPutTargets() {
+            List<Address> members = dests;
+            int size = members.size() - 1;
+            int startIndex = random.nextInt(size);
+
+            Collection<Address> targets = new ArrayList<Address>(anycast_count);
+            for (int i = 0; i < anycast_count; i++) {
+                int newIndex = (startIndex + i) % size;
+
+                if (newIndex == members.size() - 1)
+                    continue;
+
+                targets.add(members.get(newIndex));
+            }
+            return targets;
+        }
+
     }
 
 
@@ -773,9 +814,9 @@ public class UPerf extends ReceiverAdapter {
             return;
         }
 
-        UPerf test=null;
+        UPerf2 test=null;
         try {
-            test=new UPerf();
+            test=new UPerf2();
             test.init(props, name, xsite);
             test.eventLoop();
         }
