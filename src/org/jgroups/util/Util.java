@@ -2279,8 +2279,8 @@ public class Util {
 
     public static <T> String printListWithDelimiter(Collection<T> list, String delimiter, int limit) {
         boolean first=true;
-        StringBuilder sb=new StringBuilder();
         int count=0, size=list.size();
+        StringBuilder sb=new StringBuilder("(" + size + ") ");
         for(T el: list) {
             if(first)
                 first=false;
