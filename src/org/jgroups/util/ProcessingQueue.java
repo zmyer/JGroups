@@ -39,7 +39,7 @@ public class ProcessingQueue<T> {
         process();
     }
 
-    public void process() {
+    protected void process() {
         if(consumer_lock.tryLock()) {
             try {
                 while(true) {
