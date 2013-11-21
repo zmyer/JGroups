@@ -1113,7 +1113,7 @@ public class GMS extends Protocol implements DiagnosticsHandler.ProbeHandler {
           delta_view_id=delta_view.getViewId();
         if(!current_view_id.equals(delta_ref_view_id))
             throw new IllegalStateException("the view-id of the delta view ("+delta_ref_view_id+") doesn't match the " +
-                                              "current view-id ("+current_view_id+"); discarding delta view");
+                                              "current view-id ("+current_view_id+"); discarding delta view " + delta_view);
         List<Address> current_mbrs=current_view.getMembers();
         List<Address> left_mbrs=Arrays.asList(delta_view.getLeftMembers());
         List<Address> new_mbrs=Arrays.asList(delta_view.getNewMembers());
@@ -1201,38 +1201,43 @@ public class GMS extends Protocol implements DiagnosticsHandler.ProbeHandler {
     }
 
 
-    protected  Tuple<View,Digest> readViewAndDigest(byte[] buffer, int offset, int length) {
-        if(buffer == null) return null;
-        ByteArrayInputStream in_stream=new ExposedByteArrayInputStream(buffer, offset, length);
-        DataInputStream in=new DataInputStream(in_stream); // changed Nov 29 2004 (bela)
-        View tmp_view=null;
-        Digest digest=null;
+    protected Tuple<View,Digest> readViewAndDigest(byte[] buffer, int offset, int length) {
         try {
-            short flags=in.readShort();
-
-            if((flags & VIEW_PRESENT) == VIEW_PRESENT) {
-                tmp_view=(flags & MERGE_VIEW) == MERGE_VIEW? new MergeView() :
-                  (flags & DELTA_VIEW) == DELTA_VIEW? new DeltaView() :
-                    new View();
-                tmp_view.readFrom(in);
-            }
-
-            if((flags & DIGEST_PRESENT) == DIGEST_PRESENT) {
-                if((flags & READ_ADDRS) == READ_ADDRS) {
-                    digest=new Digest();
-                    digest.readFrom(in);
-                }
-                else {
-                    digest=new Digest(tmp_view.getMembersRaw());
-                    digest.readFrom(in,false);
-                }
-            }
-            return new Tuple<View,Digest>(tmp_view, digest);
+            return _readViewAndDigest(buffer,offset,length);
         }
         catch(Exception ex) {
             log.error("%s: failed reading view and digest from message: %s", local_addr, ex);
             return null;
         }
+    }
+
+
+    public static Tuple<View,Digest> _readViewAndDigest(byte[] buffer, int offset, int length) throws Exception {
+        if(buffer == null) return null;
+        ByteArrayInputStream in_stream=new ExposedByteArrayInputStream(buffer, offset, length);
+        DataInputStream in=new DataInputStream(in_stream); // changed Nov 29 2004 (bela)
+        View tmp_view=null;
+        Digest digest=null;
+        short flags=in.readShort();
+
+        if((flags & VIEW_PRESENT) == VIEW_PRESENT) {
+            tmp_view=(flags & MERGE_VIEW) == MERGE_VIEW? new MergeView() :
+              (flags & DELTA_VIEW) == DELTA_VIEW? new DeltaView() :
+                new View();
+            tmp_view.readFrom(in);
+        }
+
+        if((flags & DIGEST_PRESENT) == DIGEST_PRESENT) {
+            if((flags & READ_ADDRS) == READ_ADDRS) {
+                digest=new Digest();
+                digest.readFrom(in);
+            }
+            else {
+                digest=new Digest(tmp_view.getMembersRaw());
+                digest.readFrom(in,false);
+            }
+        }
+        return new Tuple<View,Digest>(tmp_view, digest);
     }
 
 
