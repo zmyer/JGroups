@@ -1,7 +1,7 @@
 package org.jgroups.util;
 
+import java.util.Collection;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -12,7 +12,6 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class ProcessingQueue<T> {
     protected final java.util.Queue<T>  queue=new ConcurrentLinkedQueue<T>();
-    protected final AtomicInteger       added=new AtomicInteger(0), removed=new AtomicInteger(0);
     protected final ReentrantLock       producer_lock=new ReentrantLock(), consumer_lock=new ReentrantLock();
     protected int                       count=0;
     protected Handler<T>                handler;
@@ -20,8 +19,6 @@ public class ProcessingQueue<T> {
 
     public java.util.Queue<T> getQueue()   {return queue;}
     public int                size()       {return queue.size();}
-    public int                getAdded()   {return added.get();}
-    public int                getRemoved() {return removed.get();}
 
     public ProcessingQueue<T> setHandler(Handler<T> handler) {this.handler=handler; return this;}
 
@@ -30,7 +27,6 @@ public class ProcessingQueue<T> {
         try {
             queue.add(element);
             count++;
-            added.incrementAndGet();
         }
         finally {
             producer_lock.unlock();
@@ -39,13 +35,21 @@ public class ProcessingQueue<T> {
         process();
     }
 
+    public boolean retainAll(Collection<T> elements) {
+        return queue.retainAll(elements);
+    }
+
+    public String toString() {
+        return queue.toString();
+    }
+
+
     protected void process() {
         if(consumer_lock.tryLock()) {
             try {
                 while(true) {
                     T element=queue.poll();
                     if(element != null) {
-                        removed.incrementAndGet();
                         if(handler != null) {
                             try {
                                 handler.handle(element);
@@ -75,10 +79,6 @@ public class ProcessingQueue<T> {
                     consumer_lock.unlock();
             }
         }
-    }
-
-    public String toString() {
-        return queue.toString();
     }
 
 
