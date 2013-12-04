@@ -1,5 +1,6 @@
 package org.jgroups.protocols;
 
+import org.jgroups.Address;
 import org.jgroups.Event;
 import org.jgroups.Message;
 import org.jgroups.annotations.MBean;
@@ -13,8 +14,8 @@ import org.jgroups.util.Util;
 
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -35,23 +36,31 @@ import java.util.concurrent.locks.ReentrantLock;
 public class BARRIER extends Protocol {
     
     @Property(description="Max time barrier can be closed. Default is 60000 ms")
-    long max_close_time=60000; // how long can the barrier stay closed (in ms) ? 0 means forever
-    final Lock lock=new ReentrantLock();
-    final AtomicBoolean barrier_closed=new AtomicBoolean(false);
+    protected long                 max_close_time=60000; // how long can the barrier stay closed (in ms) ? 0 means forever
+
+
+    protected final Lock           lock=new ReentrantLock();
+    protected final AtomicBoolean  barrier_closed=new AtomicBoolean(false);
 
     /** signals to waiting threads that the barrier is open again */
-    Condition barrier_opened=lock.newCondition();
-    Condition no_msgs_pending=lock.newCondition();
-    ConcurrentMap<Thread, Object> in_flight_threads=Util.createConcurrentMap();
-    Future<?> barrier_opener_future=null;
-    TimeScheduler timer;
-    private static final Object NULL=new Object();
+    protected Condition            barrier_opened=lock.newCondition();
+    protected Condition            no_msgs_pending=lock.newCondition();
+    protected Map<Thread, Object>  in_flight_threads=Util.createConcurrentMap();
+    protected Future<?>            barrier_opener_future=null;
+    protected TimeScheduler        timer;
+    protected Address              local_addr;
+    protected static final Object  NULL=new Object();
+    // mbrs from which unicasts should be accepted even if BARRIER is closed (PUNCH_HOLE adds, CLOSE_HOLE removes mbrs)
+    protected final Set<Address>   holes=new HashSet<Address>();
 
 
-    @ManagedAttribute
+    @ManagedAttribute(description="Shows whether the barrier closed")
     public boolean isClosed() {
         return barrier_closed.get();
     }
+
+    @ManagedAttribute(description="Lists the members whose unicast messages are let through")
+    public String getHoles() {return holes.toString();}
 
     public int getNumberOfInFlightThreads() {
         return in_flight_threads.size();
@@ -91,6 +100,17 @@ public class BARRIER extends Protocol {
             case Event.OPEN_BARRIER:
                 openBarrier();
                 return null;
+            case Event.SET_LOCAL_ADDRESS:
+                local_addr=(Address)evt.getArg();
+                break;
+            case Event.PUNCH_HOLE:
+                Address mbr=(Address)evt.getArg();
+                holes.add(mbr);
+                return null;
+            case Event.CLOSE_HOLE:
+                mbr=(Address)evt.getArg();
+                holes.remove(mbr);
+                return null;
         }
         return down_prot.down(evt);
     }
@@ -100,7 +120,8 @@ public class BARRIER extends Protocol {
             case Event.MSG:
                 Message msg=(Message)evt.getArg();
                 if(msg.getDest() != null) // https://issues.jboss.org/browse/JGRP-1341: let unicast messages pass
-                    return up_prot.up(evt);
+                    if((msg.isFlagSet(Message.Flag.OOB) && msg.isFlagSet(Message.Flag.INTERNAL)) || holes.contains(msg.getSrc()))
+                        return up_prot.up(evt);
                 Thread current_thread=Thread.currentThread();
                 blockIfBarrierClosed(current_thread);
                 try {
@@ -121,10 +142,13 @@ public class BARRIER extends Protocol {
 
 
 
+
     public void up(MessageBatch batch) {
-        if(batch.dest() != null) { // let unicast messages pass
-            up_prot.up(batch);
-            return;
+        if(batch.dest() != null) { // let unicast message batches pass
+            if((batch.mode() == MessageBatch.Mode.OOB && batch.mode() == MessageBatch.Mode.INTERNAL) || holes.contains(batch.sender())) {
+                up_prot.up(batch);
+                return;
+            }
         }
         Thread current_thread=Thread.currentThread();
         blockIfBarrierClosed(current_thread);
@@ -173,7 +197,7 @@ public class BARRIER extends Protocol {
     }
 
     /** Close the barrier. Temporarily remove all threads which are waiting or blocked, re-insert them after the call */
-    private void closeBarrier() {
+    protected void closeBarrier() {
         if(!barrier_closed.compareAndSet(false, true))
             return; // barrier was already closed
 
