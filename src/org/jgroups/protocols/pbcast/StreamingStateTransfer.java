@@ -286,6 +286,7 @@ public abstract class StreamingStateTransfer extends Protocol {
 
     protected void handleEOF(Address sender) {
         state_provider=null;
+        down_prot.down(new Event(Event.GET_VIEW_FROM_COORD)); // https://issues.jboss.org/browse/JGRP-1751
     }
 
     protected void handleException(Throwable exception) {
@@ -600,8 +601,6 @@ public abstract class StreamingStateTransfer extends Protocol {
                 sendEof(requester); // send an EOF to the remote consumer
             }
             catch(Throwable e) {
-                if(log.isWarnEnabled())
-                    log.warn(local_addr + ": failed getting the state from the application", e);
                 sendException(requester, e); // send the exception to the remote consumer
             }
             finally {
