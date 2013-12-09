@@ -2,12 +2,13 @@ package org.jgroups.tests;
 
 import org.jgroups.*;
 import org.jgroups.conf.ClassConfigurator;
-import org.jgroups.protocols.pbcast.NAKACK;
-import org.jgroups.protocols.pbcast.NAKACK2;
-import org.jgroups.protocols.pbcast.STABLE;
+import org.jgroups.protocols.pbcast.*;
+import org.jgroups.stack.Protocol;
+import org.jgroups.stack.ProtocolStack;
 import org.jgroups.util.SeqnoList;
 import org.jgroups.util.Util;
 import org.testng.annotations.AfterMethod;
+import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 import java.io.*;
@@ -38,6 +39,11 @@ public class StateTransferTest extends ChannelTestBase {
             ids[i]=ClassConfigurator.getProtocolId(NAK_PROTS[i]);
     }
 
+    @DataProvider(name="createChannels")
+    protected Iterator<Class<?>[]> createChannels() {
+        return new MyIterator(new Class<?>[]{STATE_TRANSFER.class, STATE.class, STATE_SOCK.class});
+    }
+
 
     @AfterMethod
     protected void destroy() {
@@ -47,9 +53,11 @@ public class StateTransferTest extends ChannelTestBase {
                 app.cleanup();
             }
     }
-    
-    public void testStateTransferFromSelfWithRegularChannel() throws Exception {
-        Channel ch=createChannel(true);
+
+    @Test(dataProvider="createChannels")
+    public void testStateTransferFromSelfWithRegularChannel(final Class<?> state_transfer_class) throws Exception {
+        JChannel ch=createChannel(true);
+        replaceStateTransferProtocolWith(ch, state_transfer_class);
         ch.connect("StateTransferTest");
         try {
             Address self=ch.getAddress();
@@ -62,8 +70,9 @@ public class StateTransferTest extends ChannelTestBase {
         }
     }
 
-    // @Test(invocationCount=10)
-    public void testStateTransferWhileSending() throws Exception {
+    // @Test(dataProvider="createChannels",invocationCount=10)
+    @Test(dataProvider="createChannels")
+    public void testStateTransferWhileSending(final Class<?> state_transfer_class) throws Exception {
         Semaphore semaphore=new Semaphore(APP_COUNT, true); // fifo order
         semaphore.acquire(APP_COUNT);
         Thread[] threads=new Thread[APP_COUNT];
@@ -74,6 +83,7 @@ public class StateTransferTest extends ChannelTestBase {
                 apps[i]=new StateTransferApplication(semaphore, names[i], from, to);
             else
                 apps[i]=new StateTransferApplication(apps[0].getChannel(), semaphore, names[i], from, to);
+            replaceStateTransferProtocolWith(apps[i].getChannel(), state_transfer_class);
             threads[i]=new Thread(apps[i], "thread-" + names[i]);
             threads[i].start();
             from+=MSG_SEND_COUNT;
@@ -204,6 +214,24 @@ public class StateTransferTest extends ChannelTestBase {
                 list.add(i);
         }
         return list.toString();
+    }
+
+    protected void replaceStateTransferProtocolWith(JChannel ch, Class<?> state_transfer_class) throws Exception {
+        ProtocolStack stack=ch.getProtocolStack();
+        if(stack.findProtocol(state_transfer_class) != null)
+            return; // protocol of the right class is already in stack
+        Protocol prot=stack.findProtocol(STATE_TRANSFER.class, StreamingStateTransfer.class);
+        Protocol new_state_transfer_protcol=(Protocol)state_transfer_class.newInstance();
+        if(prot != null) {
+            stack.replaceProtocol(prot, new_state_transfer_protcol);
+        }
+        else { // no state transfer protocol found in stack
+            Protocol flush=stack.findProtocol(FLUSH.class);
+            if(flush != null)
+                stack.insertProtocol(new_state_transfer_protcol, ProtocolStack.BELOW, FLUSH.class);
+            else
+                stack.insertProtocolAtTop(new_state_transfer_protcol);
+        }
     }
 
 
@@ -340,6 +368,26 @@ public class StateTransferTest extends ChannelTestBase {
                 }
             }
         }
+    }
+
+
+    protected static class MyIterator implements Iterator<Class<?>[]> {
+        protected final Class<?>[] stream_transfer_prots;
+        protected int              index=0;
+
+        public MyIterator(Class<?>[] stream_transfer_prots) {
+            this.stream_transfer_prots=stream_transfer_prots;
+        }
+
+        public boolean hasNext() {return index < stream_transfer_prots.length;}
+
+        public Class<?>[] next() {
+            if(index+1 > stream_transfer_prots.length)
+                throw new NoSuchElementException();
+            return new Class<?>[]{stream_transfer_prots[index++]};
+        }
+
+        public void remove() {}
     }
 
 
