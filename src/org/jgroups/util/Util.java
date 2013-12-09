@@ -2273,14 +2273,18 @@ public class Util {
 
 
     public static <T> String printListWithDelimiter(Collection<T> list, String delimiter) {
-        return printListWithDelimiter(list, delimiter, MAX_LIST_PRINT_SIZE);
+        return printListWithDelimiter(list, delimiter, MAX_LIST_PRINT_SIZE, true);
+    }
+
+    public static <T> String printListWithDelimiter(Collection<T> list, String delimiter, int limit) {
+        return printListWithDelimiter(list, delimiter, limit, true);
     }
 
 
-    public static <T> String printListWithDelimiter(Collection<T> list, String delimiter, int limit) {
+    public static <T> String printListWithDelimiter(Collection<T> list, String delimiter, int limit, boolean print_size) {
         boolean first=true;
-        int count=0, size=list.size();
-        StringBuilder sb=new StringBuilder("(" + size + ") ");
+        int count=0, size=print_size? list.size() : 0;
+        StringBuilder sb=new StringBuilder(print_size? "(" + size + ") " : "");
         for(T el: list) {
             if(first)
                 first=false;

@@ -256,7 +256,7 @@ public class ChannelTestBase {
                 for (short port : ports) {
                     initial_hosts.add(bind_addr + "[" + port + "]");
                 }
-                String tmp = Util.printListWithDelimiter(initial_hosts, ",");
+                String tmp = Util.printListWithDelimiter(initial_hosts, ",", 2000, false);
                 List<IpAddress> init_hosts = Util.parseCommaDelimitedHosts(tmp, 0);
                 ((TCPPING) ping).setInitialHosts(init_hosts);
             } else {
