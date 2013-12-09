@@ -617,31 +617,31 @@ public class Util {
             writeGenericStreamable((Streamable)obj, out);
         }
         else if((type=PRIMITIVE_TYPES.get(obj.getClass())) != null) {
-            out.write(type.byteValue());
-            switch(type.byteValue()) {
+            out.write(type);
+            switch(type) {
                 case TYPE_BOOLEAN:
-                    out.writeBoolean(((Boolean)obj).booleanValue());
+                    out.writeBoolean((Boolean)obj);
                     break;
                 case TYPE_BYTE:
-                    out.writeByte(((Byte)obj).byteValue());
+                    out.writeByte((Byte)obj);
                     break;
                 case TYPE_CHAR:
-                    out.writeChar(((Character)obj).charValue());
+                    out.writeChar((Character)obj);
                     break;
                 case TYPE_DOUBLE:
-                    out.writeDouble(((Double)obj).doubleValue());
+                    out.writeDouble((Double)obj);
                     break;
                 case TYPE_FLOAT:
-                    out.writeFloat(((Float)obj).floatValue());
+                    out.writeFloat((Float)obj);
                     break;
                 case TYPE_INT:
-                    out.writeInt(((Integer)obj).intValue());
+                    out.writeInt((Integer)obj);
                     break;
                 case TYPE_LONG:
-                    out.writeLong(((Long)obj).longValue());
+                    out.writeLong((Long)obj);
                     break;
                 case TYPE_SHORT:
-                    out.writeShort(((Short)obj).shortValue());
+                    out.writeShort((Short)obj);
                     break;
                 case TYPE_STRING:
                     String str=(String)obj;
@@ -694,28 +694,28 @@ public class Util {
                 retval=tmp.readObject();
                 break;
             case TYPE_BOOLEAN:
-                retval=Boolean.valueOf(in.readBoolean());
+                retval=in.readBoolean();
                 break;
             case TYPE_BYTE:
-                retval=Byte.valueOf(in.readByte());
+                retval=in.readByte();
                 break;
             case TYPE_CHAR:
-                retval=Character.valueOf(in.readChar());
+                retval=in.readChar();
                 break;
             case TYPE_DOUBLE:
-                retval=Double.valueOf(in.readDouble());
+                retval=in.readDouble();
                 break;
             case TYPE_FLOAT:
-                retval=Float.valueOf(in.readFloat());
+                retval=in.readFloat();
                 break;
             case TYPE_INT:
-                retval=Integer.valueOf(in.readInt());
+                retval=in.readInt();
                 break;
             case TYPE_LONG:
-                retval=Long.valueOf(in.readLong());
+                retval=in.readLong();
                 break;
             case TYPE_SHORT:
-                retval=Short.valueOf(in.readShort());
+                retval=in.readShort();
                 break;
             case TYPE_STRING:
                 if(in.readBoolean()) { // large string
@@ -1940,8 +1940,8 @@ public class Util {
     }
 
 
-   /* public static String[] commands(String path, String separator) {
-        if(path == null || path.length() == 0)
+    public static String[] components(String path, String separator) {
+        if(path == null || path.isEmpty())
             return null;
         String[] tmp=path.split(separator + "+"); // multiple separators could be present
         if(tmp == null)
@@ -1949,30 +1949,7 @@ public class Util {
         if(tmp.length == 0)
             return null;
 
-        if(tmp[0].length() == 0) {
-            tmp[0]=separator;
-            if(tmp.length > 1) {
-                String[] retval=new String[tmp.length -1];
-                retval[0]=tmp[0] + tmp[1];
-                System.arraycopy(tmp, 2, retval, 1, tmp.length-2);
-                return retval;
-            }
-            return tmp;
-        }
-        return tmp;
-    }*/
-
-
-     public static String[] components(String path, String separator) {
-        if(path == null || path.length() == 0)
-            return null;
-        String[] tmp=path.split(separator + "+"); // multiple separators could be present
-        if(tmp == null)
-            return null;
-        if(tmp.length == 0)
-            return null;
-
-        if(tmp[0].length() == 0)
+        if(tmp[0].isEmpty())
             tmp[0]=separator;
         return tmp;
     }
@@ -3178,7 +3155,7 @@ public class Util {
         if(v.isEmpty()) return null;
         retval=new int[v.size()];
         for(int i=0; i < v.size(); i++)
-            retval[i]=v.get(i).intValue();
+            retval[i]=v.get(i);
         return retval;
     }
 
@@ -3201,7 +3178,7 @@ public class Util {
         if(v.isEmpty()) return null;
         retval=new long[v.size()];
         for(int i=0; i < v.size(); i++)
-            retval[i]=v.get(i).longValue();
+            retval[i]=v.get(i);
         return retval;
     }
 
@@ -3802,7 +3779,7 @@ public class Util {
             return bind_addr;
 
     	// 1. if bind_interface_str is null, or empty, no constraint on bind_addr
-    	if (bind_interface_str == null || bind_interface_str.trim().length() == 0)
+    	if (bind_interface_str == null || bind_interface_str.trim().isEmpty())
     		return bind_addr;
     	
     	// 2. get the preferred IP version for the JVM - it will be IPv4 or IPv6 
@@ -4762,7 +4739,6 @@ public class Util {
      * Runs a task on a separate thread
      * @param task
      * @param factory
-     * @param group
      * @param thread_name
      */
     public static void runAsync(Runnable task, ThreadFactory factory, String thread_name) {
