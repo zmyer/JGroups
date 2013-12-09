@@ -1,16 +1,21 @@
 package org.jgroups.protocols;
 
-import org.jgroups.*;
+import org.jgroups.Address;
+import org.jgroups.Event;
+import org.jgroups.Message;
 import org.jgroups.annotations.MBean;
 import org.jgroups.annotations.ManagedAttribute;
 import org.jgroups.annotations.ManagedOperation;
 import org.jgroups.annotations.Property;
-import org.jgroups.protocols.pbcast.GMS;
 import org.jgroups.stack.Protocol;
-import org.jgroups.util.*;
+import org.jgroups.util.MessageBatch;
+import org.jgroups.util.TimeScheduler;
+import org.jgroups.util.Util;
 
-import java.util.*;
-import java.util.concurrent.Executor;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -28,7 +33,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * @author Bela Ban
  */
 @MBean(description="Blocks all multicast threads when closed")
-public class BARRIER2 extends Protocol {
+public class BARRIER_OLD extends Protocol {
     
     @Property(description="Max time barrier can be closed. Default is 60000 ms")
     protected long                 max_close_time=60000; // how long can the barrier stay closed (in ms) ? 0 means forever
@@ -38,6 +43,7 @@ public class BARRIER2 extends Protocol {
     protected final AtomicBoolean  barrier_closed=new AtomicBoolean(false);
 
     /** signals to waiting threads that the barrier is open again */
+    protected Condition            barrier_opened=lock.newCondition();
     protected Condition            no_msgs_pending=lock.newCondition();
     protected Map<Thread, Object>  in_flight_threads=Util.createConcurrentMap();
     protected Future<?>            barrier_opener_future=null;
@@ -46,14 +52,6 @@ public class BARRIER2 extends Protocol {
     protected static final Object  NULL=new Object();
     // mbrs from which unicasts should be accepted even if BARRIER is closed (PUNCH_HOLE adds, CLOSE_HOLE removes mbrs)
     protected final Set<Address>   holes=new HashSet<Address>();
-
-    // queues multicast messages or message batches (dest == null)
-    protected final Map<Address,Message> mcast_queue=new HashMap<Address,Message>();
-
-    // queues unicast messages or message batches (dest != null)
-    protected final Map<Address,Message> ucast_queue=new HashMap<Address,Message>();
-
-    protected TP                   transport;
 
 
     @ManagedAttribute(description="Shows whether the barrier closed")
@@ -80,8 +78,7 @@ public class BARRIER2 extends Protocol {
 
     public void init() throws Exception {
         super.init();
-        transport=getTransport();
-        timer=transport.getTimer();
+        timer=getTransport().getTimer();
     }
 
     public void stop() {
@@ -125,36 +122,8 @@ public class BARRIER2 extends Protocol {
                 if(msg.getDest() != null) // https://issues.jboss.org/browse/JGRP-1341: let unicast messages pass
                     if((msg.isFlagSet(Message.Flag.OOB) && msg.isFlagSet(Message.Flag.INTERNAL)) || holes.contains(msg.getSrc()))
                         return up_prot.up(evt);
-
-                if(barrier_closed.get()) {
-                    Header hdr=msg.getHeader((short)14); // GMS
-                    if(hdr != null) {
-                        GMS.GmsHeader gms_hdr=(GMS.GmsHeader)hdr;
-                        switch(gms_hdr.getType()) {
-                            case GMS.GmsHeader.JOIN_REQ:
-                            case GMS.GmsHeader.JOIN_REQ_WITH_STATE_TRANSFER:
-                                System.err.println(local_addr + ": *** DROPPED JOIN-REQ: " + gms_hdr);
-                                break;
-                            case GMS.GmsHeader.JOIN_RSP:
-                                System.err.println(local_addr + ": *** DROPPED JOIN-RSP: " + print(msg));
-                                break;
-                            case GMS.GmsHeader.VIEW:
-                                System.err.println(local_addr + ": *** DROPPED VIEW: " + print(msg));
-                                break;
-                            default:
-                                System.err.println(local_addr + ": *** DROPPED GmsHeader: " + gms_hdr);
-                                break;
-                        }
-                    }
-                    // queue the message
-                    final Map<Address,Message> map=msg.getDest() == null? mcast_queue : ucast_queue;
-                    synchronized(map) {
-                        map.put(msg.getSrc(), msg);
-                    }
-                    return null; // drop msg
-                }
                 Thread current_thread=Thread.currentThread();
-                in_flight_threads.put(current_thread, NULL);
+                blockIfBarrierClosed(current_thread);
                 try {
                     return up_prot.up(evt);
                 }
@@ -171,22 +140,7 @@ public class BARRIER2 extends Protocol {
         return up_prot.up(evt);
     }
 
-    protected static String print(Message msg) {
-        try {
-            Tuple<View,Digest> tuple=GMS._readViewAndDigest(msg.getRawBuffer(),msg.getOffset(),msg.getLength());
-            return "view=" + tuple.getVal1() + ", digest=" + tuple.getVal2();
-        }
-        catch(Exception e) {
-            return e.toString();
-        }
-    }
 
-    protected String printQueue(Map<Address,Message> queue) {
-        StringBuilder sb=new StringBuilder();
-        for(Map.Entry<Address,Message> entry: queue.entrySet())
-            sb.append(entry.getKey() + ": " + entry.getValue().printHeaders()).append("\n");
-        return sb.toString();
-    }
 
 
     public void up(MessageBatch batch) {
@@ -196,42 +150,8 @@ public class BARRIER2 extends Protocol {
                 return;
             }
         }
-
-        if(barrier_closed.get()) {
-            for(Message msg: batch) {
-                Header hdr=msg.getHeader((short)14); // GMS
-                if(hdr != null) {
-                    GMS.GmsHeader gms_hdr=(GMS.GmsHeader)hdr;
-                    switch(gms_hdr.getType()) {
-                        case GMS.GmsHeader.JOIN_REQ:
-                        case GMS.GmsHeader.JOIN_REQ_WITH_STATE_TRANSFER:
-                            System.err.println(local_addr + ": *** batch: DROPPED JOIN-REQ: " + gms_hdr);
-                            break;
-                        case GMS.GmsHeader.JOIN_RSP:
-                            System.err.println(local_addr + ": *** batch: DROPPED JOIN-RSP: " + print(msg));
-                            break;
-                        case GMS.GmsHeader.VIEW:
-                            System.err.println(local_addr + ": *** batch: DROPPED VIEW: " + print(msg));
-                            break;
-                        default:
-                            System.err.println(local_addr + ": *** batch: DROPPED GmsHeader: " + gms_hdr);
-                            break;
-                    }
-                }
-            }
-
-            // queue the message batch
-            final Map<Address,Message> map=batch.dest() == null? mcast_queue : ucast_queue;
-            synchronized(map) {
-                Message last=batch.last();
-                last.putHeader(transport.getId(), new TpHeader(batch.clusterName()));
-                map.put(batch.sender(), last);
-            }
-            return; // drop batch
-        }
-
         Thread current_thread=Thread.currentThread();
-        in_flight_threads.put(current_thread, NULL);
+        blockIfBarrierClosed(current_thread);
         try {
             up_prot.up(batch);
         }
@@ -241,7 +161,7 @@ public class BARRIER2 extends Protocol {
     }
 
 
-   /* protected void blockIfBarrierClosed(final Thread current_thread) {
+    protected void blockIfBarrierClosed(final Thread current_thread) {
         in_flight_threads.put(current_thread, NULL);
         if(barrier_closed.get()) {
             lock.lock();
@@ -262,9 +182,7 @@ public class BARRIER2 extends Protocol {
                 lock.unlock();
             }
         }
-    }*/
-
-
+    }
 
     protected void unblock(final Thread current_thread) {
         if(in_flight_threads.remove(current_thread) == NULL && barrier_closed.get() && in_flight_threads.isEmpty()) {
@@ -322,57 +240,21 @@ public class BARRIER2 extends Protocol {
 
     @ManagedOperation(description="Opens the barrier. No-op if already open")
     public void openBarrier() {
-        if(!barrier_closed.compareAndSet(true, false))
-            return; // barrier was already open
+        lock.lock();
+        try {
+            if(!barrier_closed.compareAndSet(true, false))
+                return; // barrier was already open
+            barrier_opened.signalAll();
+        }
+        finally {
+            lock.unlock();
+        }
         if(log.isTraceEnabled())
             log.trace("barrier was opened");
-
-        synchronized(mcast_queue) {
-            flushQueue(mcast_queue);
-        }
-
-        synchronized(ucast_queue) {
-            flushQueue(ucast_queue);
-        }
-
         cancelBarrierOpener(); // cancels if running
     }
 
-    protected void flushQueue(final Map<Address,Message> queue) {
-        if(!queue.isEmpty())
-            System.err.println(local_addr + ": $$$$$$$$$$$$$$$$ FLUSHING queue: " + queue.size()
-                                 + " elements\n: " + printQueue(queue));
-
-
-
-        for(Object obj: queue.values()) {
-            if(obj instanceof Message) {
-                Message msg=(Message)obj;
-                Executor pool=transport.pickThreadPool(msg.isFlagSet(Message.Flag.OOB),msg.isFlagSet(Message.Flag.INTERNAL));
-                try {
-                    pool.execute(transport.new SingleMessageHandler(msg));
-                }
-                catch(Throwable t) {
-                    log.warn("%s: failure passing message up the stack: %s", local_addr, t);
-                }
-            }
-            else if(obj instanceof MessageBatch) {
-                MessageBatch batch=(MessageBatch)obj;
-                Executor pool=transport.pickThreadPool(batch.mode() == MessageBatch.Mode.OOB, batch.mode() == MessageBatch.Mode.INTERNAL);
-                try {
-                    pool.execute(transport.new BatchHandler(batch));
-                }
-                catch(Throwable t) {
-                    log.warn("%s: failure passing batch up the stack: %s", local_addr, t);
-                }
-            }
-            else
-                log.error(local_addr + ": unknown object " + obj.getClass().getSimpleName());
-        }
-        queue.clear();
-    }
-
-    protected void scheduleBarrierOpener() {
+    private void scheduleBarrierOpener() {
         if(barrier_opener_future == null || barrier_opener_future.isDone()) {
             barrier_opener_future=timer.schedule(new Runnable() {public void run() {openBarrier();}},
                                                  max_close_time, TimeUnit.MILLISECONDS
@@ -380,7 +262,7 @@ public class BARRIER2 extends Protocol {
         }
     }
 
-    protected void cancelBarrierOpener() {
+    private void cancelBarrierOpener() {
         if(barrier_opener_future != null) {
             barrier_opener_future.cancel(true);
             barrier_opener_future=null;
