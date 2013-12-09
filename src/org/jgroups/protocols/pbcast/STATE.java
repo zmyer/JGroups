@@ -76,8 +76,8 @@ public class STATE extends StreamingStateTransfer {
         if(buffer == null || input_stream == null)
             return;
         try {
-            if(log.isDebugEnabled())
-                log.debug(local_addr + " received state chunk of " + Util.printBytes(length) + " from " + sender);
+            if(log.isTraceEnabled())
+                log.trace("%s: received chunk of %s from %s", local_addr, Util.printBytes(length), sender);
             input_stream.write(buffer, offset, length);
         }
         catch(IOException e) {
@@ -162,8 +162,8 @@ public class STATE extends StreamingStateTransfer {
             if(Thread.interrupted())
                 throw interrupted((int)bytesWrittenCounter);
             down_prot.down(new Event(Event.MSG, m));
-            if(log.isDebugEnabled())
-                log.debug(local_addr + " sent " + Util.printBytes(len) + " of state to " + stateRequester);
+            if(log.isTraceEnabled())
+                log.trace("%s: sent chunk of %s to %s", local_addr, Util.printBytes(len), stateRequester);
         }
 
 

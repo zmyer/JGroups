@@ -172,28 +172,23 @@ public abstract class StreamingStateTransfer extends Protocol {
 
             case Event.GET_STATE:
                 StateTransferInfo info=(StateTransferInfo)evt.getArg();
-                Address target;
-                if(info.target == null) {
+                Address target=info.target;
+
+                if(target != null && target.equals(local_addr)) {
+                    log.error("%s: cannot fetch state from myself", local_addr);
+                    target=null;
+                }
+                if(target == null)
                     target=determineCoordinator();
-                }
-                else {
-                    target=info.target;
-                    if(target.equals(local_addr)) {
-                        if(log.isErrorEnabled())
-                            log.error("cannot fetch state from myself !");
-                        target=null;
-                    }
-                }
+
                 if(target == null) {
-                    if(log.isDebugEnabled())
-                        log.debug("first member (no state)");
+                    log.debug("%s: first member (no state)", local_addr);
                     up_prot.up(new Event(Event.STATE_TRANSFER_INPUTSTREAM_CLOSED, new StateTransferResult()));
                 }
                 else {
                     state_provider=target;
                     Message state_req=new Message(target).putHeader(this.id, new StateHeader(StateHeader.STATE_REQ));
-                    if(log.isDebugEnabled())
-                        log.debug(local_addr + ": asking " + target + " for state");
+                    log.debug("%s: asking %s for state", local_addr, target);
                     down_prot.down(new Event(Event.MSG, state_req));
                 }
                 return null; // don't pass down any further !
@@ -231,8 +226,7 @@ public abstract class StreamingStateTransfer extends Protocol {
                             handleStateChunk(sender, msg.getRawBuffer(), msg.getOffset(), msg.getLength());
                             break;
                         case StateHeader.STATE_EOF:
-                            if(log.isTraceEnabled())
-                                log.trace(local_addr + " <-- EOF <-- " + sender);
+                            log.trace("%s <-- EOF <-- %s", local_addr, sender);
                             handleEOF(sender);
                             break;
 
@@ -241,8 +235,7 @@ public abstract class StreamingStateTransfer extends Protocol {
                             break;
 
                         default:
-                            if(log.isErrorEnabled())
-                                log.error("type " + hdr.type + " not known in StateHeader");
+                            log.error("%s: type %d not known in StateHeader", local_addr, hdr.type);
                             break;
                     }
                     return null;
@@ -343,8 +336,7 @@ public abstract class StreamingStateTransfer extends Protocol {
         try {
             if(digest != null)
                 down_prot.down(new Event(Event.OVERWRITE_DIGEST, digest));
-            if(log.isTraceEnabled())
-                log.trace(local_addr + ": setting the state in the aplication");
+            log.debug("%s: setting the state in the aplication", local_addr);
             up_prot.up(new Event(Event.STATE_TRANSFER_INPUTSTREAM, in));
             openBarrierAndResumeStable();
             up_prot.up(new Event(Event.STATE_TRANSFER_INPUTSTREAM_CLOSED, new StateTransferResult()));
@@ -358,8 +350,7 @@ public abstract class StreamingStateTransfer extends Protocol {
     public void closeBarrierAndSuspendStable() {
         if(!isDigestNeeded() || !barrier_closed.compareAndSet(false, true))
             return;
-        if(log.isTraceEnabled())
-            log.trace(local_addr + ": sending down CLOSE_BARRIER and SUSPEND_STABLE");
+        log.trace("%s: sending down CLOSE_BARRIER and SUSPEND_STABLE", local_addr);
         down_prot.down(new Event(Event.CLOSE_BARRIER));
         down_prot.down(new Event(Event.SUSPEND_STABLE));
     }
@@ -368,8 +359,7 @@ public abstract class StreamingStateTransfer extends Protocol {
     public void openBarrierAndResumeStable() {
         if(!isDigestNeeded() || !barrier_closed.compareAndSet(true, false))
             return;
-        if(log.isTraceEnabled())
-            log.trace(local_addr + ": sending down OPEN_BARRIER and RESUME_STABLE");
+        log.trace("%s: sending down OPEN_BARRIER and RESUME_STABLE", local_addr);
         down_prot.down(new Event(Event.OPEN_BARRIER));
         down_prot.down(new Event(Event.RESUME_STABLE));
     }
@@ -377,12 +367,11 @@ public abstract class StreamingStateTransfer extends Protocol {
     protected void sendEof(Address requester) {
         try {
             Message eof_msg=new Message(requester).putHeader(getId(), new StateHeader(StateHeader.STATE_EOF));
-            if(log.isTraceEnabled())
-                log.trace(local_addr + " --> EOF --> " + requester);
+            log.trace("%s --> EOF --> %s", local_addr, requester);
             down(new Event(Event.MSG, eof_msg));
         }
         catch(Throwable t) {
-            log.error(local_addr + ": failed sending EOF to " + requester);
+            log.error("%s: failed sending EOF to %s", local_addr, requester);
         }
     }
 
@@ -392,7 +381,7 @@ public abstract class StreamingStateTransfer extends Protocol {
             down(new Event(Event.MSG, ex_msg));
         }
         catch(Throwable t) {
-            log.error(local_addr + ": failed sending exception " + exception.toString() + " to " + requester);
+            log.error("%s: failed sending exception %s to %s", local_addr, exception.toString(), requester);
         }
     }
 
@@ -448,8 +437,7 @@ public abstract class StreamingStateTransfer extends Protocol {
 
     protected void handleStateReq(Address requester) {
         if(requester == null) {
-            if(log.isErrorEnabled())
-                log.error(local_addr + ": sender of STATE_REQ is null; ignoring state transfer request");
+            log.error("%s: sender of STATE_REQ is null; ignoring state transfer request", local_addr);
             return;
         }
 
@@ -459,8 +447,7 @@ public abstract class StreamingStateTransfer extends Protocol {
         // gives subclasses a chance to modify this header, e.g. STATE_SOCK adds the server socket's address
         modifyStateResponseHeader(hdr);
         state_rsp.putHeader(this.id, hdr);
-        if(log.isDebugEnabled())
-            log.debug(local_addr + ": responding to state requester " + requester);
+        log.debug("%s: responding to state requester %s", local_addr, requester);
         down_prot.down(new Event(Event.MSG, state_rsp));
         if(stats)
             num_state_reqs.incrementAndGet();
@@ -594,8 +581,7 @@ public abstract class StreamingStateTransfer extends Protocol {
 
         public void run() {
             try {
-                if(log.isTraceEnabled())
-                    log.trace(local_addr + ": getting the state from the application");
+                log.debug("%s: getting the state from the application", local_addr);
                 up_prot.up(new Event(Event.STATE_TRANSFER_OUTPUTSTREAM, output));
                 output.flush();
                 sendEof(requester); // send an EOF to the remote consumer
