@@ -5,28 +5,28 @@ import org.jgroups.*;
 import org.jgroups.annotations.MBean;
 import org.jgroups.annotations.ManagedAttribute;
 import org.jgroups.annotations.ManagedOperation;
-import org.jgroups.annotations.Property;
 import org.jgroups.stack.Protocol;
-import org.jgroups.util.*;
+import org.jgroups.util.Bits;
+import org.jgroups.util.MessageBatch;
+import org.jgroups.util.Table;
+import org.jgroups.util.Util;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.util.List;
 import java.util.Map;
-import java.util.NavigableMap;
-import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 
 /**
  * Implementation of total order protocol using a sequencer_uum.
  * 
- * INSERT DESCRIPTION HERE
+ * Todo 1: on a sequencer change, the new coordinator needs to determine the highest seqno from all members
+ * Todo 2: on a sequencer change, if a member has pendindg messages in the forward-queue, they need to be resent
  * 
  * @author Bela Ban
  * @edited Andrei Palade
@@ -37,47 +37,19 @@ public class SEQUENCER_UUM extends Protocol {
     protected volatile Address                  coord;
     protected volatile View                     view;
     protected volatile boolean                  is_coord=false;
-    protected final AtomicLong                  seqno=new AtomicLong(0);
-    
-    /** Maintains requests made to the coord for which no ACK has been received yet.
-     *  Needs to be sorted so we resend them in the right order */
-  //  protected final NavigableMap<Long,Message>  request_table=new ConcurrentSkipListMap<Long,Message>();  
-    protected final NavigableMap<Long,Message>  request_table=new ConcurrentSkipListMap<Long,Message>();  
+    protected final AtomicLong                  seqno=new AtomicLong(0); // only used by the sequencer
 
-    /** Maintains responses made to the requests from senders; When the coord receives a broadcast from sending processes
-     *  it acknowledges the successful retrieval of the response and removes the message from this map; We do this so we
-     *  avoid an ACK message from the sender to coordinator. We say that the ACK has been piggybacked on the message during multicast
-     *  Needs to be sorted so we resend them in the right order */
-    protected final NavigableMap<Long,Long>  response_table=new ConcurrentSkipListMap<Long,Long>();
-    
-    protected final Lock                        send_lock=new ReentrantLock();
+    // messages to be multicast are added to this queue; when seqnos are received from the sequencer, we remove and
+    // send messages from the queue
+    protected final BlockingQueue<Message>      fwd_queue=new LinkedBlockingQueue<Message>(20000); // make this configurable
 
-    protected final Condition                   send_cond=send_lock.newCondition();
+    // the number of seqno requests sent to the sequencer
+    protected final AtomicInteger               seqno_reqs=new AtomicInteger(0);
 
-    /** When ack_mode is set, we need to wait for an ack for each forwarded message until we can send the next one */
-    protected volatile boolean                  ack_mode=true;
-
-    /** Set when we block all sending threads to resend all messages from forward_table */
-    protected volatile boolean                  flushing=false;
 
     protected volatile boolean                  running=true;
 
-    /** Keeps track of the threads sending messages */
-    protected final AtomicInteger               in_flight_sends=new AtomicInteger(0);
 
-    protected volatile Flusher                  flusher;
-
-    /** Used for each resent message to wait until the message has been received */
-    protected final Promise<Long>               ack_promise=new Promise<Long>();
-
-    @Property(description="Size of the set to store received seqnos (for duplicate checking)")
-    protected int  delivery_table_max_size=2000;
-
-    @Property(description="Number of acks needed before going from ack-mode to normal mode. " +
-      "0 disables this, which means that ack-mode is always on")
-    protected int  threshold=10;
-
-    protected int  num_acks=0;
 
     protected long request_msgs=0;
     protected long response_msgs=0;
@@ -104,18 +76,12 @@ public class SEQUENCER_UUM extends Protocol {
     @ManagedAttribute
     public long getReceivedRequests() {return received_requests;}
     @ManagedAttribute
-    public long getReceivedBroadcasts() {return received_bcasts;}  
-    
-    @ManagedAttribute(description="Number of messages in the request-table")
-    public int getRequestTableSize() {return request_table.size();}
-    
-    @ManagedAttribute(description="Number of messages in the response-table")
-    public int getResponseTableSize() {return response_table.size();}
+    public long getReceivedBroadcasts() {return received_bcasts;}
 
-    public void setThreshold(int new_threshold) {this.threshold=new_threshold;}
-
-    public void setDeliveryTableMaxSize(int size) {delivery_table_max_size=size;}
+    @ManagedAttribute(description="Number of messages in the forward-queue")
+    public int getFwdQueueSize() {return fwd_queue.size();}
     
+
     @ManagedOperation
     public void resetStats() {
         request_msgs=response_msgs=bcast_msgs=received_bcasts=delivered_bcasts=broadcasts_sent=0L;
@@ -149,13 +115,10 @@ public class SEQUENCER_UUM extends Protocol {
 	public void start() throws Exception {
 		super.start();
 		running = true;
-		ack_mode = true;
 	}
 
     public void stop() {
         running=false;
-        unblockAll();
-        stopFlusher();
         super.stop();
     }
 
@@ -171,32 +134,22 @@ public class SEQUENCER_UUM extends Protocol {
                 if(msg.getDest() != null || msg.isFlagSet(Message.Flag.NO_TOTAL_ORDER) || msg.isFlagSet(Message.Flag.OOB))
                     break;
                 
-                if(log.isTraceEnabled())
-                	log.trace("[" + local_addr + "]: is coordinator:" + (is_coord ? "Yes" : "No") + " in 'down' " + msg.printHeaders());
-                
                 if(msg.getSrc() == null)
                     msg.setSrc(local_addr);
 
-                if(flushing)
-                    block();
-
-                // A seqno is not used to establish ordering, but only to weed out duplicates; next_seqno doesn't need
-                // to increase monotonically, but only to be unique (https://issues.jboss.org/browse/JGRP-1461) !
-                long next_seqno=seqno.incrementAndGet();
-                in_flight_sends.incrementAndGet();
                 try {
-                    if(log.isTraceEnabled())
-                        log.trace("[" + local_addr + "]: requesting from " + local_addr + "::" + seqno + " to coord " + coord);
-
-                    // We always forward messages to the coordinator, even if we're the coordinator. Having the coord
-                    // send its messages directly led to starvation of messages from other members. MPerf perf went up
-                    // from 20MB/sec/node to 50MB/sec/node with this change !
-                    forwardToCoord(next_seqno, msg);
-                } catch(Exception ex) {
-                    log.error("failed sending message", ex);
-                } finally {
-                    in_flight_sends.decrementAndGet();
+                    fwd_queue.put(msg);
+                    if(seqno_reqs.getAndIncrement() == 0) {
+                        int num_reqs=seqno_reqs.get();
+                        sendSeqnoRequest(num_reqs);
+                    }
                 }
+                catch(InterruptedException e) {
+                    if(!running)
+                        return null;
+                    throw new RuntimeException(e);
+                }
+
                 return null; // don't pass down
 
             case Event.VIEW_CHANGE:
@@ -228,23 +181,19 @@ public class SEQUENCER_UUM extends Protocol {
                     break; // pass up
                                 
                 switch(hdr.type) {
-                	case SequencerHeader.FLUSH:
                     case SequencerHeader.REQUEST:
-                    	if(!is_coord) {
-                            if(log.isErrorEnabled())
-                                log.error(local_addr + ": non-coord; dropping REQUEST request from " + msg.getSrc());
+                        if(!is_coord) {
+                            log.error("%s: non-coord; dropping REQUEST request from %s", local_addr, msg.getSrc());
                             return null;
                         }
                         Address sender=msg.getSrc();
                         if(view != null && !view.containsMember(sender)) {
-                            if(log.isErrorEnabled())
-                                log.error(local_addr + ": dropping REQUEST from non-member " + sender + "; view=" + view);
+                            log.error("%s : dropping REQUEST from non-member %s; view=%s" + view, local_addr, sender, view);
                             return null;
                         }
-                        
-                        long new_seqno=sender != coord ? seqno.incrementAndGet() : hdr.seqno;
-                        
-                        unicast(sender,new_seqno,hdr.seqno, hdr.type==SequencerHeader.FLUSH);
+
+                        long new_seqno=seqno.getAndAdd(hdr.num_seqnos) +1;
+                        sendSeqnoResponse(sender, new_seqno, hdr.num_seqnos);
                         
                         received_requests++;
                         break;
@@ -252,26 +201,31 @@ public class SEQUENCER_UUM extends Protocol {
                 	case SequencerHeader.RESPONSE:
                 		Address coordinator=msg.getSrc();
                         if(view != null && !view.containsMember(coordinator)) {
-                            if(log.isErrorEnabled())
-                                log.error(local_addr + ": dropping RESPONSE from non-coordinator " + coordinator + "; view=" + view);
+                            log.error(local_addr + "%s: dropping RESPONSE from non-coordinator %s; view=%s", local_addr, coordinator, view);
                             return null;
                         }
-                        
-                        
-                        response_table.put(hdr.localSeqno, hdr.seqno);	
-                        Message bcast_msg=request_table.get(hdr.localSeqno);
 
-                        System.out.println("--> " + local_addr + "::" + hdr.seqno);
-                        broadcast(bcast_msg, hdr.seqno, hdr.localSeqno, hdr.flush_ack); // do copy the message
+                        long send_seqno=hdr.seqno;
+                        for(int i=0; i < hdr.num_seqnos; i++) {
+                            Message bcast_msg=fwd_queue.poll();
+                            if(bcast_msg == null) {
+                                log.error("received %d seqnos but fwd_queue is empty", hdr.num_seqnos);
+                                break;
+                            }
+
+                           if(log.isTraceEnabled())
+                               log.trace("%s: broadcasting %d", local_addr, send_seqno);
+                            broadcast(bcast_msg, send_seqno++);
+                        }
+                        int num_reqs=0;
+                        if((num_reqs=seqno_reqs.addAndGet(-hdr.num_seqnos)) > 0) {
+                            if(num_reqs > 0)
+                                sendSeqnoRequest(num_reqs);
+                        }
 	                    break;
                     
                     case SequencerHeader.BCAST:
-                        deliver(msg, evt, hdr, hdr.flush_ack);
-                        received_bcasts++;
-                        break;
-
-                    case SequencerHeader.WRAPPED_BCAST:
-                        unwrapAndDeliver(msg, hdr.flush_ack);  // unwrap the original message (in the payload) and deliver it
+                        deliver(msg, evt, hdr);
                         received_bcasts++;
                         break;
                 }
@@ -290,16 +244,69 @@ public class SEQUENCER_UUM extends Protocol {
         return up_prot.up(evt);
     }
 
+   /* public void up(MessageBatch batch) { // todo: better impl: add seq messages into the table in 1 op
+        List<Tuple<Long,Message>> msgs=null;
+        for(Iterator<Message> it=batch.iterator(); it.hasNext();) {
+            final Message msg=it.next();
+            if(msg == null || msg.isFlagSet(Message.Flag.NO_TOTAL_ORDER) || msg.isFlagSet(Message.Flag.OOB))
+                continue;
+            SequencerHeader hdr=(SequencerHeader)msg.getHeader(id);
+            if(hdr == null)
+                continue;
+
+            it.remove(); // we have a header; remove the message from the batch, so it won't be passed up the stack
+
+            switch(hdr.type) {
+                case SequencerHeader.REQUEST:
+                case SequencerHeader.RESPONSE:
+                    up(new Event(Event.MSG, msg));
+                    break;
+
+                case SequencerHeader.BCAST:
+                    if(msgs == null)
+                        msgs=new ArrayList<Tuple<Long,Message>>(batch.size());
+                    msgs.add(new Tuple<Long,Message>(hdr.seqno, msg));
+                    break;
+
+                default:
+                    log.error(Util.getMessage("HeaderTypeNotKnown"), local_addr, hdr.type);
+            }
+        }
+
+        if(msgs != null) {
+            Address sender=batch.sender();
+            if(sender == null) {
+                log.error(local_addr + ": sender is null, cannot deliver batch " + "::" + batch);
+                return;
+            }
+
+            final Table<Message> win=received_msgs;
+
+            System.out.println("<--B " + batch.sender() + "::" + batch);
+
+            win.add(msgs);
+
+            final AtomicBoolean processing=win.getProcessing();
+            if(processing.compareAndSet(false, true))
+                removeAndDeliver(processing, win, sender);
+        }
+
+
+        if(!batch.isEmpty())
+            up_prot.up(batch);
+    }*/
+
     public void up(MessageBatch batch) {
         for(Message msg: batch) {
             if(msg.isFlagSet(Message.Flag.NO_TOTAL_ORDER) || msg.isFlagSet(Message.Flag.OOB) || msg.getHeader(id) == null)
                 continue;
+            batch.remove(msg);
 
             // simplistic implementation
             try {
-                batch.remove(msg);
                 up(new Event(Event.MSG, msg));
-            } catch(Throwable t) {
+            }
+            catch(Throwable t) {
                 log.error("failed passing up message", t);
             }
         }
@@ -322,38 +329,13 @@ public class SEQUENCER_UUM extends Protocol {
         Address existing_coord=coord, new_coord=mbrs.get(0);
         boolean coord_changed=existing_coord == null || !existing_coord.equals(new_coord);
         if(coord_changed && new_coord != null) {
-            stopFlusher();
-            startFlusher(new_coord); // needs to be done in the background, to prevent blocking if down() would block
-        }
-    }
-
-    protected void flush(final Address new_coord) throws InterruptedException {
-        // wait until all threads currently sending messages have returned (new threads after flushing=true) will block
-        // flushing is set to true in startFlusher()
-        while(flushing && running) {
-            if(in_flight_sends.get() == 0)
-                break;
-            Thread.sleep(100);
-        }
-
-        send_lock.lockInterruptibly();
-        try {
-            if(log.isTraceEnabled())
-                log.trace(local_addr + ": coord changed from " + coord + " to " + new_coord);
             coord=new_coord;
-            is_coord=local_addr != null && local_addr.equals(coord);
-            flushMessagesInForwardTable();
+
+            // todo: if I'm the new coord, get the highest seqno from all members. If not, re-send my pending seqno reqs
         }
-        finally {
-            if(log.isTraceEnabled())
-                log.trace(local_addr + ": flushing completed");
-            flushing=false;
-            ack_mode=true; // go to ack-mode after flushing
-            num_acks=0;
-            send_cond.signalAll();
-            send_lock.unlock();
-        }
+        is_coord=new_coord.equals(local_addr);
     }
+
 
     // If we're becoming coordinator, we need to handle TMP_VIEW as
     // an immediate change of view. See JGRP-1452.
@@ -366,188 +348,42 @@ public class SEQUENCER_UUM extends Protocol {
             handleViewChange(v);
     }
 
-    /**
-     * Sends all messages currently in forward_table to the new coordinator (changing the dest field).
-     * This needs to be done, so the underlying reliable unicast protocol (e.g. UNICAST) adds these messages
-     * to its retransmission mechanism<br/>
-     * Note that we need to resend the messages in order of their seqnos ! We also need to prevent other message
-     * from being inserted until we're done, that's why there's synchronization.<br/>
-     * Access to the forward_table doesn't need to be synchronized as there won't be any insertions during flushing
-     * (all down-threads are blocked)
-     */
-    protected void flushMessagesInForwardTable() {
-        if(is_coord) {
-            for(Map.Entry<Long,Message> entry: request_table.entrySet()) {
-            	if(!response_table.containsKey(entry.getKey())){
-                    SequencerHeader hdr=new SequencerHeader(SequencerHeader.REQUEST, entry.getKey());
-                    Message forward_msg=new Message(coord).putHeader(this.id, hdr);
-                    if(log.isTraceEnabled())
-                        log.trace(local_addr + ": flushing (unicasting) lost requests " + local_addr + "::" + entry.getKey());
-                    down_prot.down(new Event(Event.MSG, forward_msg));
-            	} 
-            }
-            return;
-        }
 
-        // for forwarded messages, we need to receive the forwarded message from the coordinator, to prevent this case:
-        // - V1={A,B,C}
-        // - A crashes
-        // - C installs V2={B,C}
-        // - C forwards messages 3 and 4 to B (the new coord)
-        // - B drops 3 because its view is still V1
-        // - B installs V2
-        // - B receives message 4 and broadcasts it
-        // ==> C's message 4 is delivered *before* message 3 !
-        // ==> By resending 3 until it is received, then resending 4 until it is received, we make sure this won't happen
-        // (see https://issues.jboss.org/browse/JGRP-1449)
-        
-        NavigableMap<Long,Message> missing_request_table=new ConcurrentSkipListMap<Long,Message>();
-    	for(Map.Entry<Long,Message> entry: request_table.entrySet()) {
-        	if(!response_table.containsKey(entry.getKey())){
-        		request_table.put(entry.getKey(), entry.getValue());
-        	}
-    	}
-        
-        while(flushing && running && !missing_request_table.isEmpty()) {
-            Map.Entry<Long,Message> entry=missing_request_table.firstEntry();
-            final Long key=entry.getKey();
-
-            while(flushing && running && !missing_request_table.isEmpty()) {
-                SequencerHeader hdr=new SequencerHeader(SequencerHeader.FLUSH, key);
-                Message forward_msg=new Message(coord).putHeader(this.id,hdr).setFlag(Message.Flag.DONT_BUNDLE);
-                if(log.isTraceEnabled())
-                    log.trace(local_addr + ": flushing (forwarding) " + local_addr + "::" + key + " to coord " + coord);
-                ack_promise.reset();
-                down_prot.down(new Event(Event.MSG, forward_msg));
-                Long ack=ack_promise.getResult(500);
-                if((ack != null && ack.equals(key)) || !request_table.containsKey(key))
-                    break;
-            }
-        }
-    }
     
-    protected void forwardToCoord(long seqno, Message msg) {
-    	
-        if(is_coord) {
-        	request_table.put(seqno, msg);
-            forward(seqno, false);
-            return;
-        }
-
-        if(!running || flushing) {
-        	request_table.put(seqno, msg);
-            return;
-        }
-
-        if(!ack_mode) {
-        	request_table.put(seqno, msg);
-            forward(seqno, false);
-            return;
-        }
-
-        send_lock.lock();
-        try {
-        	request_table.put(seqno, msg);
-            while(running && !flushing) {
-                ack_promise.reset();
-                forward(seqno, true);
-                if(!ack_mode || !running || flushing)
-                    break;
-                Long ack=ack_promise.getResult(500);
-                if((ack != null && ack.equals(seqno)) || !request_table.containsKey(seqno))
-                    break;
-            }
-        } finally {
-            send_lock.unlock();
-        }
-    }   
-
-    protected void forward(long seqno, boolean flush) {
+    protected void sendSeqnoRequest(int num_seqnos) {
         Address target=coord;
         if(target == null)
             return;
-        byte type=flush ? SequencerHeader.FLUSH : SequencerHeader.REQUEST;
-        
-        SequencerHeader hdr=new SequencerHeader(type,seqno);
-        Message forward_msg=new Message(target).putHeader(this.id,hdr);
-     
+        SequencerHeader hdr=new SequencerHeader(SequencerHeader.REQUEST, 0, num_seqnos);
+        Message forward_msg=new Message(target).putHeader(this.id, hdr);
         down_prot.down(new Event(Event.MSG, forward_msg));
         sent_requests++;
     }
     
-	protected void unicast(Address original_sender, long new_seqno, long old_seqno, boolean resend) {		
-		SequencerHeader hdr = new SequencerHeader(SequencerHeader.RESPONSE, new_seqno, old_seqno);
+	protected void sendSeqnoResponse(Address original_sender,long seqno, int num_seqnos) {
+		SequencerHeader hdr = new SequencerHeader(SequencerHeader.RESPONSE, seqno, num_seqnos);
 		Message ucast_msg = new Message(original_sender).putHeader(this.id, hdr);
 		
-		if(resend) {
-            hdr.flush_ack=true;
-        }
-
-		if (log.isTraceEnabled())
-			log.trace(local_addr + ": unicasting " + original_sender + ":: new_seqno=" + new_seqno + " local_seqno=" + old_seqno);
+        if (log.isTraceEnabled())
+            log.trace(local_addr + ": sending seqno response to " + original_sender + ":: new_seqno=" + seqno + ", num_seqnos=" + num_seqnos);
 
         down_prot.down(new Event(Event.MSG, ucast_msg));
         sent_responses++;
 	}
     
-    protected void broadcast(final Message msg, long seqno, long local_seqno, boolean resend) {
-
-    	SequencerHeader new_hdr=new SequencerHeader(SequencerHeader.BCAST, seqno, local_seqno);
-        msg.putHeader(this.id, new_hdr);
+    protected void broadcast(final Message msg, long seqno) {
+        msg.putHeader(this.id, new SequencerHeader(SequencerHeader.BCAST, seqno));
  
-        if(resend) {
-            new_hdr.flush_ack=true;
-            msg.setFlag(Message.Flag.DONT_BUNDLE);
-        }
-
         if(log.isTraceEnabled())
             log.trace(local_addr + ": broadcasting ::" + seqno);
 
-        if(msg.getLength() >= 1000){
-        	
-        		// if(is_coord){
-        	
-	        	//	broadcasts_sent++;
-	        	
-//	                long bsent = getBroadcastsSent();
-//					long urec = ((UNICAST3)UNICAST3).getUnicastsReceived();
-//					long retransmit = ((UNICAST3)UNICAST3).getRetransmissions();
-//					if (start == -1) {
-//    					start = System.currentTimeMillis();
-//    				}
-	
-					// writer.println(bsent + ", " + urec + ", " + retransmit + ", " + (System.currentTimeMillis() - start));
-        		//}
-        }
-        
         down_prot.down(new Event(Event.MSG, msg));
         bcast_msgs++;
     }
 
-    /**
-     * Unmarshal the original message (in the payload) and then pass it up (unless already delivered)
-     * @param msg
-     */
-    protected void unwrapAndDeliver(final Message msg, boolean flush_ack) {
-        try {
-            Message msg_to_deliver=(Message)Util.objectFromByteBuffer(msg.getRawBuffer(), msg.getOffset(), msg.getLength());
-        
-            SequencerHeader hdr=(SequencerHeader)msg.getHeader(this.id);
-            if(flush_ack)
-                hdr.flush_ack=true;
-            
-            deliver(msg_to_deliver, new Event(Event.MSG, msg_to_deliver), hdr, flush_ack);
-        } catch(Exception ex) {
-            log.error("failure unmarshalling buffer", ex);
-        }
-    }
 
-    protected void deliver(Message msg, Event evt, SequencerHeader hdr, boolean flush_ack) {
-    	
-    	if(flush_ack){
-             hdr.flush_ack=true;
-    	}
-    	
+
+    protected void deliver(Message msg, Event evt, SequencerHeader hdr) {
         Address sender=msg.getSrc();
         if(sender == null) {
             if(log.isErrorEnabled())
@@ -556,43 +392,11 @@ public class SEQUENCER_UUM extends Protocol {
         }
         
         final Table<Message> win=received_msgs;
-
-        if(sender.equals(local_addr)) {
-            request_table.remove(hdr.localSeqno);
-            response_table.remove(hdr.localSeqno);
-            if(hdr.flush_ack) {
-                ack_promise.setResult(hdr.seqno);
-                if(ack_mode && !flushing && threshold > 0 && ++num_acks >= threshold) {
-                    ack_mode=false;
-                    num_acks=0;
-                }
-            }
-        }
-        if(is_coord){
-        	response_table.remove(hdr.seqno);
-        }
-        
-//        if(!canDeliver(sender, hdr.seqno)){
-//            if(log.isWarnEnabled())
-//                log.warn(local_addr + ": dropped duplicate message " + sender + "::" + hdr.seqno);
-//            return;
-//        }
-
-        System.out.println("<-- " + msg.getSrc() + "::" + hdr.seqno);
-
         win.add(hdr.seqno, msg);
-        
-        if(log.isTraceEnabled())
-        	log.trace(local_addr + ": delivering " + sender + "::" + hdr.seqno);
 
-        
         final AtomicBoolean processing=win.getProcessing();
         if(processing.compareAndSet(false, true)) 
             removeAndDeliver(processing, win, sender);
-        
-        
- //       up_prot.up(evt);
- //       delivered_bcasts++;
     }
     
     
@@ -639,126 +443,49 @@ public class SEQUENCER_UUM extends Protocol {
     }
 
 
-    protected void block() {
-        send_lock.lock();
-        try {
-            while(flushing && running) {
-                try {
-                    send_cond.await();
-                }
-                catch(InterruptedException e) {
-                }
-            }
-        }
-        finally {
-            send_lock.unlock();
-        }
-    }
-
-    protected void unblockAll() {
-        flushing=false;
-        send_lock.lock();
-        try {
-            send_cond.signalAll();
-            ack_promise.setResult(null);
-        }
-        finally {
-            send_lock.unlock();
-        }
-    }
-
-    protected synchronized void startFlusher(final Address new_coord) {
-        if(flusher == null || !flusher.isAlive()) {
-            if(log.isTraceEnabled())
-                log.trace(local_addr + ": flushing started");
-            // causes subsequent message sends (broadcasts and forwards) to block (https://issues.jboss.org/browse/JGRP-1495)
-            flushing=true;
-            
-            flusher=new Flusher(new_coord);
-            flusher.setName("Flusher");
-            flusher.start();
-        }
-    }
-
-    protected void stopFlusher() {
-        flushing=false;
-        Thread tmp=flusher;
-
-        while(tmp != null && tmp.isAlive()) {
-            tmp.interrupt();
-            ack_promise.setResult(null);
-            try {
-                tmp.join();
-            }
-            catch(InterruptedException e) {
-            }
-        }
-    }
 
     /* ----------------------------- End of Private Methods -------------------------------- */
     
-	protected class Flusher extends Thread {
-		protected final Address new_coord;
-
-		public Flusher(Address new_coord) {
-			this.new_coord = new_coord;
-		}
-
-		public void run() {
-			try {
-				flush(new_coord);
-			} catch (InterruptedException e) {
-			}
-		}
-	}
 
     public static class SequencerHeader extends Header {
-    	
         protected static final byte REQUEST       = 1;
-        protected static final byte FLUSH         = 2;
-        protected static final byte BCAST         = 3;
-        protected static final byte WRAPPED_BCAST = 4;
-        protected static final byte RESPONSE      = 5;
+        protected static final byte BCAST         = 2;
+        protected static final byte RESPONSE      = 3;
 
-        protected byte    type=-1;
-        protected long    seqno=-1;
-        protected long    localSeqno=-1;
-        protected boolean flush_ack;
+        protected byte    type;
+        protected long    seqno;
+        protected int     num_seqnos=1; // the number of seqnos requested (REQUEST) or returned (on a RESPONSE)
 
         public SequencerHeader() {}
 
         public SequencerHeader(byte type) {this.type=type;}
 
-        public SequencerHeader(byte type, long seqno) {this(type); this.seqno=seqno;}
-        
-        public SequencerHeader(byte type, long seqno, long localSeqno) {
-        	this(type); 
-        	this.seqno=seqno; 
-        	this.localSeqno=localSeqno;
+        public SequencerHeader(byte type, long seqno) {
+            this(type, seqno, 1);
         }
 
+        public SequencerHeader(byte type, long seqno, int num_seqnos) {
+            this(type);
+            this.seqno=seqno;
+            this.num_seqnos=num_seqnos;
+        }
+        
         public long getSeqno() {return seqno;}
         
-        public long getLocalSeqno() {return localSeqno;}
-
         public String toString() {
             StringBuilder sb=new StringBuilder(64);
             sb.append(printType());
             if(seqno >= 0)
                 sb.append(" seqno=" + seqno);
-            if(localSeqno >= 0)
-                sb.append(" localSeqno=" + localSeqno);
-            if(flush_ack)
-                sb.append(" (flush_ack)");
+            if(num_seqnos > 1)
+                sb.append(", num_seqnos=" + num_seqnos);
             return sb.toString();
         }
 
         protected final String printType() {
             switch(type) {
                 case REQUEST:        return "REQUEST";
-                case FLUSH:          return "FLUSH";
                 case BCAST:          return "BCAST";
-                case WRAPPED_BCAST:  return "WRAPPED_BCAST";
                 case RESPONSE:	     return "RESPONSE";
                 default:             return "n/a";
             }
@@ -767,20 +494,18 @@ public class SEQUENCER_UUM extends Protocol {
         public void writeTo(DataOutput out) throws Exception {
             out.writeByte(type);
             Bits.writeLong(seqno,out);
-            Bits.writeLong(localSeqno,out);
-            out.writeBoolean(flush_ack);
+            out.writeShort(num_seqnos);
         }
 
         public void readFrom(DataInput in) throws Exception {
             type=in.readByte();
             seqno=Bits.readLong(in);
-            localSeqno=Bits.readLong(in);
-            flush_ack=in.readBoolean();
+            num_seqnos=in.readUnsignedShort();
         }
 
         // type + seqno + localSeqno + flush_ack
         public int size() {
-            return Global.BYTE_SIZE + Bits.size(seqno) + Bits.size(localSeqno) + Global.BYTE_SIZE; 
+            return Global.BYTE_SIZE + Bits.size(seqno) + Global.SHORT_SIZE;
         }
     }
 
