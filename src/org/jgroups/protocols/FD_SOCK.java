@@ -1184,7 +1184,7 @@ public class FD_SOCK extends Protocol implements Runnable {
         
 
         private void startTask() {
-            if(future == null || future.isDone()) {
+            if(running && (future == null || future.isDone())) {
                 try {
                     future=timer.scheduleWithFixedDelay(this, suspect_msg_interval, suspect_msg_interval, TimeUnit.MILLISECONDS);
                 }
