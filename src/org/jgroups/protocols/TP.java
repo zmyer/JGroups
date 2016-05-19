@@ -1382,21 +1382,19 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
     protected void passBatchUp(MessageBatch batch, boolean perform_cluster_name_matching, boolean discard_own_mcast) {
         if(log.isTraceEnabled())
             log.trace("%s: received message batch of %d messages from %s", local_addr, batch.size(), batch.sender());
-
-        AsciiString ch_name=batch.clusterName();
         if(up_prot == null)
             return;
 
         // Discard if message's cluster name is not the same as our cluster name
-        if(perform_cluster_name_matching && cluster_name != null && !cluster_name.equals(ch_name)) {
+        if(perform_cluster_name_matching && cluster_name != null && !cluster_name.equals(batch.clusterName())) {
             if(log_discard_msgs && log.isWarnEnabled()) {
                 Address sender=batch.sender();
                 if(suppress_log_different_cluster != null)
                     suppress_log_different_cluster.log(SuppressLog.Level.warn, sender,
                                                        suppress_time_different_cluster_warnings,
-                                                       ch_name,cluster_name, sender);
+                                                       batch.clusterName(),cluster_name, sender);
                 else
-                    log.warn(Util.getMessage("BatchDroppedDiffCluster"), ch_name,cluster_name, sender);
+                    log.warn(Util.getMessage("BatchDroppedDiffCluster"), batch.clusterName(),cluster_name, sender);
             }
             return;
         }

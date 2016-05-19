@@ -8,6 +8,7 @@ import org.jgroups.tests.rt.RtReceiver;
 import org.jgroups.tests.rt.RtTransport;
 import org.jgroups.util.DirectExecutor;
 import org.jgroups.util.MessageBatch;
+import org.jgroups.util.Profiler;
 import org.jgroups.util.Util;
 
 import java.util.List;
@@ -73,8 +74,8 @@ public class JGroupsTransport extends ReceiverAdapter implements RtTransport {
         ch=new JChannel(props).name(name).receiver(this);
         TP transport=ch.getProtocolStack().getTransport();
         // uncomment below to disable the regular and OOB thread pools
-        transport.setOOBThreadPool(new DirectExecutor());
-        transport.setDefaultThreadPool(new DirectExecutor());
+        // transport.setOOBThreadPool(new DirectExecutor());
+        // transport.setDefaultThreadPool(new DirectExecutor());
 
         //ThreadPoolExecutor thread_pool=new ThreadPoolExecutor(4, 4, 30000, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(5000));
         //transport.setDefaultThreadPool(thread_pool);
