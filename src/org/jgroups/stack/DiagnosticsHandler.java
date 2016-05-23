@@ -200,7 +200,7 @@ public class DiagnosticsHandler implements Runnable {
     }
 
     protected String defaultHeaders() {
-        if(transport == null) return "n/a";
+        if(transport == null) return "";
         Address local_addr=transport.localAddress();
         View view=transport.view();
         int num_members=view != null? view.size() : 0;
