@@ -1,87 +1,105 @@
 package org.jgroups.tests;
 
-import org.jgroups.*;
-import org.jgroups.protocols.TP;
-import org.jgroups.util.*;
+import org.jgroups.Global;
+import org.jgroups.tests.rt.RtReceiver;
+import org.jgroups.tests.rt.RtTransport;
+import org.jgroups.tests.rt.transports.*;
+import org.jgroups.util.AverageMinMax;
+import org.jgroups.util.Bits;
+import org.jgroups.util.Promise;
+import org.jgroups.util.Util;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Class that measure RTT for multicast messages between 2 cluster members. See {@link RpcDispatcherSpeedTest} for
- * RPCs
+ * RPCs. Note that request and response times are measured using {@link System#nanoTime()} which might yield incorrect
+ * values when run on different cores, so these numbers may not be reliable.
  * @author Bela Ban
  */
-public class RoundTrip extends ReceiverAdapter {
-    protected JChannel               channel;
-    protected int                    num_msgs=20000;
-    protected int                    num_senders=1; // number of sender threads
-    protected boolean                oob=true, dont_bundle, details;
-    protected static final byte      REQ=0, RSP=1;
-    protected Sender[]               senders;
+public class RoundTrip implements RtReceiver {
+    protected RtTransport                     tp;
+    protected int                             num_msgs=20000;
+    protected int                             num_senders=1; // number of sender threads
+    protected boolean                         details;
+    protected static final byte               REQ=0, RSP=1, DONE=2;
+    // | REQ or RSP | index (short) | time (long) |
+    public static final int                   PAYLOAD=Global.BYTE_SIZE + Global.SHORT_SIZE + Global.LONG_SIZE;
+    protected Sender[]                        senders;
+    protected final AverageMinMax             req_latency=new AverageMinMax(); // client -> server
+    protected final AverageMinMax             rsp_latency=new AverageMinMax(); // server -> client
+    protected static final Map<String,String> TRANSPORTS=new HashMap<>(16);
 
-
-
-    protected void start(String props, String name) throws Exception {
-        channel=new JChannel(props).name(name).setReceiver(this);
-        TP transport=channel.getProtocolStack().getTransport();
-        // uncomment below to disable the regular and OOB thread pools
-        // transport.setOOBThreadPool(new DirectExecutor());
-        // transport.setDefaultThreadPool(new DirectExecutor());
-
-        //ThreadPoolExecutor thread_pool=new ThreadPoolExecutor(4, 4, 30000, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(5000));
-        //transport.setDefaultThreadPool(thread_pool);
-        //transport.setOOBThreadPool(thread_pool);
-        //transport.setInternalThreadPool(thread_pool);
-
-        channel.connect("rt");
-        View view=channel.getView();
-        if(view.size() > 2)
-            System.err.printf("More than 2 members found (%s); terminating\n", view);
-        else
-            loop();
-        Util.close(channel);
+    static {
+        TRANSPORTS.put("jg",      JGroupsTransport.class.getName());
+        TRANSPORTS.put("jgroups", JGroupsTransport.class.getName());
+        TRANSPORTS.put("tcp",     TcpTransport.class.getName());
+        TRANSPORTS.put("nio",     NioTransport.class.getName());
+        TRANSPORTS.put("server",  ServerTransport.class.getName());
+        TRANSPORTS.put("udp",     UdpTransport.class.getName());
     }
 
-    /**
-     * On the server: receive a request, send a response. On the client: send a request, wait for the response
-     * @param msg
-     */
-    public void receive(Message msg) {
-        byte[] req_buf=msg.getRawBuffer();
-        byte type=req_buf[0];
-        short id=Bits.readShort(req_buf, 1);
-        switch(type) {
+    protected void start(String transport, String[] args) throws Exception {
+        tp=create(transport);
+        tp.receiver(this);
+        try {
+            tp.start(args);
+            loop();
+        }
+        finally {
+            tp.stop();
+        }
+    }
+
+    /** On the server: receive a request, send a response. On the client: send a request, wait for the response */
+    public void receive(Object sender, byte[] req_buf, int offset, int length) {
+        switch(req_buf[0]) {
             case REQ:
-                byte[] rsp_buf=new byte[Global.BYTE_SIZE + Global.SHORT_SIZE];
+                short id=Bits.readShort(req_buf, 1);
+                long time=time() - Bits.readLong(req_buf, 3);
+                byte[] rsp_buf=new byte[PAYLOAD];
                 rsp_buf[0]=RSP;
                 Bits.writeShort(id, rsp_buf, 1);
-                Message rsp=new Message(msg.src(), rsp_buf);
                 try {
-                    channel.send(rsp);
+                    Bits.writeLong(time(), rsp_buf, 3);
+                    tp.send(sender, rsp_buf, 0, rsp_buf.length);
                 }
                 catch(Exception e) {
                     e.printStackTrace();
                 }
+                synchronized(req_latency) {
+                    req_latency.add(time);
+                }
                 break;
             case RSP:
+                id=Bits.readShort(req_buf, 1);
+                time=time() - Bits.readLong(req_buf, 3);
                 senders[id].promise.setResult(true); // notify the sender of the response
+                synchronized(rsp_latency) {
+                    rsp_latency.add(time);
+                }
+                break;
+            case DONE:
+                System.out.printf(Util.bold("req-latency = min/avg/max: %d / %.2f / %d us\n"),
+                                  req_latency.min(), req_latency.average(), req_latency.max());
+                req_latency.clear();
                 break;
             default:
                 throw new IllegalArgumentException("first byte needs to be either REQ or RSP but not " + req_buf[0]);
         }
     }
 
-    public void viewAccepted(View view) {
-        System.out.println("view = " + view);
-    }
 
     protected void loop() {
         boolean looping=true;
         while(looping) {
             int c=Util.keyPress(String.format("[1] send [2] num_msgs (%d) [3] senders (%d)\n" +
-                                                "[o] oob (%b) [b] dont_bundle (%b) [d] details (%b) [x] exit\n",
-                                              num_msgs, num_senders, oob, dont_bundle, details));
+                                                "[d] details (%b) [x] exit\n",
+                                              num_msgs, num_senders, details));
             try {
                 switch(c) {
                     case '1':
@@ -92,12 +110,6 @@ public class RoundTrip extends ReceiverAdapter {
                         break;
                     case '3':
                         num_senders=Util.readIntFromStdin("num_senders: ");
-                        break;
-                    case 'o':
-                        oob=!oob;
-                        break;
-                    case 'b':
-                        dont_bundle=!dont_bundle;
                         break;
                     case 'd':
                         details=!details;
@@ -114,13 +126,13 @@ public class RoundTrip extends ReceiverAdapter {
     }
 
     protected void sendRequests() throws Exception {
-        View view=channel.getView();
-        if(view.size() != 2) {
-            System.err.printf("Cluster must have exactly 2 members: %s\n", view);
+        List mbrs=tp.clusterMembers();
+        if(mbrs != null && mbrs.size() != 2) {
+            System.err.printf("Cluster must have exactly 2 members: %s\n", mbrs);
             return;
         }
-
-        Address target=Util.pickNext(view.getMembers(), channel.getAddress());
+        rsp_latency.clear();
+        Object target=mbrs != null? Util.pickNext(mbrs, tp.localAddress()) : null;
         final CountDownLatch latch=new CountDownLatch(num_senders +1);
         final AtomicInteger sent_msgs=new AtomicInteger(0);
         senders=new Sender[num_senders];
@@ -129,53 +141,58 @@ public class RoundTrip extends ReceiverAdapter {
             senders[i].start();
         }
 
-        long start=System.nanoTime();
+        long start=time();
         latch.countDown(); // start all sender threads
         for(Sender sender: senders)
             sender.join();
-        long total_time=System.nanoTime()-start;
-        double msgs_sec=num_msgs / (total_time / 1_000_000_000.0);
+        long total_time=time()-start;
+
+        byte[] done_buf=new byte[PAYLOAD];
+        done_buf[0]=DONE;
+        tp.send(target, done_buf, 0, done_buf.length);
+        double msgs_sec=num_msgs / (total_time / 1_000_000.0);
 
         AverageMinMax avg=null;
         if(details)
             System.out.println("");
         for(Sender sender: senders) {
             if(details)
-                System.out.printf("%d: %s\n", sender.id, print(sender.avg));
+                System.out.printf("%d: %s\n", sender.id, print(sender.rtt));
             if(avg == null)
-                avg=sender.avg;
+                avg=sender.rtt;
             else
-                avg.merge(sender.avg);
+                avg.merge(sender.rtt);
         }
 
-        System.out.printf(Util.bold("\n\nreqs/sec = %.2f, " +
-                                      "round-trip = min/avg/max: %.2f / %.2f / %.2f us\n\n"),
-                          msgs_sec, avg.min()/1000.0, avg.average() / 1000.0, avg.max()/1000.0);
+        System.out.printf(Util.bold("\n\nreqs/sec    = %.2f" +
+                                      "\nround-trip  = min/avg/max: %d / %.2f / %d us" +
+                                      "\nrsp-latency = min/avg/max: %d / %.2f / %d us\n\n"),
+                          msgs_sec, avg.min(), avg.average(), avg.max(),
+                          rsp_latency.min(), rsp_latency.average(), rsp_latency.max());
     }
 
     protected static String print(AverageMinMax avg) {
-        return String.format("round-trip min/avg/max = %.2f / %.2f / %.2f us",
-                             avg.min() / 1000.0, avg.average() / 1000.0, avg.max() / 1000.0);
+        return String.format("round-trip min/avg/max = %d / %.2f / %d us", avg.min(), avg.average(), avg.max());
     }
+
+    protected static long time() {return Util.micros();}
+
 
 
     protected class Sender extends Thread {
         protected final short            id;
-        protected final byte[]           req_buf=new byte[Global.BYTE_SIZE + Global.SHORT_SIZE]; // request and id
         protected final CountDownLatch   latch;
         protected final AtomicInteger    sent_msgs; // current number of messages; senders stop if sent_msgs >= num_msgs
         protected final Promise<Boolean> promise=new Promise<>(); // for the sender thread to wait for the response
         protected final int              print;
-        protected final Address          target;
-        protected final AverageMinMax    avg=new AverageMinMax(); // in ns
+        protected final Object           target;
+        protected final AverageMinMax    rtt=new AverageMinMax(); // in us: client -> server -> client
 
-        public Sender(short id, CountDownLatch latch, AtomicInteger sent_msgs, Address target) {
+        public Sender(short id, CountDownLatch latch, AtomicInteger sent_msgs, Object target) {
             this.id=id;
             this.latch=latch;
             this.sent_msgs=sent_msgs;
             this.target=target;
-            req_buf[0]=REQ;
-            Bits.writeShort(id, req_buf, 1); // writes id at buf_reqs[1-2]
             print=Math.max(1, num_msgs / 10);
         }
 
@@ -186,18 +203,18 @@ public class RoundTrip extends ReceiverAdapter {
                     break;
                 if(num > 0 && num % print == 0)
                     System.out.printf(".");
+
                 promise.reset(false);
-                Message req=new Message(target, req_buf);
-                if(oob)
-                    req.setFlag(Message.Flag.OOB);
-                if(dont_bundle)
-                    req.setFlag(Message.Flag.DONT_BUNDLE);
+                byte[] req_buf=new byte[PAYLOAD];
+                req_buf[0]=REQ;
+                Bits.writeShort(id, req_buf, 1);
                 try {
-                    long start=System.nanoTime();
-                    channel.send(req);
+                    long start=time();
+                    Bits.writeLong(start, req_buf, 3);
+                    tp.send(target, req_buf, 0, req_buf.length);
                     promise.getResult(0);
-                    long time=System.nanoTime()-start;
-                    avg.add(time);
+                    long time=time()-start;
+                    rtt.add(time);
                 }
                 catch(Exception e) {
                     e.printStackTrace();
@@ -208,25 +225,69 @@ public class RoundTrip extends ReceiverAdapter {
 
 
     public static void main(String[] args) throws Exception {
-        String props=null, name=null;
+        String tp="jg";
         for(int i=0; i < args.length; i++) {
-            if(args[i].equals("-props")) {
-                props=args[++i];
+            if(args[i].equals("-tp")) {
+                tp=args[++i];
                 continue;
             }
-            if(args[i].equals("-name")) {
-                name=args[++i];
-                continue;
+            if(args[i].equals("-h")) {
+                help(tp);
+                return;
             }
-            help();
-            return;
         }
-        new RoundTrip().start(props, name);
+        RtTransport transport=create(tp);
+        String[] opts=transport.options();
+        if(opts != null) {
+            for(int i=0; i < args.length; i++) {
+                if(args[i].equals("-tp") || args[i].equals("-h") || !args[i].startsWith("-"))
+                    continue;
+                String option=args[i];
+                boolean match=false;
+                for(String opt: opts) {
+                    if(opt.startsWith(option)) {
+                        match=true;
+                        break;
+                    }
+                }
+                if(!match) {
+                    help(tp);
+                    return;
+                }
+            }
+        }
+        new RoundTrip().start(tp, args);
     }
 
 
 
-    private static void help() {
-        System.out.println("RoundTrip [-props <properties>] [-name name]");
+    protected static void help(String transport) {
+        RtTransport tp=null;
+        try {
+            tp=create(transport);
+        }
+        catch(Exception e) {
+        }
+        System.out.printf("\n%s [-tp classname | (%s)]\n          %s\n\n",
+                          RoundTrip.class.getSimpleName(), availableTransports(), tp != null? printOptions(tp.options()) : "");
     }
+
+    protected static RtTransport create(String transport) throws Exception {
+        String clazzname=TRANSPORTS.get(transport);
+        Class<?> clazz=Util.loadClass(clazzname != null? clazzname : transport, RoundTrip.class);
+        return (RtTransport)clazz.newInstance();
+    }
+
+    protected static String availableTransports() {
+        return Util.printListWithDelimiter(TRANSPORTS.keySet(), "|", 0, false);
+    }
+
+    protected static String printOptions(String[] opts) {
+        if(opts == null) return "";
+        StringBuilder sb=new StringBuilder();
+        for(String opt: opts)
+            sb.append("[").append(opt).append("] ");
+        return sb.toString();
+    }
+
 }
