@@ -199,10 +199,10 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
     protected int timer_max_threads=4;
 
     @Property(name="timer.keep_alive_time", description="Timeout in ms to remove idle threads from the timer pool")
-    protected long timer_keep_alive_time=5000;
+    protected long timer_keep_alive_time=30000;
 
     @Property(name="timer.queue_max_size", description="Max number of elements on a timer queue")
-    protected int timer_queue_max_size=500;
+    protected int timer_queue_max_size=100;
 
     @Property(name="timer.rejection_policy",description="Timer rejection policy. Possible values are Abort, Discard, DiscardOldest and Run")
     protected String timer_rejection_policy="abort"; // abort will spawn a new thread if the timer thread pool is full
@@ -268,6 +268,12 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
 
     @Property(description="The max number of elements in a bundler if the bundler supports size limitations")
     protected int bundler_capacity=20000;
+
+    @Property(name="no_bundler.pool_size",description="Pool size of buffers for marshalling in NoBundler")
+    protected int no_bundler_pool_size=10;
+
+    @Property(name="no_bundler.initial_buf_size",description="The initial size of each buffer (in bytes)")
+    protected int no_bundler_initial_buf_size=512;
 
     @ManagedAttribute(description="Fully qualified classname of bundler")
     public String getBundlerClass() {
@@ -952,7 +958,6 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
 
     public void init() throws Exception {
         this.id=ClassConfigurator.getProtocolId(TP.class);
-        // super.init();
 
         // Create the default thread factory
         if(global_thread_factory == null)
@@ -1002,7 +1007,7 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
         if(oob_thread_pool == null
           || (oob_thread_pool instanceof ThreadPoolExecutor && ((ThreadPoolExecutor)oob_thread_pool).isShutdown())) {
             if(oob_thread_pool_queue_enabled)
-                oob_thread_pool_queue=new LinkedBlockingQueue<>(oob_thread_pool_queue_max_size);
+                oob_thread_pool_queue=new ArrayBlockingQueue<>(oob_thread_pool_queue_max_size);
             else
                 oob_thread_pool_queue=new SynchronousQueue<>();
             oob_thread_pool=createThreadPool(oob_thread_pool_min_threads, oob_thread_pool_max_threads, oob_thread_pool_keep_alive_time,
@@ -1014,7 +1019,7 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
         if(thread_pool == null
           || (thread_pool instanceof ThreadPoolExecutor && ((ThreadPoolExecutor)thread_pool).isShutdown())) {
             if(thread_pool_queue_enabled)
-                thread_pool_queue=new LinkedBlockingQueue<>(thread_pool_queue_max_size);
+                thread_pool_queue=new ArrayBlockingQueue<>(thread_pool_queue_max_size);
             else
                 thread_pool_queue=new SynchronousQueue<>();
             thread_pool=createThreadPool(thread_pool_min_threads, thread_pool_max_threads, thread_pool_keep_alive_time,
@@ -1027,7 +1032,7 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
         if(internal_thread_pool == null
           || (internal_thread_pool instanceof ThreadPoolExecutor && ((ThreadPoolExecutor)internal_thread_pool).isShutdown())) {
             if(internal_thread_pool_queue_enabled)
-                internal_thread_pool_queue=new LinkedBlockingQueue<>(internal_thread_pool_queue_max_size);
+                internal_thread_pool_queue=new ArrayBlockingQueue<>(internal_thread_pool_queue_max_size);
             else
                 internal_thread_pool_queue=new SynchronousQueue<>();
             internal_thread_pool=createThreadPool(internal_thread_pool_min_threads, internal_thread_pool_max_threads, internal_thread_pool_keep_alive_time,
@@ -1287,7 +1292,7 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
         if(type.startsWith("sender-sends"))
             return new SenderSendsBundler();
         if(type.startsWith("no-bundler"))
-            return new NoBundler();
+            return new NoBundler().poolSize(no_bundler_pool_size).initialBufSize(no_bundler_initial_buf_size);
         try {
             Class<Bundler> clazz=Util.loadClass(type, getClass());
             return clazz.newInstance();
