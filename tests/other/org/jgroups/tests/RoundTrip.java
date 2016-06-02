@@ -274,7 +274,15 @@ public class RoundTrip implements RtReceiver {
         new RoundTrip(use_ms).start(tp, args);
     }
 
+    protected static RtTransport create(String transport) throws Exception {
+        String clazzname=TRANSPORTS.get(transport);
+        Class<?> clazz=Util.loadClass(clazzname != null? clazzname : transport, RoundTrip.class);
+        return (RtTransport)clazz.newInstance();
+    }
 
+    protected static String availableTransports() {
+        return Util.printListWithDelimiter(TRANSPORTS.keySet(), "|", 0, false);
+    }
 
     protected static void help(String transport) {
         RtTransport tp=null;
@@ -287,15 +295,6 @@ public class RoundTrip implements RtReceiver {
                           RoundTrip.class.getSimpleName(), availableTransports(), tp != null? printOptions(tp.options()) : "");
     }
 
-    protected static RtTransport create(String transport) throws Exception {
-        String clazzname=TRANSPORTS.get(transport);
-        Class<?> clazz=Util.loadClass(clazzname != null? clazzname : transport, RoundTrip.class);
-        return (RtTransport)clazz.newInstance();
-    }
-
-    protected static String availableTransports() {
-        return Util.printListWithDelimiter(TRANSPORTS.keySet(), "|", 0, false);
-    }
 
     protected static String printOptions(String[] opts) {
         if(opts == null) return "";
