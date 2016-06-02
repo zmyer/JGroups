@@ -158,7 +158,9 @@ public class RoundTrip implements RtReceiver {
         byte[] done_buf=new byte[PAYLOAD];
         done_buf[0]=DONE;
         tp.send(target, done_buf, 0, done_buf.length);
-        double msgs_sec=num_msgs / (total_time / 1_000_000.0);
+
+        double divisor=use_ms? 1_000.0 : 1_000_000.0;
+        double msgs_sec=num_msgs / (total_time / divisor);
 
         AverageMinMax avg=null;
         if(details)
