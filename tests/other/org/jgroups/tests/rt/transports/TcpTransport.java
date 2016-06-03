@@ -30,7 +30,7 @@ public class TcpTransport implements RtTransport {
     protected RtReceiver   receiver;
     protected InetAddress  host=null;
     protected int          port=7800;
-    protected boolean      server;
+    protected boolean      server, tcp_nodelay;
     protected final Log    log=LogFactory.getLog(TcpTransport.class);
 
 
@@ -38,7 +38,7 @@ public class TcpTransport implements RtTransport {
     }
 
     public String[] options() {
-        return new String[]{"-host <host>", "-port <port>", "-server"};
+        return new String[]{"-host <host>", "-port <port>", "-server", "-tcp-nodelay"};
     }
 
     public void options(String... options) throws Exception {
@@ -55,6 +55,10 @@ public class TcpTransport implements RtTransport {
             }
             if(options[i].equals("-port")) {
                 port=Integer.parseInt(options[++i]);
+                continue;
+            }
+            if(options[i].equals("-tcp-nodelay")) {
+                tcp_nodelay=true;
             }
         }
         if(host == null)
@@ -78,7 +82,7 @@ public class TcpTransport implements RtTransport {
             out.println("server started (ctrl-c to kill)");
             for(;;) {
                 Socket client_sock=srv_sock.accept();
-                client_sock.setTcpNoDelay(true); // we're concerned about latency
+                client_sock.setTcpNoDelay(tcp_nodelay); // we're concerned about latency
                 input=client_sock.getInputStream();
                 output=client_sock.getOutputStream();
                 receiver_thread=new Receiver(input);
@@ -87,7 +91,7 @@ public class TcpTransport implements RtTransport {
         }
         else {
             sock=new Socket();
-            sock.setTcpNoDelay(true);
+            sock.setTcpNoDelay(tcp_nodelay);
             sock.connect(new InetSocketAddress(host, port));
             output=sock.getOutputStream();
             input=sock.getInputStream();
