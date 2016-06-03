@@ -30,6 +30,8 @@ public class AverageMinMax extends Average {
     }
 
     public <T extends Average> T merge(T other) {
+        if(other.count() == 0)
+            return (T)this;
         super.merge(other);
         if(other instanceof AverageMinMax) {
             AverageMinMax o=(AverageMinMax)other;
