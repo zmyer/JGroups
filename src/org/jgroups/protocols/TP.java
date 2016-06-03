@@ -1285,7 +1285,7 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
 
     protected Bundler createBundler(String type) {
         if(type == null)
-            throw new IllegalArgumentException("bunder type has to be non-null");
+            throw new IllegalArgumentException("bundler type has to be non-null");
         if(type.startsWith("transfer-queue"))
             return type.endsWith("simplified")? new SimplifiedTransferQueueBundler(bundler_capacity) :
               new TransferQueueBundler(bundler_capacity);

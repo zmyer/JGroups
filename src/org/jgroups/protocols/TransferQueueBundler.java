@@ -26,7 +26,7 @@ public class TransferQueueBundler extends BaseBundler implements Runnable {
         this.queue = queue;
     }
 
-    protected TransferQueueBundler(int capacity) {
+    public TransferQueueBundler(int capacity) {
         this(new ArrayBlockingQueue<>(assertPositive(capacity, "bundler capacity cannot be " + capacity)));
     }
 
