@@ -30,13 +30,15 @@ fi;
 #JG_FLAGS="-Djgroups.bind_addr=match-address:192.168.1.*"
 JG_FLAGS="$JG_FLAGS -Djava.net.preferIPv4Stack=true"
 FLAGS="-server -Xmx1G -Xms500M"
-GC="-XX:+UseParNewGC -XX:+UseConcMarkSweepGC" ## concurrent mark and sweep (CMS) collector
+#GC="-XX:+UseParNewGC -XX:+UseConcMarkSweepGC" ## concurrent mark and sweep (CMS) collector
+#GC="-XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+GC="-XX:+UseG1GC -XX:+UseStringDeduplication"
 
 JMX="-Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=localhost"
 
-#java -Xrunhprof:cpu=samples,monitor=y,interval=5,lineno=y,thread=y -classpath $CP $LOG $JG_FLAGS $FLAGS $EXPERIMENTAL $JMX  $*
+#java -Xrunhprof:cpu=samples,monitor=y,interval=5,lineno=y,thread=y -classpath $CP $LOG $JG_FLAGS $FLAGS $JMX  $*
 
 #DEBUG="-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=5000"
 
-java -cp $CP $DEBUG $LOG $GC $JG_FLAGS $FLAGS $EXPERIMENTAL $JMX $JMC  $*
+java -cp $CP $DEBUG $LOG $GC $JG_FLAGS $FLAGS $JMX $JMC  $*
 
