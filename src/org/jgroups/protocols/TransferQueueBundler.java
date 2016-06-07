@@ -35,7 +35,8 @@ public class TransferQueueBundler extends BaseBundler implements Runnable {
 
     public void init(TP transport) {
         super.init(transport);
-        queue=new ArrayBlockingQueue<>(assertPositive(transport.getBundlerCapacity(), "bundler capacity cannot be " + transport.getBundlerCapacity()));
+        if(queue == null)
+            queue=new ArrayBlockingQueue<>(assertPositive(transport.getBundlerCapacity(), "bundler capacity cannot be " + transport.getBundlerCapacity()));
     }
 
     public synchronized void start() {
@@ -46,15 +47,11 @@ public class TransferQueueBundler extends BaseBundler implements Runnable {
     }
 
     public synchronized void stop() {
-        Thread tmp=bundler_thread;
-        bundler_thread=null;
-        if(tmp != null) {
-            tmp.interrupt();
-            if(tmp.isAlive()) {
-                try {tmp.join(500);} catch(InterruptedException e) {}
-            }
-        }
-        queue.clear();
+        _stop(true);
+    }
+
+    public synchronized void stopAndFlush() {
+        _stop(false);
     }
 
     public void send(Message msg) throws Exception {
@@ -88,6 +85,20 @@ public class TransferQueueBundler extends BaseBundler implements Runnable {
             }
         }
     }
+
+    protected void _stop(boolean clear_queue) {
+        Thread tmp=bundler_thread;
+        bundler_thread=null;
+        if(tmp != null) {
+            tmp.interrupt();
+            if(tmp.isAlive()) {
+                try {tmp.join(500);} catch(InterruptedException e) {}
+            }
+        }
+        if(clear_queue)
+            queue.clear();
+    }
+
 
     protected static int assertPositive(int value, String message) {
         if(value <= 0) throw new IllegalArgumentException(message);
