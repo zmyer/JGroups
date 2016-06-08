@@ -1,12 +1,12 @@
 package org.jgroups.util;
 
+import org.jgroups.annotations.GuardedBy;
+
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -24,48 +24,48 @@ import java.util.concurrent.locks.ReentrantLock;
  * <p/>
  * Removal of elements starts at HD+1; any non-null element is removed and HD is advanced accordingly. If a remove
  * method is called with nullify=true, then removed elements are nulled and LOW is advanced as well (LOW=HD). Note
- * that <em>all</em> removals in a given RingBufferLockless must either have nullify=true, or all must be false. It is not
- * permitted to do some removals with nullify=true, and others with nullify=false, in the same RingBufferLockless.
+ * that <em>all</em> removals in a given RingBuffer must either have nullify=true, or all must be false. It is not
+ * permitted to do some removals with nullify=true, and others with nullify=false, in the same RingBuffer.
  * <p/>
  * The {@link #stable(long)} method is called periodically; it nulls all elements between LOW and HD and advances LOW
  * to HD.
  * <p/>
- * The design of RingBufferLockless is discussed in doc/design/RingBufferLockless.txt.
+ * The design of RingBuffer is discussed in doc/design/RingBufferSeqno.txt.
  * <p/>
  * @author Bela Ban
  * @since 3.1
  */
-public class RingBufferLockless<T> implements Iterable<T> {
+public class RingBufferSeqno<T> implements Iterable<T> {
     /** Atomic ref array so that elements can be checked for null and set atomically.  Should always be sized to a power of 2. */
-    protected final AtomicReferenceArray<T> buf;
+    protected final T[]            buf;
 
     /** The lowest seqno. Moved forward by stable() */
-    protected volatile long                 low;
+    protected long                 low;
 
     /** The highest delivered seqno. Moved forward by a remove method. The next message to be removed is hd +1 */
-    protected volatile long                 hd;
+    protected long                 hd;
 
     /** The highest received seqno. Moved forward by add(). The next message to be added is hr +1 */
-    protected final AtomicLong              hr=new AtomicLong(0);
+    protected long                 hr;
 
-    protected final long                    offset;
+    protected final long           offset;
 
     /** Lock for adders to block on when the buffer is full */
-    protected final Lock                    lock=new ReentrantLock();
+    protected final Lock           lock=new ReentrantLock();
 
-    protected final Condition               buffer_full=lock.newCondition();
+    protected final Condition      buffer_full=lock.newCondition();
 
-    protected volatile boolean              running=true;
+    protected boolean              running=true;
 
-    protected final AtomicBoolean           processing=new AtomicBoolean(false);
+    protected final AtomicBoolean  processing=new AtomicBoolean(false);
 
 
     /**
      * Creates a RingBuffer
-     * @param capacity The number of elements the ring buffer's array should hold
+     * @param capacity The number of elements the ring buffer's array should hold.
      * @param offset The offset. The first element to be added has to be offset +1.
      */
-    public RingBufferLockless(int capacity, long offset) {
+    public RingBufferSeqno(int capacity, long offset) {
         if(capacity < 1)
             throw new IllegalArgumentException("incorrect capacity of " + capacity);
         if(offset < 0)
@@ -76,17 +76,16 @@ public class RingBufferLockless<T> implements Iterable<T> {
         while (capacity > cap)
            cap <<= 1;
 
-        this.buf=new AtomicReferenceArray<>(cap);
-        this.low=this.hd=this.offset=offset;
-        this.hr.set(offset);
+        this.buf=(T[])new Object[cap];
+        this.low=this.hd=this.hr=this.offset=offset;
     }
 
 
     public long          getLow()                     {return low;}
     public long          getHighestDelivered()        {return hd;}
     public void          setHighestDelivered(long hd) {this.hd=hd;}
-    public long          getHighestReceived()         {return hr.get();}
-    public long[]        getDigest()                  {return new long[]{hd, hr.get()};}
+    public long          getHighestReceived()         {return hr;}
+    public long[]        getDigest()                  {return new long[]{hd, hr};}
     public AtomicBoolean getProcessing()              {return processing;}
 
 
@@ -104,34 +103,30 @@ public class RingBufferLockless<T> implements Iterable<T> {
      * return immediately, either successfully or unsuccessfully (if the buffer is full)
      * @return True if the element was added, false otherwise.
      */
-    public boolean  add(long seqno, T element, boolean block) {
-        validate(seqno);
+    public boolean add(long seqno, T element, boolean block) {
+        lock.lock();
+        try {
+            if(seqno <= hd)                 // seqno already delivered, includes check seqno <= low
+                return false;
 
-        if(seqno <= hd)                 // seqno already delivered, includes check seqno <= low
-            return false;
+            if(seqno - low > capacity() && (!block || !block(seqno)))  // seqno too big
+                return false;
 
-        if(seqno - low > capacity() && (!block || !block(seqno)))  // seqno too big
-            return false;
+            int index=index(seqno);
 
-        // now we can set any slow > hd and yet not overwriting low (check #1 above)
-        int index=index(seqno);
+            if(buf[index] != null)
+                return false;
+            else
+                buf[index]=element;
 
-        // Fix for correctness check #1 (see doc/design/RingBuffer.txt)
-        if(buf.get(index) != null || seqno <= hd)
-            return false;
-
-        if(!buf.compareAndSet(index, null, element)) // the element at buf[index] was already present
-            return false;
-
-        // now see if hr needs to moved forward, this can be concurrent as we may have multiple producers
-        for(;;) {
-            long current_hr=hr.get();
-            long new_hr=Math.max(seqno, current_hr);
-            if(new_hr <= current_hr || hr.compareAndSet(current_hr, new_hr))
-                break;
+            // now see if hr needs to moved forward, this can be concurrent as we may have multiple producers
+            if(seqno > hr)
+                hr=seqno;
+            return true;
         }
-
-        return true;
+        finally {
+            lock.unlock();
+        }
     }
 
 
@@ -143,36 +138,35 @@ public class RingBufferLockless<T> implements Iterable<T> {
      * hd+1 > hr.
      */
     public T remove(boolean nullify) {
-        long tmp=hd+1;
-        if(tmp > hr.get())
-            return null;
-        int index=index(tmp);
-        T element=buf.get(index);
-        if(element == null)
-            return null;
-        hd=tmp;
+        lock.lock();
+        try {
+            long tmp=hd+1;
+            if(tmp > hr)
+                return null;
+            int index=index(tmp);
+            T element=buf[index];
+            if(element == null)
+                return null;
+            hd=tmp;
 
-        if(nullify) {
-            long tmp_low=low;
-            if(tmp == tmp_low +1)
-                buf.compareAndSet(index, element, null);
-            else {
-                int from=index(tmp_low+1), length=(int)(tmp - tmp_low), capacity=capacity();
-                for(int i=from; i < from+length; i++) {
-                    index=i & (capacity - 1);
-                    buf.set(index, null);
+            if(nullify) {
+                if(tmp == low +1)
+                    buf[index]=null;
+                else {
+                    int from=index(low+1), length=(int)(tmp - low), capacity=capacity();
+                    for(int i=from; i < from+length; i++) {
+                        index=i & (capacity - 1);
+                        buf[index]=null;
+                    }
                 }
-            }
-            low=tmp;
-            lock.lock();
-            try {
+                low=tmp;
                 buffer_full.signalAll();
             }
-            finally {
-                lock.unlock();
-            }
+            return element;
         }
-        return element;
+        finally {
+            lock.unlock();
+        }
     }
 
 
@@ -193,57 +187,68 @@ public class RingBufferLockless<T> implements Iterable<T> {
     public List<T> removeMany(final AtomicBoolean processing, boolean nullify, int max_results) {
         List<T> list=null;
         int num_results=0;
-        long original_hd=hd, start=original_hd, end=hr.get();
         T element;
-        while(start+1 <= end && (element=buf.get(index(start+1))) != null) {
-            if(list == null)
-                list=new ArrayList<>(max_results > 0? max_results : 20);
-            list.add(element);
-            start++;
-            if(max_results > 0 && ++num_results >= max_results)
-                break;
-        }
 
-        if(start > original_hd) { // do we need to move HD forward ?
-            hd=start;
-            if(nullify) {
-                long tmp_low=low;
-                int from=index(tmp_low+1), length=(int)(start - tmp_low), capacity=capacity();
-                for(int i=from; i < from+length; i++) {
-                    int index=i & (capacity - 1);
-                    buf.set(index, null);
-                }
-                // Releases some of the blocked adders
-                if(start > low) {
-                    low=start;
-                    lock.lock();
-                    try {
-                        buffer_full.signalAll();
+        lock.lock();
+        try {
+            long start=hd, end=hr;
+            while(start+1 <= end && (element=buf[index(start+1)]) != null) {
+                if(list == null)
+                    list=new ArrayList<>(max_results > 0? max_results : 20);
+                list.add(element);
+                start++;
+                if(max_results > 0 && ++num_results >= max_results)
+                    break;
+            }
+
+            if(start > hd) { // do we need to move HD forward ?
+                hd=start;
+                if(nullify) {
+                    int from=index(low+1), length=(int)(start - low), capacity=capacity();
+                    for(int i=from; i < from+length; i++) {
+                        int index=i & (capacity - 1);
+                        buf[index]=null;
                     }
-                    finally {
-                        lock.unlock();
+                    // Releases some of the blocked adders
+                    if(start > low) {
+                        low=start;
+                        buffer_full.signalAll();
                     }
                 }
             }
-        }
         
-        if((list == null || list.isEmpty()) && processing != null)
-            processing.set(false);
-        return list;
+            if((list == null || list.isEmpty()) && processing != null)
+                processing.set(false);
+            return list;
+        }
+        finally {
+            lock.unlock();
+        }
     }
 
     public T get(long seqno) {
-        validate(seqno);
-        if(seqno <= low || seqno > hr.get())
-            return null;
-        int index=index(seqno);
-        return buf.get(index);
+        lock.lock();
+        try {
+            if(seqno <= low || seqno > hr)
+                return null;
+            int index=index(seqno);
+            return buf[index];
+        }
+        finally {
+            lock.unlock();
+        }
     }
 
     /** Only used for testing !! */
     public T _get(long seqno) {
         int index=index(seqno);
-        return index < 0? null : buf.get(index);
+        lock.lock();
+        try {
+            return index < 0? null : buf[index];
+        }
+        finally {
+            lock.unlock();
+        }
     }
 
 
@@ -256,7 +261,6 @@ public class RingBufferLockless<T> implements Iterable<T> {
     public List<T> get(long from, long to) {
         if(from > to)
             throw new IllegalArgumentException("from (" + from + ") has to be <= to (" + to + ")");
-        validate(from);
         List<T> retval=null;
         for(long i=from; i <= to; i++) {
             T element=get(i);
@@ -272,28 +276,27 @@ public class RingBufferLockless<T> implements Iterable<T> {
 
     /** Nulls elements between low and seqno and forwards low */
     public void stable(long seqno) {
-        validate(seqno);
-        if(seqno <= low)
-            return;
-        if(seqno > hd)
-            throw new IllegalArgumentException("seqno " + seqno + " cannot be bigger than hd (" + hd + ")");
+        lock.lock();
+        try {
+            if(seqno <= low)
+                return;
+            if(seqno > hd)
+                throw new IllegalArgumentException("seqno " + seqno + " cannot be bigger than hd (" + hd + ")");
 
-        int from=index(low+1), length=(int)(seqno - low), capacity=capacity();
-        for(int i=from; i < from+length; i++) {
-            int index=i & (capacity - 1);
-            buf.set(index, null);
-        }
+            int from=index(low+1), length=(int)(seqno - low), capacity=capacity();
+            for(int i=from; i < from+length; i++) {
+                int index=i & (capacity - 1);
+                buf[index]=null;
+            }
 
-        // Releases some of the blocked adders
-        if(seqno > low) {
-            low=seqno;
-            lock.lock();
-            try {
+            // Releases some of the blocked adders
+            if(seqno > low) {
+                low=seqno;
                 buffer_full.signalAll();
             }
-            finally {
-                lock.unlock();
-            }
+        }
+        finally {
+            lock.unlock();
         }
     }
 
@@ -308,10 +311,10 @@ public class RingBufferLockless<T> implements Iterable<T> {
         }
     }
 
-    public final int capacity()   {return buf.length();}
+    public final int capacity()   {return buf.length;}
     public int       size()       {return count(false);}
     public int       missing()    {return count(true);}
-    public int       spaceUsed()  {return (int)(hr.get() - low);}
+    public int       spaceUsed()  {return (int)(hr - low);}
     public double    saturation() {
         int space=spaceUsed();
         return space == 0? 0.0 : space / (double)capacity();
@@ -319,13 +322,13 @@ public class RingBufferLockless<T> implements Iterable<T> {
 
     public SeqnoList getMissing() {
         SeqnoList missing=null;
-        long tmp_hd=hd, tmp_hr=hr.get();
+        long tmp_hd=hd, tmp_hr=hr;
         for(long i=tmp_hd+1; i <= tmp_hr; i++) {
-            if(buf.get(index(i)) == null) {
+            if(buf[index(i)] == null) {
                 if(missing == null)
-                    missing=new SeqnoList((int)(tmp_hr-tmp_hd), hd);
+                    missing=new SeqnoList((int)(hr-hd), hd);
                 long end=i;
-                while(buf.get(index(end+1)) == null && end <= tmp_hr)
+                while(buf[index(end+1)] == null && end <= tmp_hr)
                     end++;
 
                 if(end == i)
@@ -356,38 +359,28 @@ public class RingBufferLockless<T> implements Iterable<T> {
 
 
     
-    protected static final void validate(long seqno) {
-        if(seqno < 0)
-            throw new IllegalArgumentException("seqno " + seqno + " cannot be negative");
-    }
-
     protected int index(long seqno) {
         return (int)((seqno - offset -1) & (capacity() - 1));
     }
 
+    @GuardedBy("lock")
     protected boolean block(long seqno) {
-        lock.lock();
-        try {
-            while(running && seqno - low > capacity()) {
-                try {
-                    buffer_full.await();
-                }
-                catch(InterruptedException e) {
-                }
+        while(running && seqno - low > capacity()) {
+            try {
+                buffer_full.await();
             }
-            return running;
+            catch(InterruptedException e) {
+            }
         }
-        finally {
-            lock.unlock();
-        }
+        return running;
     }
 
     protected int count(boolean missing) {
         int retval=0;
-        long tmp_hd=hd, tmp_hr=hr.get();
+        long tmp_hd=hd, tmp_hr=hr;
         for(long i=tmp_hd+1; i <= tmp_hr; i++) {
             int index=index(i);
-            T element=buf.get(index);
+            T element=buf[index];
             if(missing && element == null)
                 retval++;
             if(!missing && element != null)
@@ -398,15 +391,15 @@ public class RingBufferLockless<T> implements Iterable<T> {
 
 
     protected class RingBufferIterator implements Iterator<T> {
-        protected final AtomicReferenceArray<T> buffer;
+        protected final T[] buffer;
         protected long current=hd+1;
 
-        public RingBufferIterator(AtomicReferenceArray<T> buffer) {
+        public RingBufferIterator(T[] buffer) {
             this.buffer=buffer;
         }
 
         public boolean hasNext() {
-            return current <= hr.get();
+            return current <= hr;
         }
 
         public T next() {
@@ -415,7 +408,7 @@ public class RingBufferLockless<T> implements Iterable<T> {
             }
             if(current <= hd)
                 current=hd+1;
-            return buffer.get(index(current++));
+            return buffer[index(current++)];
         }
 
         public void remove() {}
