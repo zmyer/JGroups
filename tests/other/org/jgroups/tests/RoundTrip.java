@@ -141,7 +141,7 @@ public class RoundTrip implements RtReceiver {
         }
         rsp_latency.clear();
         Object target=mbrs != null? Util.pickNext(mbrs, tp.localAddress()) : null;
-        final CountDownLatch latch=new CountDownLatch(num_senders +1);
+        final CountDownLatch latch=new CountDownLatch(1);
         final AtomicInteger sent_msgs=new AtomicInteger(0);
         senders=new Sender[num_senders];
         for(int i=0; i < num_senders; i++) {
@@ -208,6 +208,12 @@ public class RoundTrip implements RtReceiver {
         }
 
         public void run() {
+            try {
+                latch.await();
+            }
+            catch(InterruptedException e) {
+                e.printStackTrace();
+            }
             for(;;) {
                 int num=sent_msgs.getAndIncrement();
                 if(num > num_msgs)
