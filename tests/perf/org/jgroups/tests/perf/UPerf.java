@@ -182,7 +182,7 @@ public class UPerf extends ReceiverAdapter {
                           num_msgs, Util.printBytes(BUFFER.length), sync, oob, msg_bundling);
         int total_gets=0, total_puts=0;
         final AtomicInteger num_msgs_sent=new AtomicInteger(0);
-        final CountDownLatch latch=new CountDownLatch(num_threads+1);
+        final CountDownLatch latch=new CountDownLatch(1);
 
         Invoker[] invokers=new Invoker[num_threads];
         for(int i=0; i < invokers.length; i++) {
@@ -517,7 +517,12 @@ public class UPerf extends ReceiverAdapter {
                 put_options.flags(Message.Flag.DONT_BUNDLE);
             }
 
-            latch.countDown();
+            try {
+                latch.await();
+            }
+            catch(InterruptedException e) {
+                e.printStackTrace();
+            }
 
             while(true) {
                 long i=num_msgs_sent.getAndIncrement();
