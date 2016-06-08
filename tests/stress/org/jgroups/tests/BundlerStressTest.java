@@ -6,6 +6,7 @@ import org.jgroups.PhysicalAddress;
 import org.jgroups.protocols.*;
 import org.jgroups.util.AsciiString;
 import org.jgroups.util.AverageMinMax;
+import org.jgroups.util.DefaultThreadFactory;
 import org.jgroups.util.Util;
 
 import java.util.concurrent.CountDownLatch;
@@ -21,7 +22,8 @@ import static org.jgroups.tests.FragTest2.type;
 public class BundlerStressTest {
     protected String                 bundler_type;
     protected Bundler                bundler;
-    protected int                    num_msgs=20000, num_senders=20;
+    protected int                    num_msgs=50000, num_senders=20;
+    protected boolean                details;
     protected static final Address[] ADDRESSES;
     protected final TP               transport=new MockTransport();
 
@@ -48,8 +50,8 @@ public class BundlerStressTest {
         boolean looping=true;
         while(looping) {
             int c=Util.keyPress(String.format("[1] send [2] num_msgs (%d) [3] senders (%d)\n" +
-                                                "[b] change bundler (%s) [x] exit\n",
-                                              num_msgs, num_senders, bundler.getClass().getSimpleName()));
+                                                "[b] change bundler (%s) [d] details (%b) [x] exit\n",
+                                              num_msgs, num_senders, bundler.getClass().getSimpleName(), details));
             try {
                 switch(c) {
                     case '1':
@@ -75,6 +77,9 @@ public class BundlerStressTest {
                             System.err.printf("failed changing bundler to %s: %s\n", type, t);
                         }
                         break;
+                    case 'd':
+                        details=!details;
+                        break;
                     case 'x':
                         looping=false;
                         break;
@@ -90,7 +95,7 @@ public class BundlerStressTest {
 
     protected void sendMessages() throws Exception {
         Message[] msgs=generateMessages(num_msgs);
-        CountDownLatch latch=new CountDownLatch(num_senders+1);
+        CountDownLatch latch=new CountDownLatch(1);
         AtomicInteger index=new AtomicInteger(0);
         Sender[] senders=new Sender[num_senders];
         for(int i=0; i < senders.length; i++) {
@@ -103,21 +108,37 @@ public class BundlerStressTest {
 
         for(Sender sender: senders)
             sender.join();
+
+        // if the bundler has a transfer queue, we need to wait until the queue is empty
+        if(bundler instanceof TransferQueueBundler) {
+            TransferQueueBundler b=(TransferQueueBundler)bundler;
+            b.stopAndFlush();
+            for(;;) {
+                if(b.getBufferSize() == 0)
+                    break;
+            }
+        }
+
         long time_us=Util.micros()-start;
         AverageMinMax send_avg=null;
         for(Sender sender: senders) {
-            System.out.printf("[%d] count=%d, send-time = %s\n", sender.getId(), sender.send.count(), sender.send);
+            if(details)
+                System.out.printf("[%d] count=%d, send-time = %s\n", sender.getId(), sender.send.count(), sender.send);
             if(send_avg == null)
                 send_avg=sender.send;
             else
                 send_avg.merge(sender.send);
         }
 
+
+
+
         double msgs_sec=num_msgs / (time_us / 1_000.0);
 
-        System.out.printf(Util.bold("\n\nreqs/sec    = %.2f" +
+        System.out.printf(Util.bold("\n\nreqs/ms    = %.2f (time: %d us)" +
                                       "\nsend-time  = min/avg/max: %d / %.2f / %d ns\n"),
-                          msgs_sec, send_avg.min(), send_avg.average(), send_avg.max());
+                          msgs_sec, time_us,
+                          send_avg.min(), send_avg.average(), send_avg.max());
     }
 
     protected Bundler createBundler(String bundler) {
@@ -130,7 +151,7 @@ public class BundlerStressTest {
         if(bundler.startsWith("sender-sends") || bundler.equals("ss"))
             return new SenderSendsBundler();
         if(bundler.startsWith("no-bundler") || bundler.equals("nb"))
-            return new NoBundler().poolSize(16348).initialBufSize(25);
+            return new NoBundler().poolSize(16384).initialBufSize(25);
         try {
             Class<Bundler> clazz=Util.loadClass(bundler, getClass());
             return clazz.newInstance();
@@ -178,7 +199,11 @@ public class BundlerStressTest {
         }
 
         public void run() {
-            latch.countDown();
+            try {
+                latch.await();
+            }
+            catch(InterruptedException e) {
+            }
             while(true) {
                 int idx=index.getAndIncrement();
                 if(idx >= msgs.length)
@@ -198,8 +223,10 @@ public class BundlerStressTest {
 
     protected static class MockTransport extends TP {
 
+
         public MockTransport() {
             this.cluster_name=new AsciiString("mock");
+            global_thread_factory=new DefaultThreadFactory("", false);
         }
 
         public boolean supportsMulticasting() {
