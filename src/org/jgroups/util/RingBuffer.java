@@ -1,5 +1,6 @@
 package org.jgroups.util;
 
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -22,6 +23,8 @@ public class RingBuffer<T> {
         int c=Util.getNextHigherPowerOfTwo(capacity); // power of 2 for faster mod operation
         buf=(T[])new Object[c];
     }
+
+    public int capacity() {return buf.length;}
 
     public int readIndex() {
         lock.lock();
@@ -60,7 +63,7 @@ public class RingBuffer<T> {
      * @param element the element to be added. Must not be null, or else this operation returns immediately without
      *                adding the null element
      */
-    public RingBuffer write(T element) throws InterruptedException {
+    public RingBuffer<T> put(T element) throws InterruptedException {
         if(element == null)
             return this;
         lock.lock();
@@ -81,7 +84,7 @@ public class RingBuffer<T> {
     }
 
 
-    public T read() throws InterruptedException {
+    public T take() throws InterruptedException {
         lock.lock();
         try {
             while(count == 0)
@@ -99,6 +102,49 @@ public class RingBuffer<T> {
         }
     }
 
+    public int drainTo(Collection<T> list) {
+        return drainTo(list, Integer.MAX_VALUE);
+    }
+
+    public int drainTo(Collection<T> list, int max_elements) {
+        if(list == null)
+            return 0;
+        int cnt=0;
+        lock.lock();
+        try {
+            int num_elements=Math.min(max_elements, count);
+            for(int i=0; i < num_elements; i++) {
+                T el=buf[ri];
+                list.add(el);
+                buf[ri]=null;
+                if(++ri == buf.length)
+                    ri=0;
+                cnt++;
+            }
+            if(cnt > 0) {
+                count-=cnt;
+                not_full.signal();
+            }
+            return cnt;
+        }
+        finally {
+            lock.unlock();
+        }
+    }
+
+
+    public RingBuffer<T> clear() {
+        lock.lock();
+        try {
+            count=ri=wi=0;
+            for(int i=0; i < buf.length; i++)
+                buf[i]=null;
+            return this;
+        }
+        finally {
+            lock.unlock();
+        }
+    }
 
     public int size() {
         lock.lock();

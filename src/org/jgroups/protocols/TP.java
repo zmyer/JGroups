@@ -1286,12 +1286,15 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
     protected Bundler createBundler(String type) {
         if(type == null)
             throw new IllegalArgumentException("bundler type has to be non-null");
-        if(type.startsWith("transfer-queue"))
-            return type.endsWith("simplified")? new SimplifiedTransferQueueBundler(bundler_capacity) :
-              new TransferQueueBundler(bundler_capacity);
-        if(type.startsWith("sender-sends"))
+        if(type.startsWith("transfer-queue") || type.equals("tq"))
+            return new TransferQueueBundler(bundler_capacity);
+        if(type.startsWith("simplified-transfer-queue") || type.equals("stq"))
+            return new SimplifiedTransferQueueBundler(bundler_capacity);
+        if(type.startsWith("sender-sends") || type.equals("ss"))
             return new SenderSendsBundler();
-        if(type.startsWith("no-bundler"))
+        if(type.startsWith("ring-buffer") || type.equals("rb"))
+            return new RingBufferBundler(bundler_capacity);
+        if(type.startsWith("no-bundler") || type.equals("nb"))
             return new NoBundler().poolSize(no_bundler_pool_size).initialBufSize(no_bundler_initial_buf_size);
         try {
             Class<Bundler> clazz=Util.loadClass(type, getClass());
