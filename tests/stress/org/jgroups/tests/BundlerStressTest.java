@@ -150,6 +150,8 @@ public class BundlerStressTest {
             return new TransferQueueBundler(20000);
         if(bundler.startsWith("sender-sends") || bundler.equals("ss"))
             return new SenderSendsBundler();
+        if(bundler.startsWith("ring-buffer") || bundler.equals("rb"))
+                   return new RingBufferBundler(16384);
         if(bundler.startsWith("no-bundler") || bundler.equals("nb"))
             return new NoBundler().poolSize(16384).initialBufSize(25);
         try {

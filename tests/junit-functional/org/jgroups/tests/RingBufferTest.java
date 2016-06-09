@@ -4,7 +4,9 @@ import org.jgroups.util.RingBuffer;
 import org.jgroups.util.Util;
 import org.testng.annotations.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * @author Bela Ban
@@ -25,38 +27,53 @@ public class RingBufferTest {
 
     public void testWriteAndRead() throws Exception {
         RingBuffer<Integer> rb=new RingBuffer<>(8);
-        rb.write(1).write(2);
+        rb.put(1).put(2);
         System.out.println("rb = " + rb);
         assert rb.size() == 2;
         assert !rb.isEmpty();
-        rb.write(3).write(4);
+        rb.put(3).put(4);
         for(int i=1; i <= 4; i++) {
-            int num=rb.read();
+            int num=rb.take();
             assert num == i;
         }
         for(int num: Arrays.asList(5,6,7,8,9,10))
-            rb.write(num);
+            rb.put(num);
         System.out.println("rb = " + rb);
         assert rb.size() == 6;
 
         for(int num: Arrays.asList(5,6,7,8,9,10)) {
-            int n=rb.read();
+            int n=rb.take();
             assert num == n;
         }
         System.out.println("rb = " + rb);
+    }
+
+    public void testDrainTo() throws InterruptedException {
+        RingBuffer<Integer> rb=new RingBuffer<>(8);
+        List<Integer> list=new ArrayList<>(4);
+        int num=rb.drainTo(list);
+        assert num == 0 && list.isEmpty();
+
+        for(int i=1; i <= 8; i++)
+            rb.put(i);
+
+        num=rb.drainTo(list, 4);
+        assert num == 4;
+
+        num=rb.drainTo(list);
+        assert num == 4 && rb.isEmpty() && list.size() == 8;
     }
 
     public void testReadBlocking() throws InterruptedException {
         final RingBuffer<Integer> rb=new RingBuffer<>(8);
         new Thread(()-> {Util.sleep(1000);
             try {
-                rb.write(50);
+                rb.put(50);
             }
             catch(InterruptedException e) {
-
             }
         }).start();
-        int num=rb.read();
+        int num=rb.take();
         System.out.println("num = " + num);
         assert num == 50;
     }
@@ -64,20 +81,19 @@ public class RingBufferTest {
     public void testWriteBlocking() throws InterruptedException {
         final RingBuffer<Integer> rb=new RingBuffer<>(8);
         for(int i=1; i <= 8; i++)
-            rb.write(i);
+            rb.put(i);
 
         new Thread(()-> {Util.sleep(1000);
             try {
-                rb.read();
+                rb.take();
             }
             catch(InterruptedException e) {
-
             }
         }).start();
-        rb.write(9); // this blocks first until the read() above has completed
+        rb.put(9); // this blocks first until the read() above has completed
         System.out.println("rb = " + rb);
         assert rb.size() == 8;
-        int num=rb.read();
+        int num=rb.take();
         assert num == 2;
     }
 }
