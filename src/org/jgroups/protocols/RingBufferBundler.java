@@ -70,26 +70,17 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
 
     public void run() {
         while(running) {
-            Message msg=null;
             try {
-                if((msg=buf.take()) == null)
-                    continue;
-                long size=msg.size();
-                if(count + size >= transport.getMaxBundleSize())
-                    sendBundledMessages();
-                addMessage(msg, size);
-                while(true) {
-                    remove_queue.clear();
-                    int num_msgs=buf.drainTo(remove_queue);
-                    if(num_msgs <= 0)
-                        break;
-                    for(int i=0; i < remove_queue.size(); i++) {
-                        msg=remove_queue.get(i);
-                        size=msg.size();
-                        if(count + size >= transport.getMaxBundleSize())
-                            sendBundledMessages();
-                        addMessage(msg, size);
-                    }
+                remove_queue.clear();
+                int num_msgs=buf.drainTo(remove_queue, Integer.MAX_VALUE, true);
+                if(num_msgs <= 0)
+                    break;
+                for(int i=0; i < remove_queue.size(); i++) {
+                    Message msg=remove_queue.get(i);
+                    long size=msg.size();
+                    if(count + size >= transport.getMaxBundleSize())
+                        sendBundledMessages();
+                    addMessage(msg, size);
                 }
                 if(count > 0)
                     sendBundledMessages();
