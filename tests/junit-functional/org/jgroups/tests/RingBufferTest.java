@@ -1,6 +1,7 @@
 package org.jgroups.tests;
 
 import org.jgroups.util.RingBuffer;
+import org.jgroups.util.Util;
 import org.testng.annotations.Test;
 
 import java.util.Arrays;
@@ -43,5 +44,40 @@ public class RingBufferTest {
             assert num == n;
         }
         System.out.println("rb = " + rb);
+    }
+
+    public void testReadBlocking() throws InterruptedException {
+        final RingBuffer<Integer> rb=new RingBuffer<>(8);
+        new Thread(()-> {Util.sleep(1000);
+            try {
+                rb.write(50);
+            }
+            catch(InterruptedException e) {
+
+            }
+        }).start();
+        int num=rb.read();
+        System.out.println("num = " + num);
+        assert num == 50;
+    }
+
+    public void testWriteBlocking() throws InterruptedException {
+        final RingBuffer<Integer> rb=new RingBuffer<>(8);
+        for(int i=1; i <= 8; i++)
+            rb.write(i);
+
+        new Thread(()-> {Util.sleep(1000);
+            try {
+                rb.read();
+            }
+            catch(InterruptedException e) {
+
+            }
+        }).start();
+        rb.write(9); // this blocks first until the read() above has completed
+        System.out.println("rb = " + rb);
+        assert rb.size() == 8;
+        int num=rb.read();
+        assert num == 2;
     }
 }

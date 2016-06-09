@@ -1,7 +1,6 @@
 package org.jgroups.util;
 
-import org.jgroups.annotations.GuardedBy;
-
+import java.util.Iterator;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -13,7 +12,8 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class RingBuffer<T> {
     protected final T[]                                  buf;
-    protected int                                        ri, wi; // read and write indices
+    protected int                                        ri, wi;   // read and write indices
+    protected int                                        count;    // number of elements available to be read
     protected final Lock                                 lock=new ReentrantLock();
     protected final java.util.concurrent.locks.Condition not_empty=lock.newCondition(); // reader can block on this
     protected final java.util.concurrent.locks.Condition not_full=lock.newCondition();  // writes can block on this
@@ -43,6 +43,17 @@ public class RingBuffer<T> {
         }
     }
 
+    public int count() {
+        lock.lock();
+        try {
+            return count;
+        }
+        finally {
+            lock.unlock();
+        }
+    }
+
+
     /**
      * Tries to add a new element at the current write index and advances the write index. If the write index is at the
      * same position as the read index, this will block until the read index is advanced.
@@ -54,8 +65,14 @@ public class RingBuffer<T> {
             return this;
         lock.lock();
         try {
+            while(count == buf.length)
+                not_full.await();
+
             buf[wi]=element;
-            advanceWriteIndex(); // tries to advance the write index, but blocks as long as wi+1 == ri
+            if(++wi == buf.length)
+                wi=0;
+            count++;
+            not_empty.signal();
             return this;
         }
         finally {
@@ -67,9 +84,14 @@ public class RingBuffer<T> {
     public T read() throws InterruptedException {
         lock.lock();
         try {
-            waitForData(); // blocks while ri == wi
+            while(count == 0)
+                not_empty.await();
             T el=buf[ri];
-            advanceReadIndex();
+            buf[ri]=null;
+            if(++ri == buf.length)
+                ri=0;
+            count--;
+            not_full.signal();
             return el;
         }
         finally {
@@ -81,14 +103,7 @@ public class RingBuffer<T> {
     public int size() {
         lock.lock();
         try {
-            int cnt=0, read_index=ri, write_index=wi;
-            for(; read_index != write_index; read_index++, cnt++) {
-                if(read_index == buf.length) // handle wrap-around. this should be faster than a mod operation
-                    read_index=0;
-             //    if(read_index == write_index)
-                //    break;
-            }
-            return cnt;
+            return count;
         }
         finally {
             lock.unlock();
@@ -109,36 +124,31 @@ public class RingBuffer<T> {
         return String.format("[ri=%d wi=%d size=%d cap=%d]", ri, wi, size(), buf.length);
     }
 
-    /** Advances the write index and notifies a waiting reader */
-    @GuardedBy("lock") protected void advanceWriteIndex() throws InterruptedException {
-        // block if wi+1 == ri:
-        int new_wi=wi+1;
-        if(new_wi == buf.length)
-            new_wi=0;
-
-        while(new_wi == ri)
-            not_full.await();
-
-        if(++wi == buf.length)
-            wi=0;
-        not_empty.signal();
-    }
-
-    /** Advances the read index and notifies waiting writers */
-    @GuardedBy("lock") protected void advanceReadIndex() {
-        if(++ri == buf.length)
-            ri=0;
-        not_full.signal(); // todo: use signalAll() as we can have multiple writers?
-    }
-
-    @GuardedBy("lock") protected void waitForData() throws InterruptedException {
-        while(ri == wi)
-            not_empty.await();
-    }
 
     /** Apparently much more efficient than mod (%) */
     protected int realIndex(int index) {
         return index & (buf.length -1);
+    }
+
+
+    /**
+     * Iterator passed to the read() batch method. Contains a ref to a start (read index) and end index (write index).
+     * Can be reset to iterate multiple times over that range, which is guaranteed to to change until the iteration is
+     * done.
+     */
+    protected final class RingBufferIterator implements Iterator<T> {
+
+        public boolean hasNext() {
+            return false;
+        }
+
+        public T next() {
+            return null;
+        }
+
+        public void reset() {
+
+        }
     }
 
 }
