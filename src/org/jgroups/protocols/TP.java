@@ -291,6 +291,8 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
     @ManagedAttribute public int getBundlerBufferSize() {
         if(bundler instanceof TransferQueueBundler)
             return ((TransferQueueBundler)bundler).getBufferSize();
+        if(bundler instanceof RingBufferBundler)
+            return ((RingBufferBundler)bundler).getBufferSize();
         return 0;
     }
 
@@ -1901,6 +1903,11 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
             Thread thread=((TransferQueueBundler)bundler).getThread();
             if(thread != null)
                 global_thread_factory.renameThread(TransferQueueBundler.THREAD_NAME, thread);
+        }
+        else if(bundler instanceof RingBufferBundler) {
+            Thread thread=((RingBufferBundler)bundler).getThread();
+            if(thread != null)
+                global_thread_factory.renameThread(RingBufferBundler.THREAD_NAME, thread);
         }
     }
 

@@ -21,7 +21,8 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
     protected List<Message>          remove_queue;
     protected volatile     Thread    bundler_thread;
     protected volatile boolean       running=true;
-    protected static final String    THREAD_NAME="TransferQueueBundler";
+    protected int                    num_spins=40; // number of times we call Thread.yield before acquiring the lock (0 disables)
+    protected static final String    THREAD_NAME="RingBufferBundler";
 
     public RingBufferBundler() {
         this.remove_queue=new ArrayList<>(16);
@@ -36,10 +37,12 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
         this(new RingBuffer<>(assertPositive(capacity, "bundler capacity cannot be " + capacity)));
     }
 
-    public Thread               getThread()               {return bundler_thread;}
-    public int                  getBufferSize()           {return buf.size();}
-    public int                  removeQueueSize()         {return remove_queue.size();}
+    public Thread            getThread()               {return bundler_thread;}
+    public int               getBufferSize()           {return buf.size();}
+    public int               removeQueueSize()         {return remove_queue.size();}
     public RingBufferBundler removeQueueSize(int size) {this.remove_queue=new ArrayList<>(size); return this;}
+    public int               numSpins()                {return num_spins;}
+    public RingBufferBundler numSpins(int n)           {num_spins=n; return this;}
 
     public void init(TP transport) {
         super.init(transport);
@@ -72,9 +75,10 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
         while(running) {
             try {
                 remove_queue.clear();
-                int num_msgs=buf.drainTo(remove_queue, Integer.MAX_VALUE, true);
+                // int num_msgs=buf.drainTo(remove_queue, Integer.MAX_VALUE, true);
+                int num_msgs=buf.drainToLockless(remove_queue, Integer.MAX_VALUE, true, num_spins);
                 if(num_msgs <= 0)
-                    break;
+                    continue;
                 for(int i=0; i < remove_queue.size(); i++) {
                     Message msg=remove_queue.get(i);
                     long size=msg.size();

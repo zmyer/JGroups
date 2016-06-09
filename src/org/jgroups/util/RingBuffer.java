@@ -145,6 +145,57 @@ public class RingBuffer<T> {
         }
     }
 
+    public int drainToLockless(Collection<T> list, int max_elements, boolean block, int num_spins) throws InterruptedException {
+        if(list == null)
+            return 0;
+        int cnt=0;
+
+        if(block) {
+
+            // try spinning first (experimental)
+            for(int i=0; i < num_spins; i++) {
+                if(count > 0)
+                    break;
+                Thread.yield();
+            }
+
+            if(count == 0) {
+                lock.lock();
+                try {
+                    while(count == 0)
+                        not_empty.await();
+                }
+                finally {
+                    lock.unlock();
+                }
+            }
+        }
+
+        int num_elements=Math.min(max_elements, count);
+        int read_index=ri;
+
+        for(int i=0; i < num_elements; i++) {
+            T el=buf[read_index];
+            list.add(el);
+            buf[read_index]=null;
+            if(++read_index == buf.length)
+                read_index=0;
+            cnt++;
+        }
+        if(cnt > 0) {
+            lock.lock();
+            try {
+                count-=cnt;
+                ri=read_index;
+                not_full.signal();
+            }
+            finally {
+                lock.unlock();
+            }
+        }
+        return cnt;
+    }
+
 
     public RingBuffer<T> clear() {
         lock.lock();
