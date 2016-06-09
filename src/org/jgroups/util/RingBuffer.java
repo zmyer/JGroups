@@ -107,11 +107,24 @@ public class RingBuffer<T> {
     }
 
     public int drainTo(Collection<T> list, int max_elements) {
+        try {
+            return drainTo(list, max_elements, false);
+        }
+        catch(InterruptedException e) {
+            return 0;
+        }
+    }
+
+    public int drainTo(Collection<T> list, int max_elements, boolean block) throws InterruptedException {
         if(list == null)
             return 0;
         int cnt=0;
         lock.lock();
         try {
+            if(block) {
+                while(count == 0)
+                    not_empty.await();
+            }
             int num_elements=Math.min(max_elements, count);
             for(int i=0; i < num_elements; i++) {
                 T el=buf[ri];
