@@ -149,26 +149,8 @@ public class RingBuffer<T> {
             return 0;
         int cnt=0;
 
-        if(block) {
-
-            // try spinning first (experimental)
-            for(int i=0; i < num_spins; i++) {
-                if(count > 0)
-                    break;
-                Thread.yield();
-            }
-
-            if(count == 0) {
-                lock.lock();
-                try {
-                    while(count == 0)
-                        not_empty.await();
-                }
-                finally {
-                    lock.unlock();
-                }
-            }
-        }
+        if(block)
+            waitForMessages(num_spins);
 
         int num_elements=Math.min(max_elements, count);
         int read_index=ri;
@@ -193,6 +175,32 @@ public class RingBuffer<T> {
             }
         }
         return cnt;
+    }
+
+
+    /** Blocks until messages are available */
+    public void waitForMessages() throws InterruptedException {
+        waitForMessages(40);
+    }
+
+    /** Blocks until messages are available */
+    public void waitForMessages(int num_spins) throws InterruptedException {
+        // try spinning first (experimental)
+        for(int i=0; i < num_spins; i++) {
+            if(count > 0)
+                break;
+            Thread.yield();
+        }
+        if(count == 0) {
+            lock.lock();
+            try {
+                while(count == 0)
+                    not_empty.await();
+            }
+            finally {
+                lock.unlock();
+            }
+        }
     }
 
 
