@@ -23,7 +23,10 @@ public class RingBuffer<T> {
         buf=(T[])new Object[c];
     }
 
-    public int capacity() {return buf.length;}
+    public T[] buf()               {return buf;}
+    public int capacity()          {return buf.length;}
+    public int readIndexLockless() {return ri;}
+    public int countLockLockless() {return count;}
 
     public int readIndex() {
         lock.lock();
@@ -53,6 +56,17 @@ public class RingBuffer<T> {
         finally {
             lock.unlock();
         }
+    }
+
+    /** Nulls an element without range and wrap check or lock acquisition. */
+    public RingBuffer<T> nullify(int index) {
+        buf[index]=null;
+        return null;
+    }
+
+    /** Gets an element without range or wrap check, or lock acquisition */
+    public T get(int index) {
+        return buf[index];
     }
 
 
@@ -163,28 +177,31 @@ public class RingBuffer<T> {
                 read_index=0;
             cnt++;
         }
-        if(cnt > 0) {
-            lock.lock();
-            try {
-                ri=read_index;
-                count-=cnt;
-                not_full.signal();
-            }
-            finally {
-                lock.unlock();
-            }
-        }
+        if(cnt > 0)
+            publishReadIndex(read_index, cnt);
         return cnt;
     }
 
-
-    /** Blocks until messages are available */
-    public void waitForMessages() throws InterruptedException {
-        waitForMessages(40);
+    public RingBuffer<T> publishReadIndex(int new_read_index, int num_elements_read) {
+        lock.lock();
+        try {
+            this.ri=new_read_index;
+            this.count-=num_elements_read;
+            not_full.signal();
+            return this;
+        }
+        finally {
+            lock.unlock();
+        }
     }
 
     /** Blocks until messages are available */
-    public void waitForMessages(int num_spins) throws InterruptedException {
+    public int waitForMessages() throws InterruptedException {
+        return waitForMessages(40);
+    }
+
+    /** Blocks until messages are available */
+    public int waitForMessages(int num_spins) throws InterruptedException {
         // try spinning first (experimental)
         for(int i=0; i < num_spins; i++) {
             if(count > 0)
@@ -201,6 +218,7 @@ public class RingBuffer<T> {
                 lock.unlock();
             }
         }
+        return count;
     }
 
 
