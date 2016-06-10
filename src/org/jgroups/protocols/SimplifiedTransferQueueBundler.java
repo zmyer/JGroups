@@ -7,10 +7,8 @@ package org.jgroups.protocols;
 
 import org.jgroups.Address;
 import org.jgroups.Message;
-import org.jgroups.util.ByteArrayDataOutputStream;
 import org.jgroups.util.Util;
 
-import java.net.SocketException;
 import java.util.concurrent.ArrayBlockingQueue;
 
 /**
@@ -67,7 +65,7 @@ public class SimplifiedTransferQueueBundler extends TransferQueueBundler {
             try {
                 output.position(0);
                 if(numMsgs == 1) {
-                    sendSingleMessage(msg_queue[start], output);
+                    sendSingleMessage(msg_queue[start]);
                     msg_queue[start]=null;
                 }
                 else {
@@ -90,25 +88,5 @@ public class SimplifiedTransferQueueBundler extends TransferQueueBundler {
         }
     }
 
-    private byte[] getMsgClusterName(Message msg) {
-        return ((TpHeader) msg.getHeader(transport.getId())).cluster_name;
-    }
 
-    protected void sendSingleMessage(Message msg, ByteArrayDataOutputStream output) {
-        Address dest = msg.getDest();
-        try {
-            Util.writeMessage(msg, output, dest == null);
-            transport.doSend(output.buffer(), 0, output.position(), dest);
-            if(transport.statsEnabled())
-                transport.incrSingleMsgsInsteadOfBatches();
-        }
-        catch(SocketException sock_ex) {
-            log.trace(Util.getMessage("SendFailure"),
-                      transport.localAddress(), (dest == null? "cluster" : dest), msg.size(), sock_ex.toString(), msg.printHeaders());
-        }
-        catch(Throwable e) {
-            log.error(Util.getMessage("SendFailure"),
-                      transport.localAddress(), (dest == null? "cluster" : dest), msg.size(), e.toString(), msg.printHeaders());
-        }
-    }
 }

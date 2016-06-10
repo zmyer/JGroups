@@ -69,6 +69,7 @@ public abstract class BaseBundler implements Bundler {
             if(list.isEmpty())
                 continue;
 
+            output.position(0);
             if(list.size() == 1)
                 sendSingleMessage(list.get(0));
             else {
@@ -98,7 +99,6 @@ public abstract class BaseBundler implements Bundler {
     protected void sendSingleMessage(final Message msg) {
         Address dest=msg.getDest();
         try {
-            output.position(0);
             Util.writeMessage(msg, output, dest == null);
             transport.doSend(output.buffer(), 0, output.position(), dest);
             if(transport.statsEnabled())
@@ -118,7 +118,6 @@ public abstract class BaseBundler implements Bundler {
 
     protected void sendMessageList(final Address dest, final Address src, final List<Message> list) {
         try {
-            output.position(0);
             Util.writeMessageList(dest, src, transport.cluster_name.chars(), list, output, dest == null, transport.getId());
             transport.doSend(output.buffer(), 0, output.position(), dest);
         }
