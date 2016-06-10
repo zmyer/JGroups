@@ -9,28 +9,22 @@ package org.jgroups.protocols;
 import org.jgroups.Message;
 import org.jgroups.util.RingBuffer;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  * This bundler adds all (unicast or multicast) messages to a queue until max size has been exceeded, but does send
  * messages immediately when no other messages are available. https://issues.jboss.org/browse/JGRP-1540
  */
 public class RingBufferBundler extends BaseBundler implements Runnable {
-    protected RingBuffer<Message>    buf;
-    protected List<Message>          remove_queue;
+    protected RingBuffer<Message>    rb;
     protected volatile     Thread    bundler_thread;
     protected volatile boolean       running=true;
     protected int                    num_spins=40; // number of times we call Thread.yield before acquiring the lock (0 disables)
     protected static final String    THREAD_NAME="RingBufferBundler";
 
     public RingBufferBundler() {
-        this.remove_queue=new ArrayList<>(16);
     }
 
-    protected RingBufferBundler(RingBuffer<Message> buf) {
-        this.buf=buf;
-        this.remove_queue=new ArrayList<>(16);
+    protected RingBufferBundler(RingBuffer<Message> rb) {
+        this.rb=rb;
     }
 
     public RingBufferBundler(int capacity) {
@@ -38,16 +32,14 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
     }
 
     public Thread            getThread()               {return bundler_thread;}
-    public int               getBufferSize()           {return buf.size();}
-    public int               removeQueueSize()         {return remove_queue.size();}
-    public RingBufferBundler removeQueueSize(int size) {this.remove_queue=new ArrayList<>(size); return this;}
+    public int               getBufferSize()           {return rb.size();}
     public int               numSpins()                {return num_spins;}
     public RingBufferBundler numSpins(int n)           {num_spins=n; return this;}
 
     public void init(TP transport) {
         super.init(transport);
-        if(buf == null)
-            buf=new RingBuffer<>(assertPositive(transport.getBundlerCapacity(), "bundler capacity cannot be " + transport.getBundlerCapacity()));
+        if(rb == null)
+            rb=new RingBuffer<>(assertPositive(transport.getBundlerCapacity(), "bundler capacity cannot be " + transport.getBundlerCapacity()));
     }
 
     public synchronized void start() {
@@ -68,30 +60,40 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
 
     public void send(Message msg) throws Exception {
         if(running)
-            buf.put(msg);
+            rb.put(msg);
     }
 
     public void run() {
         while(running) {
             try {
-                remove_queue.clear();
-                // int num_msgs=buf.drainTo(remove_queue, Integer.MAX_VALUE, true);
-                int num_msgs=buf.drainToLockless(remove_queue, Integer.MAX_VALUE, true, num_spins);
-                if(num_msgs <= 0)
-                    continue;
-                for(int i=0; i < remove_queue.size(); i++) {
-                    Message msg=remove_queue.get(i);
-                    long size=msg.size();
-                    if(count + size >= transport.getMaxBundleSize())
-                        sendBundledMessages();
-                    addMessage(msg, size);
-                }
-                if(count > 0)
-                    sendBundledMessages();
+                readMessages();
             }
             catch(Throwable t) {
             }
         }
+    }
+
+    protected void readMessages() throws InterruptedException {
+        int cnt=0, capacity=rb.capacity();
+        int available_msgs=rb.waitForMessages(num_spins);
+        int read_index=rb.readIndex();
+        Object[] buf=rb.buf();
+
+        for(int i=0; i < available_msgs; i++) {
+            Message msg=(Message)buf[read_index];
+            long size=msg.size();
+            if(count + size >= transport.getMaxBundleSize())
+                sendBundledMessages();
+            addMessage(msg, size);
+            buf[read_index]=null;
+            if(++read_index == capacity)
+                read_index=0;
+            cnt++;
+        }
+        if(cnt > 0)
+            rb.publishReadIndex(read_index, cnt);
+        if(count > 0)
+            sendBundledMessages();
     }
 
     protected void _stop(boolean clear_queue) {
@@ -105,7 +107,7 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
             }
         }
         if(clear_queue)
-            buf.clear();
+            rb.clear();
     }
 
 
