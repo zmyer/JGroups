@@ -77,12 +77,13 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
         int cnt=0, capacity=rb.capacity();
         int available_msgs=rb.waitForMessages(num_spins);
         int read_index=rb.readIndex();
+        int max_bundle_size=transport.getMaxBundleSize();
         Object[] buf=rb.buf();
 
         for(int i=0; i < available_msgs; i++) {
             Message msg=(Message)buf[read_index];
             long size=msg.size();
-            if(count + size >= transport.getMaxBundleSize())
+            if(count + size >= max_bundle_size)
                 sendBundledMessages();
             addMessage(msg, size);
             buf[read_index]=null;
