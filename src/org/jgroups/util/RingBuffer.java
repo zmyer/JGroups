@@ -1,7 +1,6 @@
 package org.jgroups.util;
 
 import java.util.Collection;
-import java.util.Iterator;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -185,8 +184,8 @@ public class RingBuffer<T> {
         if(cnt > 0) {
             lock.lock();
             try {
-                count-=cnt;
                 ri=read_index;
+                count-=cnt;
                 not_full.signal();
             }
             finally {
@@ -240,25 +239,5 @@ public class RingBuffer<T> {
         return index & (buf.length -1);
     }
 
-
-    /**
-     * Iterator passed to the read() batch method. Contains a ref to a start (read index) and end index (write index).
-     * Can be reset to iterate multiple times over that range, which is guaranteed to to change until the iteration is
-     * done.
-     */
-    protected final class RingBufferIterator implements Iterator<T> {
-
-        public boolean hasNext() {
-            return false;
-        }
-
-        public T next() {
-            return null;
-        }
-
-        public void reset() {
-
-        }
-    }
 
 }
