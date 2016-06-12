@@ -446,7 +446,6 @@ public class Util {
         return result;
     }
 
-
     public static byte[] collectionToByteBuffer(Collection c) throws Exception {
         byte[] result=null;
         final ByteArrayOutputStream out_stream=new ByteArrayOutputStream(512);
@@ -2643,6 +2642,64 @@ public class Util {
         }
     }
 
+    public static String byteArrayToHexString(byte[] b) {
+        if(b == null)
+            return "null";
+        StringBuilder sb = new StringBuilder(b.length * 2);
+        for (int i = 0; i < b.length; i++){
+            int v = b[i] & 0xff;
+            if (v < 16) { sb.append('0'); }
+            sb.append(Integer.toHexString(v));
+        }
+        return sb.toString().toUpperCase();
+    }
+
+    public static int getNextHigherPowerOfTwo(int num) {
+        if(num <= 0) return 1;
+        int highestBit=Integer.highestOneBit(num);
+        return num <= highestBit? highestBit : highestBit << 1;
+    }
+
+    public static int size(byte[] buf) {
+        return buf == null? Global.BYTE_SIZE : Global.BYTE_SIZE + Global.INT_SIZE + buf.length;
+    }
+
+    /**
+     * Blocks until all channels have the same view
+     * @param timeout How long to wait (max in ms)
+     * @param interval Check every interval ms
+     * @param channels The channels which should form the view. The expected view size is channels.length.
+     * Must be non-null
+     */
+    public static void waitUntilAllChannelsHaveSameSize(long timeout, long interval, Channel... channels) throws TimeoutException {
+        int size=channels.length;
+
+        if(interval >= timeout || timeout <= 0)
+            throw new IllegalArgumentException("interval needs to be smaller than timeout or timeout needs to be > 0");
+        long target_time=System.currentTimeMillis() + timeout;
+        while(System.currentTimeMillis() <= target_time) {
+            boolean all_channels_have_correct_size=true;
+            for(Channel ch: channels) {
+                View view=ch.getView();
+                if(view == null || view.size() != size) {
+                    all_channels_have_correct_size=false;
+                    break;
+                }
+            }
+            if(all_channels_have_correct_size)
+                return;
+            Util.sleep(interval);
+        }
+        View[] views=new View[channels.length];
+        StringBuilder sb=new StringBuilder();
+        for(int i=0; i < channels.length; i++) {
+            views[i]=channels[i].getView();
+            sb.append(channels[i].getLocalAddress()).append(": ").append(views[i]).append("\n");
+        }
+        for(View view: views)
+            if(view == null || view.size() != size)
+                throw new TimeoutException("Timeout " + timeout + " kicked in, views are:\n" + sb);
+    }
 
 }
 

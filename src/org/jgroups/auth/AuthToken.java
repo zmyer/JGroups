@@ -20,6 +20,11 @@ public abstract class AuthToken implements Serializable, Streamable{
 
     public void setAuth(AUTH auth) {this.auth=auth;}
 
+    public void init() throws Exception {}
+    public void start() throws Exception {}
+    public void stop() {}
+    public void destroy() {}
+
     /**
      * Used to return the full package and class name of the implementation.  This is used by the AUTH protocol to create an instance of the implementation.
      * @return a java.lang.String object of the package and class name

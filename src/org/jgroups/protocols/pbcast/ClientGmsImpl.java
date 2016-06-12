@@ -67,6 +67,7 @@ public class ClientGmsImpl extends GmsImpl {
         Address coord=null;
         JoinRsp rsp=null;
         View tmp_view;
+        long join_attempts=0;
         leaving=false;
 
         join_promise.reset();
@@ -134,8 +135,15 @@ public class ClientGmsImpl extends GmsImpl {
                 if(rsp == null)
                     rsp=join_promise.getResult(gms.join_timeout);
                 if(rsp == null) {
+                    join_attempts++;
                     if(log.isWarnEnabled())
                         log.warn("join(" + mbr + ") sent to " + coord + " timed out (after " + gms.join_timeout + " ms), retrying");
+                    if(gms.max_join_attempts != 0 && join_attempts >= gms.max_join_attempts) {
+                        if(log.isWarnEnabled())
+                            log.warn("Too many JOIN attempts: becoming singleton");
+                        becomeSingletonMember(mbr);
+                        return;
+                    }
                 }
                 else {
                     // 1. check whether JOIN was rejected

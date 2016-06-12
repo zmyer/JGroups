@@ -42,6 +42,13 @@ public class DISCARD extends Protocol {
 
     protected boolean use_gui=false;
 
+    public boolean isDiscardAll() {
+        return discard_all;
+    }
+
+    public void setDiscardAll(boolean discard_all) {
+        this.discard_all=discard_all;
+    }
 
     /**
      * All protocol names have to be unique !

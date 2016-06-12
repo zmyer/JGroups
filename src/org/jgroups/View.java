@@ -6,6 +6,7 @@ import org.jgroups.util.Streamable;
 import org.jgroups.util.Util;
 
 import java.io.*;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Vector;
@@ -72,7 +73,6 @@ public class View implements Externalizable, Cloneable, Streamable {
         this(new ViewId(creator, id), members);
     }
 
-
     /**
      * returns the view ID of this view
      * if this view was created with the empty constructur, null will be returned
@@ -93,6 +93,8 @@ public class View implements Externalizable, Cloneable, Streamable {
         return vid != null ? vid.getCoordAddress() : null;
     }
 
+    public Address getCoord() {return !members.isEmpty()? members.get(0) : null;}
+
     /**
      * Returns a reference to the List of members (ordered)
      * Do NOT change this list, hence your will invalidate the view
@@ -104,6 +106,13 @@ public class View implements Externalizable, Cloneable, Streamable {
         return Util.unmodifiableVector(members);
     }
 
+    /** Returns the underlying list. The caller <em>must not</em> modify the contents. Should not be used by
+     *  application code ! This method may be removed at any time, so don't use it !
+     */
+    public Vector<Address> getMembersRaw() {
+           return members;
+    }
+
     /**
      * returns true, if this view contains a certain member
      *
@@ -113,6 +122,16 @@ public class View implements Externalizable, Cloneable, Streamable {
      */
     public boolean containsMember(Address mbr) {
         return !(mbr == null || members == null) && members.contains(mbr);
+    }
+
+    public boolean containsMembers(Collection<Address> mbrs) {
+        if(mbrs == null || members == null)
+            return false;
+        for(Address mbr: mbrs) {
+            if(!containsMember(mbr))
+                return false;
+        }
+        return true;
     }
 
 

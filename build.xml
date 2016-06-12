@@ -70,11 +70,13 @@
     <patternset id="all.tests">
         <include name="org/jgroups/tests/**Test**"/>
         <include name="org/jgroups/blocks/**Test**"/>
+        <include name="org/jgroups/protocols/**Test**"/>
     </patternset>
 
     <patternset id="junit.excludes">
         <exclude name="**/DistributedQueueTest*"/>
         <exclude name="**/ChannelTestBase*"/>
+        <exclude name="**/EncryptTest*"/>
     </patternset>
 
 

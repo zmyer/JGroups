@@ -102,7 +102,7 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
     private boolean leaving=false;
     private boolean started=false;
     private TimeScheduler timer=null;
-    private static final String name="NAKACK";
+    public static final String name="NAKACK";
 
     private long xmit_reqs_received;
     private long xmit_reqs_sent;
@@ -598,7 +598,7 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
             case Event.MSG:
                 Message msg=(Message)evt.getArg();
                 Address dest=msg.getDest();
-                if(dest != null && !dest.isMulticastAddress()) {
+                if((dest != null && !dest.isMulticastAddress()) || msg.isFlagSet(Message.NO_RELIABILITY)) {
                     break; // unicast address: not null and not mcast, pass down unchanged
                 }
                 send(evt, msg);
@@ -687,6 +687,8 @@ public class NAKACK extends Protocol implements Retransmitter.RetransmitCommand,
 
         case Event.MSG:
             Message msg=(Message)evt.getArg();
+            if(msg.isFlagSet(Message.NO_RELIABILITY))
+                break;
             NakAckHeader hdr=(NakAckHeader)msg.getHeader(name);
             if(hdr == null)
                 break;  // pass up (e.g. unicast msg)

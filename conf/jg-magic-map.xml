@@ -42,4 +42,5 @@
     <class id="66" name="org.jgroups.blocks.PullPushAdapter$PullHeader"/>
     <class id="67" name="org.jgroups.protocols.AuthHeader"/>
     <class id="68" name="org.jgroups.protocols.MERGE3$CoordAnnouncement"/>
+    <class id="69" name="org.jgroups.protocols.EncryptHeader"/>
 </magic-number-class-mapping>

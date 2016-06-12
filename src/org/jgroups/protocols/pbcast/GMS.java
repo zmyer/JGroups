@@ -41,6 +41,8 @@ public class GMS extends Protocol {
     long                      join_timeout=5000;
     long                      leave_timeout=5000;
     long                      merge_timeout=5000;           // time to wait for all MERGE_RSPS
+    /** Number of join attempts before we give up and become a singleton. Zero means 'never give up */
+    long                      max_join_attempts=0;
     private final Object      impl_mutex=new Object();       // synchronizes event entry into impl
     private final Hashtable<String,GmsImpl>   impls=new Hashtable<String,GmsImpl>(3);
     private boolean           shun=false;
@@ -122,6 +124,8 @@ public class GMS extends Protocol {
     public long getJoinRetryTimeout() {return -1;}
     /** @deprecated */
     public void setJoinRetryTimeout(long t) {}
+    public long getMaxJoinAttempts() {return max_join_attempts;}
+    public void setMaxJoinAttempts(long t) {max_join_attempts=t;}
     public boolean isShun() {return shun;}
     public void setShun(boolean s) {shun=s;}
 
@@ -969,6 +973,12 @@ public class GMS extends Protocol {
             props.remove("resume_task_timeout");
         }
 
+        str=props.getProperty("max_join_attempts");
+        if(str != null) {
+            max_join_attempts=Long.parseLong(str);
+            props.remove("max_join_attempts");
+        }
+
         str=props.getProperty("disable_initial_coord");
         if(str != null) {
             disable_initial_coord=Boolean.valueOf(str).booleanValue();
@@ -1120,6 +1130,10 @@ public class GMS extends Protocol {
 
         public Address getMember() {
             return mbr;
+        }
+
+        public void setMergeRejected(boolean merge_rejected) {
+            this.merge_rejected=merge_rejected;
         }
 
         public String toString() {

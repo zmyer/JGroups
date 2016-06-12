@@ -16,6 +16,11 @@ public class AuthHeader extends Header implements Streamable{
 
     public AuthHeader(){
     }
+
+    public AuthHeader(AuthToken token) {
+        this.token=token;
+    }
+
     /**
      * Sets the token value to that of the passed in token object
      * @param token the new authentication token
