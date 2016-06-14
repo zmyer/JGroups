@@ -12,31 +12,34 @@ import org.jgroups.util.RingBuffer;
 import org.jgroups.util.Util;
 
 import java.util.concurrent.locks.LockSupport;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 /**
  * This bundler adds all (unicast or multicast) messages to a queue until max size has been exceeded, but does send
  * messages immediately when no other messages are available. https://issues.jboss.org/browse/JGRP-1540
  */
 public class RingBufferBundler extends BaseBundler implements Runnable {
-    protected RingBuffer<Message>    rb;
-    protected volatile     Thread    bundler_thread;
-    protected volatile boolean       running=true;
-    protected int                    num_spins=40; // number of times we call Thread.yield before acquiring the lock (0 disables)
-    protected static final String    THREAD_NAME="RingBufferBundler";
-    protected Consumer<Integer>      wait_strategy=YIELD;
+    protected RingBuffer<Message>         rb;
+    protected volatile Thread             bundler_thread;
+    protected volatile boolean            running=true;
+    protected int                         num_spins=40; // number of times we call Thread.yield before acquiring the lock (0 disables)
+    protected static final String         THREAD_NAME="RingBufferBundler";
+    protected BiConsumer<Integer,Integer> wait_strategy=SPIN_PARK;
 
-    protected static final Consumer<Integer> SPIN=it -> {;};
-    protected static final Consumer<Integer> YIELD=it -> Thread.yield();
-    protected static final Consumer<Integer> PARK=it -> LockSupport.parkNanos(1);
-    protected static final Consumer<Integer> SPIN_YIELD_PARK=it -> {
-        if(it < 10)
-            ; // spin
-        else if(it < 20)
-            Thread.yield();
-        else
-            LockSupport.parkNanos(1);
+    protected static final BiConsumer<Integer,Integer> SPIN=(it,spins) -> {;};
+    protected static final BiConsumer<Integer,Integer> YIELD=(it,spins) -> Thread.yield();
+    protected static final BiConsumer<Integer,Integer> PARK=(it,spins) -> LockSupport.parkNanos(1);
+    protected static final BiConsumer<Integer,Integer> SPIN_PARK=(it, spins) -> {
+        if(it < spins/10)
+            ; // spin for the first 10% of all iterations, then switch to park()
+        LockSupport.parkNanos(1);
     };
+    protected static final BiConsumer<Integer,Integer> SPIN_YIELD=(it, spins) -> {
+        if(it < spins/10)
+            ;           // spin for the first 10% of the total number of iterations
+        Thread.yield(); //, then switch to yield()
+    };
+
 
     public RingBufferBundler() {
     }
@@ -55,7 +58,7 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
     public int                 numSpins()                {return num_spins;}
     public RingBufferBundler   numSpins(int n)           {num_spins=n; return this;}
     public String              waitStrategy()            {return print(wait_strategy);}
-    public RingBufferBundler   waitStrategy(String st)   {wait_strategy=createWaitStrategy(st); return this;}
+    public RingBufferBundler   waitStrategy(String st)   {wait_strategy=createWaitStrategy(st, YIELD); return this;}
 
 
     public void init(TP transport) {
@@ -202,30 +205,32 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
             rb.clear();
     }
 
-    protected static String print(Consumer<Integer> wait_strategy) {
+    protected static String print(BiConsumer<Integer,Integer> wait_strategy) {
         if(wait_strategy      == null)            return null;
         if(wait_strategy      == SPIN)            return "spin";
         else if(wait_strategy == YIELD)           return "yield";
         else if(wait_strategy == PARK)            return "park";
-        else if(wait_strategy == SPIN_YIELD_PARK) return "spin-yield-park";
+        else if(wait_strategy == SPIN_PARK)       return "spin-park";
+        else if(wait_strategy == SPIN_YIELD)      return "spin-yield";
         else return wait_strategy.getClass().getSimpleName();
     }
 
-    protected Consumer<Integer> createWaitStrategy(String st) {
-        if(st == null) return null;
+    protected BiConsumer<Integer,Integer> createWaitStrategy(String st, BiConsumer<Integer,Integer> default_wait_strategy) {
+        if(st == null) return default_wait_strategy != null? default_wait_strategy : null;
         switch(st) {
             case "spin":            return wait_strategy=SPIN;
             case "yield":           return wait_strategy=YIELD;
             case "park":            return wait_strategy=PARK;
-            case "spin_yield_park": return wait_strategy=SPIN_YIELD_PARK;
+            case "spin_park":       return wait_strategy=SPIN_PARK;
+            case "spin_yield":      return wait_strategy=SPIN_YIELD;
             default:
                 try {
-                    Class<Consumer<Integer>> clazz=Util.loadClass(st, this.getClass());
+                    Class<BiConsumer<Integer,Integer>> clazz=Util.loadClass(st, this.getClass());
                     return clazz.newInstance();
                 }
                 catch(Throwable t) {
                     log.error("failed creating wait_strategy " + st, t);
-                    return null;
+                    return default_wait_strategy != null? default_wait_strategy : null;
                 }
         }
     }
