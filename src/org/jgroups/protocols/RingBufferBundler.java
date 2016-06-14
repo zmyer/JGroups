@@ -130,7 +130,7 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
             int num_msgs=1;
 
             // iterate through the following messages and find messages to the same destination
-            count=msg.size();
+            long bytes=msg.size();
             int i=start;
             while(i != end) {
                 i=advance(i, capacity);
@@ -138,9 +138,9 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
                 if(next != null && (dest == next.getDest() || (dest != null && dest.equals(next.dest())))) {
                     next.dest(dest); // avoid further equals() calls
                     long size=next.size();
-                    if(count + size > max_bundle_size)
+                    if(bytes + size > max_bundle_size)
                         break;
-                    count+=size;
+                    bytes+=size;
                     num_msgs++;
                 }
             }
