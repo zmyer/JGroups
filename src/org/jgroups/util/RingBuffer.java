@@ -59,16 +59,6 @@ public class RingBuffer<T> {
         }
     }
 
-    /** Nulls an element without range and wrap check or lock acquisition. */
-    public RingBuffer<T> nullify(int index) {
-        buf[index]=null;
-        return null;
-    }
-
-    /** Gets an element without range or wrap check, or lock acquisition */
-    public T get(int index) {
-        return buf[index];
-    }
 
 
     /**
@@ -118,9 +108,11 @@ public class RingBuffer<T> {
 
 
     public RingBuffer<T> publishReadIndex(int num_elements_read) {
+        // this.ri is only read/written by the consumer, and since there's only 1 consumer, there's no need to synchronize on it
+        this.ri=realIndex(this.ri + num_elements_read);
+
         lock.lock();
         try {
-            this.ri=realIndex(this.ri + num_elements_read);
             this.count-=num_elements_read;
             not_full.signal();
             return this;
