@@ -17,7 +17,7 @@ public class RingBufferTest {
 
 
     public void testEmpty() {
-        RingBuffer<Integer> rb=new RingBuffer<>(8);
+        RingBuffer<Integer> rb=new RingBuffer<>(Integer.class, 8);
         System.out.println("rb = " + rb);
         //noinspection SizeReplaceableByIsEmpty
         assert rb.size() == 0;
@@ -26,7 +26,7 @@ public class RingBufferTest {
     }
 
     public void testWriteAndRead() throws Exception {
-        RingBuffer<Integer> rb=new RingBuffer<>(8);
+        RingBuffer<Integer> rb=new RingBuffer<>(Integer.class, 8);
         rb.put(1).put(2);
         System.out.println("rb = " + rb);
         assert rb.size() == 2;
@@ -49,7 +49,7 @@ public class RingBufferTest {
     }
 
     public void testDrainTo() throws InterruptedException {
-        RingBuffer<Integer> rb=new RingBuffer<>(8);
+        RingBuffer<Integer> rb=new RingBuffer<>(Integer.class, 8);
         List<Integer> list=new ArrayList<>(4);
         int num=rb.drainTo(list);
         assert num == 0 && list.isEmpty();
@@ -65,7 +65,7 @@ public class RingBufferTest {
     }
 
     public void testReadBlocking() throws InterruptedException {
-        final RingBuffer<Integer> rb=new RingBuffer<>(8);
+        final RingBuffer<Integer> rb=new RingBuffer<>(Integer.class, 8);
         new Thread(()-> {Util.sleep(1000);
             try {
                 rb.put(50);
@@ -79,7 +79,7 @@ public class RingBufferTest {
     }
 
     public void testWriteBlocking() throws InterruptedException {
-        final RingBuffer<Integer> rb=new RingBuffer<>(8);
+        final RingBuffer<Integer> rb=new RingBuffer<>(Integer.class, 8);
         for(int i=1; i <= 8; i++)
             rb.put(i);
 
