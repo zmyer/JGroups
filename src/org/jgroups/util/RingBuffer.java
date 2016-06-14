@@ -1,5 +1,6 @@
 package org.jgroups.util;
 
+import java.lang.reflect.Array;
 import java.util.Collection;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -18,9 +19,9 @@ public class RingBuffer<T> {
     protected final java.util.concurrent.locks.Condition not_empty=lock.newCondition(); // reader can block on this
     protected final java.util.concurrent.locks.Condition not_full=lock.newCondition();  // writes can block on this
 
-    public RingBuffer(int capacity) {
+    public RingBuffer(Class<T> element_type, int capacity) {
         int c=Util.getNextHigherPowerOfTwo(capacity); // power of 2 for faster mod operation
-        buf=(T[])new Object[c];
+        buf=(T[])Array.newInstance(element_type, c);
     }
 
     public T[] buf()               {return buf;}
@@ -178,14 +179,14 @@ public class RingBuffer<T> {
             cnt++;
         }
         if(cnt > 0)
-            publishReadIndex(read_index, cnt);
+            publishReadIndex(cnt);
         return cnt;
     }
 
-    public RingBuffer<T> publishReadIndex(int new_read_index, int num_elements_read) {
+    public RingBuffer<T> publishReadIndex(int num_elements_read) {
         lock.lock();
         try {
-            this.ri=new_read_index;
+            this.ri=realIndex(this.ri + num_elements_read);
             this.count-=num_elements_read;
             not_full.signal();
             return this;
@@ -207,7 +208,9 @@ public class RingBuffer<T> {
             if(count > 0)
                 break;
             Thread.yield();
+            // LockSupport.parkNanos(1);
         }
+
         if(count == 0) {
             lock.lock();
             try {
