@@ -1,9 +1,9 @@
 package org.jgroups.util;
 
 import java.lang.reflect.Array;
-import java.util.Collection;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 
 /**
  * Ring buffer of fixed capacity designed for multiple writers but only a single reader. Advancing the read or
@@ -116,72 +116,6 @@ public class RingBuffer<T> {
         }
     }
 
-    public int drainTo(Collection<T> list) {
-        return drainTo(list, Integer.MAX_VALUE);
-    }
-
-    public int drainTo(Collection<T> list, int max_elements) {
-        try {
-            return drainTo(list, max_elements, false);
-        }
-        catch(InterruptedException e) {
-            return 0;
-        }
-    }
-
-    public int drainTo(Collection<T> list, int max_elements, boolean block) throws InterruptedException {
-        if(list == null)
-            return 0;
-        int cnt=0;
-        lock.lock();
-        try {
-            if(block) {
-                while(count == 0)
-                    not_empty.await();
-            }
-            int num_elements=Math.min(max_elements, count);
-            for(int i=0; i < num_elements; i++) {
-                T el=buf[ri];
-                list.add(el);
-                buf[ri]=null;
-                if(++ri == buf.length)
-                    ri=0;
-                cnt++;
-            }
-            if(cnt > 0) {
-                count-=cnt;
-                not_full.signal();
-            }
-            return cnt;
-        }
-        finally {
-            lock.unlock();
-        }
-    }
-
-    public int drainToLockless(Collection<T> list, int max_elements, boolean block, int num_spins) throws InterruptedException {
-        if(list == null)
-            return 0;
-        int cnt=0;
-
-        if(block)
-            waitForMessages(num_spins);
-
-        int num_elements=Math.min(max_elements, count);
-        int read_index=ri;
-
-        for(int i=0; i < num_elements; i++) {
-            T el=buf[read_index];
-            list.add(el);
-            buf[read_index]=null;
-            if(++read_index == buf.length)
-                read_index=0;
-            cnt++;
-        }
-        if(cnt > 0)
-            publishReadIndex(cnt);
-        return cnt;
-    }
 
     public RingBuffer<T> publishReadIndex(int num_elements_read) {
         lock.lock();
@@ -198,17 +132,19 @@ public class RingBuffer<T> {
 
     /** Blocks until messages are available */
     public int waitForMessages() throws InterruptedException {
-        return waitForMessages(40);
+        return waitForMessages(40, null);
     }
 
     /** Blocks until messages are available */
-    public int waitForMessages(int num_spins) throws InterruptedException {
+    public int waitForMessages(int num_spins, final Consumer<Integer> wait_strategy) throws InterruptedException {
         // try spinning first (experimental)
         for(int i=0; i < num_spins; i++) {
             if(count > 0)
                 break;
-            Thread.yield();
-            // LockSupport.parkNanos(1);
+            if(wait_strategy != null)
+                wait_strategy.accept(i);
+            else
+                Thread.yield();
         }
 
         if(count == 0) {

@@ -11,6 +11,9 @@ import org.jgroups.Message;
 import org.jgroups.util.RingBuffer;
 import org.jgroups.util.Util;
 
+import java.util.concurrent.locks.LockSupport;
+import java.util.function.Consumer;
+
 /**
  * This bundler adds all (unicast or multicast) messages to a queue until max size has been exceeded, but does send
  * messages immediately when no other messages are available. https://issues.jboss.org/browse/JGRP-1540
@@ -21,6 +24,19 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
     protected volatile boolean       running=true;
     protected int                    num_spins=40; // number of times we call Thread.yield before acquiring the lock (0 disables)
     protected static final String    THREAD_NAME="RingBufferBundler";
+    protected Consumer<Integer>      wait_strategy=YIELD;
+
+    protected static final Consumer<Integer> SPIN=it -> {;};
+    protected static final Consumer<Integer> YIELD=it -> Thread.yield();
+    protected static final Consumer<Integer> PARK=it -> LockSupport.parkNanos(1);
+    protected static final Consumer<Integer> SPIN_YIELD_PARK=it -> {
+        if(it < 10)
+            ; // spin
+        else if(it < 20)
+            Thread.yield();
+        else
+            LockSupport.parkNanos(1);
+    };
 
     public RingBufferBundler() {
     }
@@ -38,6 +54,9 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
     public int                 getBufferSize()           {return rb.size();}
     public int                 numSpins()                {return num_spins;}
     public RingBufferBundler   numSpins(int n)           {num_spins=n; return this;}
+    public String              waitStrategy()            {return print(wait_strategy);}
+    public RingBufferBundler   waitStrategy(String st)   {wait_strategy=createWaitStrategy(st); return this;}
+
 
     public void init(TP transport) {
         super.init(transport);
@@ -76,33 +95,10 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
         }
     }
 
-    protected void readMessagesOld() throws InterruptedException {
-        int cnt=0, capacity=rb.capacity();
-        int available_msgs=rb.waitForMessages(num_spins);
-        int read_index=rb.readIndex();
-        int max_bundle_size=transport.getMaxBundleSize();
-        Object[] buf=rb.buf();
-
-        for(int i=0; i < available_msgs; i++) {
-            Message msg=(Message)buf[read_index];
-            long size=msg.size();
-            if(count + size >= max_bundle_size)
-                sendBundledMessages();
-            addMessage(msg, size);
-            buf[read_index]=null;
-            if(++read_index == capacity)
-                read_index=0;
-            cnt++;
-        }
-        if(cnt > 0)
-            rb.publishReadIndex(cnt);
-        if(count > 0)
-            sendBundledMessages();
-    }
 
     protected void readMessages() throws InterruptedException {
         int capacity=rb.capacity();
-        int available_msgs=rb.waitForMessages(num_spins);
+        int available_msgs=rb.waitForMessages(num_spins, wait_strategy);
         int read_index=rb.readIndex();
         Message[] buf=rb.buf();
         sendBundledMessages(buf, read_index, available_msgs, capacity);
@@ -206,6 +202,33 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
             rb.clear();
     }
 
+    protected static String print(Consumer<Integer> wait_strategy) {
+        if(wait_strategy      == null)            return null;
+        if(wait_strategy      == SPIN)            return "spin";
+        else if(wait_strategy == YIELD)           return "yield";
+        else if(wait_strategy == PARK)            return "park";
+        else if(wait_strategy == SPIN_YIELD_PARK) return "spin-yield-park";
+        else return wait_strategy.getClass().getSimpleName();
+    }
+
+    protected Consumer<Integer> createWaitStrategy(String st) {
+        if(st == null) return null;
+        switch(st) {
+            case "spin":            return wait_strategy=SPIN;
+            case "yield":           return wait_strategy=YIELD;
+            case "park":            return wait_strategy=PARK;
+            case "spin_yield_park": return wait_strategy=SPIN_YIELD_PARK;
+            default:
+                try {
+                    Class<Consumer<Integer>> clazz=Util.loadClass(st, this.getClass());
+                    return clazz.newInstance();
+                }
+                catch(Throwable t) {
+                    log.error("failed creating wait_strategy " + st, t);
+                    return null;
+                }
+        }
+    }
 
     protected static int assertPositive(int value, String message) {
         if(value <= 0) throw new IllegalArgumentException(message);

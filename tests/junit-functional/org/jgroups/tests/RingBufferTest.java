@@ -4,9 +4,7 @@ import org.jgroups.util.RingBuffer;
 import org.jgroups.util.Util;
 import org.testng.annotations.Test;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 /**
  * @author Bela Ban
@@ -48,21 +46,6 @@ public class RingBufferTest {
         System.out.println("rb = " + rb);
     }
 
-    public void testDrainTo() throws InterruptedException {
-        RingBuffer<Integer> rb=new RingBuffer<>(Integer.class, 8);
-        List<Integer> list=new ArrayList<>(4);
-        int num=rb.drainTo(list);
-        assert num == 0 && list.isEmpty();
-
-        for(int i=1; i <= 8; i++)
-            rb.put(i);
-
-        num=rb.drainTo(list, 4);
-        assert num == 4;
-
-        num=rb.drainTo(list);
-        assert num == 4 && rb.isEmpty() && list.size() == 8;
-    }
 
     public void testReadBlocking() throws InterruptedException {
         final RingBuffer<Integer> rb=new RingBuffer<>(Integer.class, 8);
