@@ -275,6 +275,12 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
     @Property(name="no_bundler.initial_buf_size",description="The initial size of each buffer (in bytes)")
     protected int no_bundler_initial_buf_size=512;
 
+    @Property(description="Number of spins before a real lock is acquired")
+    protected int bundler_num_spins=40;
+
+    @Property(description="The wait strategy for a RingBuffer")
+    protected String bundler_wait_strategy;
+
     @ManagedAttribute(description="Fully qualified classname of bundler")
     public String getBundlerClass() {
         return bundler != null? bundler.getClass().getName() : "null";
@@ -298,23 +304,28 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
 
     @ManagedAttribute(description="The wait strategy for a RingBuffer")
     public String bundlerWaitStrategy() {
-        return bundler instanceof RingBufferBundler? ((RingBufferBundler)bundler).waitStrategy() : "n/a";
+        return bundler instanceof RingBufferBundler? ((RingBufferBundler)bundler).waitStrategy() : bundler_wait_strategy;
     }
 
     @ManagedAttribute(description="Sets the wait strategy in the RingBufferBundler. Allowed values are \"spin\", " +
-      "\"yield\", \"park\" and \"spin_yield_park\", or a fully qualified classname")
+      "\"yield\", \"park\", \"spin_park\" and \"spin_yield\" or a fully qualified classname")
     public void bundlerWaitStrategy(String strategy) {
-        if(bundler instanceof RingBufferBundler)
+        if(bundler instanceof RingBufferBundler) {
             ((RingBufferBundler)bundler).waitStrategy(strategy);
+            this.bundler_wait_strategy=strategy;
+        }
+        else
+            this.bundler_wait_strategy=strategy;
     }
 
     @ManagedAttribute(description="Number of spins before a real lock is acquired")
     public int bundlerNumSpins() {
-        return bundler instanceof RingBufferBundler? ((RingBufferBundler)bundler).numSpins() : 0;
+        return bundler instanceof RingBufferBundler? ((RingBufferBundler)bundler).numSpins() : bundler_num_spins;
     }
 
     @ManagedAttribute(description="Sets the number of times a thread spins until a real lock is acquired")
     public void bundlerNumSpins(int spins) {
+        this.bundler_num_spins=spins;
         if(bundler instanceof RingBufferBundler)
             ((RingBufferBundler)bundler).numSpins(spins);
     }
@@ -1318,7 +1329,7 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
         if(type.startsWith("sender-sends") || type.equals("ss"))
             return new SenderSendsBundler();
         if(type.startsWith("ring-buffer") || type.equals("rb"))
-            return new RingBufferBundler(bundler_capacity);
+            return new RingBufferBundler(bundler_capacity).numSpins(bundler_num_spins).waitStrategy(bundler_wait_strategy);
         if(type.startsWith("no-bundler") || type.equals("nb"))
             return new NoBundler().poolSize(no_bundler_pool_size).initialBufSize(no_bundler_initial_buf_size);
         try {

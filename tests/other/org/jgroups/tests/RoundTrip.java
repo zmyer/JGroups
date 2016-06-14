@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class RoundTrip implements RtReceiver {
     protected RtTransport                     tp;
-    protected int                             num_msgs=20000;
+    protected int                             num_msgs=50000;
     protected int                             num_senders=1; // number of sender threads
     protected boolean                         details;
     protected boolean                         use_ms; // typically we use us, but if the flag is true, we use ms

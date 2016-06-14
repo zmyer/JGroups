@@ -3,7 +3,7 @@ package org.jgroups.util;
 import java.lang.reflect.Array;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 /**
  * Ring buffer of fixed capacity designed for multiple writers but only a single reader. Advancing the read or
@@ -135,18 +135,21 @@ public class RingBuffer<T> {
         return waitForMessages(40, null);
     }
 
-    /** Blocks until messages are available */
-    public int waitForMessages(int num_spins, final Consumer<Integer> wait_strategy) throws InterruptedException {
+    /**
+     *  Blocks until messages are available
+     *  @param num_spins the number of times we should spin before acquiring a lock
+     *  @param wait_strategy the strategy used to spin. The first parameter is the iteration count and the second
+     *                       parameter is the max number of spins
+     */
+
+    public int waitForMessages(int num_spins, final BiConsumer<Integer,Integer> wait_strategy) throws InterruptedException {
         // try spinning first (experimental)
-        for(int i=0; i < num_spins; i++) {
-            if(count > 0)
-                break;
+        for(int i=0; i < num_spins && count == 0; i++) {
             if(wait_strategy != null)
-                wait_strategy.accept(i);
+                wait_strategy.accept(i, num_spins);
             else
                 Thread.yield();
         }
-
         if(count == 0) {
             lock.lock();
             try {
