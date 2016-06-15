@@ -7,10 +7,12 @@ package org.jgroups.protocols;
  */
 
 import org.jgroups.Address;
+import org.jgroups.Global;
 import org.jgroups.Message;
 import org.jgroups.util.RingBuffer;
 import org.jgroups.util.Util;
 
+import java.util.Objects;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.BiConsumer;
 
@@ -130,31 +132,19 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
             }
 
             Address dest=msg.dest();
-            int num_msgs=findMessagesToSameDestination(dest, buf, start, end, max_bundle_size);
-
             try {
                 output.position(0);
-                if(num_msgs == 1) {
-                    sendSingleMessage(msg);
-                    buf[start]=null;
-                }
-                else {
-                    Util.writeMessageListHeader(dest, msg.src(), cluster_name, num_msgs, output, dest == null);
-                    int i=start;
-                    while(num_msgs > 0) {
-                        Message next=buf[i];
-                        // since we assigned the matching destination we can do plain ==
-                        if(next != null && next.dest() == dest) {
-                            next.writeToNoAddrs(next.src(), output, transport.getId());
-                            buf[i]=null;
-                            num_msgs--;
-                        }
-                        if(i == end)
-                            break;
-                        i=advance(i);
-                    }
-                    transport.doSend(output.buffer(), 0, output.position(), dest);
-                }
+                Util.writeMessageListHeader(dest, msg.src(), cluster_name, 1, output, dest == null);
+
+                // remember the position at which the number of messages (an int) was written, so we can later set the
+                // correct value (when we know the correct number of messages)
+                int size_pos=output.position() - Global.INT_SIZE;
+                int num_msgs=marshalMessagesToSameDestination(dest, buf, start, end, max_bundle_size);
+                int current_pos=output.position();
+                output.position(size_pos);
+                output.writeInt(num_msgs);
+                output.position(current_pos);
+                transport.doSend(output.buffer(), 0, output.position(), dest);
             }
             catch(Exception ex) {
                 log.error("failed to send message(s)", ex);
@@ -166,18 +156,20 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
         }
     }
 
-    // Iterate through the following messages and find messages to the same destination
-    protected int findMessagesToSameDestination(Address dest, Message[] buf, int start_index, final int end_index, int max_bundle_size) {
+    // Iterate through the following messages and find messages to the same destination (dest) and write them to output
+    protected int marshalMessagesToSameDestination(Address dest, Message[] buf,
+                                                   int start_index, final int end_index, int max_bundle_size) throws Exception {
         int num_msgs=0, bytes=0;
         for(;;) {
             Message msg=buf[start_index];
-            if(msg != null && (dest == msg.getDest() || (dest != null && dest.equals(msg.dest())))) {
-                msg.dest(dest); // avoid further equals() calls
+            if(msg != null && Objects.equals(dest, msg.dest())) {
                 long size=msg.size();
                 if(bytes + size > max_bundle_size)
                     break;
                 bytes+=size;
                 num_msgs++;
+                buf[start_index]=null;
+                msg.writeToNoAddrs(msg.src(), output, transport.getId());
             }
             if(start_index == end_index)
                 break;
