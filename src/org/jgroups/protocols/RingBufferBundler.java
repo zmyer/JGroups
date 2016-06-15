@@ -211,8 +211,10 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
             case "spin":            return wait_strategy=SPIN;
             case "yield":           return wait_strategy=YIELD;
             case "park":            return wait_strategy=PARK;
-            case "spin_park":       return wait_strategy=SPIN_PARK;
-            case "spin_yield":      return wait_strategy=SPIN_YIELD;
+            case "spin_park":
+            case "spin-park":       return wait_strategy=SPIN_PARK;
+            case "spin_yield":
+            case "spin-yield":      return wait_strategy=SPIN_YIELD;
             default:
                 try {
                     Class<BiConsumer<Integer,Integer>> clazz=Util.loadClass(st, this.getClass());
