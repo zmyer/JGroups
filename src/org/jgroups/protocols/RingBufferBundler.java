@@ -25,6 +25,7 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
     protected int                         num_spins=40; // number of times we call Thread.yield before acquiring the lock (0 disables)
     protected static final String         THREAD_NAME="RingBufferBundler";
     protected BiConsumer<Integer,Integer> wait_strategy=SPIN_PARK;
+    protected int                         capacity;
 
     protected static final BiConsumer<Integer,Integer> SPIN=(it,spins) -> {;};
     protected static final BiConsumer<Integer,Integer> YIELD=(it,spins) -> Thread.yield();
@@ -46,6 +47,7 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
 
     protected RingBufferBundler(RingBuffer<Message> rb) {
         this.rb=rb;
+        this.capacity=rb.capacity();
     }
 
     public RingBufferBundler(int capacity) {
@@ -63,8 +65,10 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
 
     public void init(TP transport) {
         super.init(transport);
-        if(rb == null)
+        if(rb == null) {
             rb=new RingBuffer<>(Message.class, assertPositive(transport.getBundlerCapacity(), "bundler capacity cannot be " + transport.getBundlerCapacity()));
+            this.capacity=rb.capacity();
+        }
     }
 
     public synchronized void start() {
@@ -100,62 +104,43 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
 
 
     protected void readMessages() throws InterruptedException {
-        int capacity=rb.capacity();
         int available_msgs=rb.waitForMessages(num_spins, wait_strategy);
         int read_index=rb.readIndex();
         Message[] buf=rb.buf();
-        sendBundledMessages(buf, read_index, available_msgs, capacity);
+        sendBundledMessages(buf, read_index, available_msgs);
         rb.publishReadIndex(available_msgs);
     }
 
 
 
     /** Read and send messages in range [read-index .. read-index+available_msgs-1] */
-    public void sendBundledMessages(final Message[] buf, final int read_index, final int available_msgs, final int capacity) {
+    public void sendBundledMessages(final Message[] buf, final int read_index, final int available_msgs) {
         int       max_bundle_size=transport.getMaxBundleSize();
         byte[]    cluster_name=transport.cluster_name.chars();
         int       start=read_index;
-        final int end=index(start + available_msgs-1, capacity); // index of the last message to be read
+        final int end=index(start + available_msgs-1); // index of the last message to be read
 
         for(;;) {
             Message msg=buf[start];
             if(msg == null) {
                 if(start == end)
                     break;
-                start=advance(start, capacity);
+                start=advance(start);
                 continue;
             }
 
             Address dest=msg.dest();
-            int num_msgs=1;
-
-            // iterate through the following messages and find messages to the same destination
-            long bytes=msg.size();
-            int i=start;
-            while(i != end) {
-                i=advance(i, capacity);
-                Message next=buf[i];
-                if(next != null && (dest == next.getDest() || (dest != null && dest.equals(next.dest())))) {
-                    next.dest(dest); // avoid further equals() calls
-                    long size=next.size();
-                    if(bytes + size > max_bundle_size)
-                        break;
-                    bytes+=size;
-                    num_msgs++;
-                }
-            }
+            int num_msgs=findMessagesToSameDestination(dest, buf, start, end, max_bundle_size);
 
             try {
                 output.position(0);
                 if(num_msgs == 1) {
-                    // System.out.printf("single msg to %s (count=%d)\n", msg.dest(), count);
                     sendSingleMessage(msg);
                     buf[start]=null;
                 }
                 else {
-                    // System.out.printf("message bundle of %d to %s (count=%d)\n", num_msgs, dest, count);
                     Util.writeMessageListHeader(dest, msg.src(), cluster_name, num_msgs, output, dest == null);
-                    i=start;
+                    int i=start;
                     while(num_msgs > 0) {
                         Message next=buf[i];
                         // since we assigned the matching destination we can do plain ==
@@ -166,30 +151,43 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
                         }
                         if(i == end)
                             break;
-                        i=advance(i, capacity);
+                        i=advance(i);
                     }
                     transport.doSend(output.buffer(), 0, output.position(), dest);
                 }
             }
             catch(Exception ex) {
-                log.error("failed to send message", ex);
+                log.error("failed to send message(s)", ex);
             }
 
             if(start == end)
                 break;
-            start=advance(start, capacity);
+            start=advance(start);
         }
     }
 
-
-    protected static final int advance(int index, int capacity) { // should be inlined
-        return index+1 == capacity? 0 : index+1;
+    // Iterate through the following messages and find messages to the same destination
+    protected int findMessagesToSameDestination(Address dest, Message[] buf, int start_index, final int end_index, int max_bundle_size) {
+        int num_msgs=0, bytes=0;
+        for(;;) {
+            Message msg=buf[start_index];
+            if(msg != null && (dest == msg.getDest() || (dest != null && dest.equals(msg.dest())))) {
+                msg.dest(dest); // avoid further equals() calls
+                long size=msg.size();
+                if(bytes + size > max_bundle_size)
+                    break;
+                bytes+=size;
+                num_msgs++;
+            }
+            if(start_index == end_index)
+                break;
+            start_index=advance(start_index);
+        }
+        return num_msgs;
     }
 
-    // fast equivalent to %
-    protected static int index(int idx, int capacity) {
-        return idx & (capacity-1);
-    }
+    protected final int advance(int index) {return index+1 == capacity? 0 : index+1;}
+    protected final int index(int idx)     {return idx & (capacity-1);}    // fast equivalent to %
 
     protected void _stop(boolean clear_queue) {
         running=false;

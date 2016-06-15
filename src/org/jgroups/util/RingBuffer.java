@@ -114,7 +114,7 @@ public class RingBuffer<T> {
         lock.lock();
         try {
             this.count-=num_elements_read;
-            not_full.signal();
+            not_full.signalAll(); // wake up all writers
             return this;
         }
         finally {

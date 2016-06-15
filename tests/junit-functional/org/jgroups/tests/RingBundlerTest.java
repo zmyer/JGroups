@@ -11,8 +11,10 @@ import org.jgroups.util.RingBuffer;
 import org.jgroups.util.Util;
 import org.testng.annotations.Test;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.locks.LockSupport;
 
 /**
  * @author Bela Ban
@@ -34,7 +36,7 @@ public class RingBundlerTest {
         System.out.println("rb = " + rb);
         int cnt=rb.countLockLockless();
         assert cnt == 6;
-        bundler.sendBundledMessages(rb.buf(), rb.readIndexLockless(), cnt, rb.capacity());
+        bundler.sendBundledMessages(rb.buf(), rb.readIndexLockless(), cnt);
         rb.publishReadIndex(cnt);
         System.out.println("rb = " + rb);
         assert rb.readIndex() == 6;
@@ -49,7 +51,7 @@ public class RingBundlerTest {
         assert rb.readIndex() == 6;
         assert rb.writeIndex() == 2;
 
-        bundler.sendBundledMessages(rb.buf(), rb.readIndexLockless(), rb.countLockLockless(), rb.capacity());
+        bundler.sendBundledMessages(rb.buf(), rb.readIndexLockless(), rb.countLockLockless());
         rb.publishReadIndex(cnt);
 
         assert rb.readIndex() == 2;
@@ -57,6 +59,54 @@ public class RingBundlerTest {
         assert rb.count() == 0;
     }
 
+    public void testFullBufferAndRead() throws Exception {
+        RingBufferBundler bundler=new RingBufferBundler(16);
+        RingBuffer<Message> rb=bundler.buf();
+        MockTransport transport=new MockTransport();
+        bundler.init(transport);
+        bundler.stop(); // stops the reader thread
+        Field running=Util.getField(RingBufferBundler.class, "running");
+        running.setAccessible(true);
+        Util.setField(running, bundler, true);
+
+        for(int i=0; i < 16; i++)
+            bundler.send(new Message(a)); // buffer is full now; reader is not running
+        System.out.println("rb = " + rb);
+
+        Thread[] adders=new Thread[16];
+        for(int i=0; i < 16; i++) {
+            adders[i]=new Thread(() -> {
+                try {
+                    bundler.send(new Message(b));
+                }
+                catch(Exception e) {
+                    e.printStackTrace();
+                }
+            }, "Adder-" + i);
+            adders[i].start();
+        }
+
+        int available=rb.waitForMessages(5, (it,spins) -> LockSupport.park());
+        System.out.println("available = " + available);
+        assert available == 16;
+        // we skip the sending
+        rb.publishReadIndex(available);
+
+        while(!rb.isEmpty() || !allDone(adders)) {
+            available=rb.waitForMessages(5, (it,spins) -> LockSupport.parkNanos(1));
+            System.out.println("available = " + available);
+            rb.publishReadIndex(available);
+        }
+        assert rb.isEmpty();
+        assert allDone(adders);
+    }
+
+    protected static boolean allDone(Thread[] threads) {
+        for(Thread thread: threads)
+            if(thread.isAlive())
+                return false;
+        return true;
+    }
 
     protected List<Message> create(int msg_size, Address ... destinations) {
         List<Message> list=new ArrayList<>(destinations.length);
