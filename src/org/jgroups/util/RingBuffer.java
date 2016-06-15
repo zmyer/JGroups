@@ -152,7 +152,7 @@ public class RingBuffer<T> {
                 lock.unlock();
             }
         }
-        return count;
+        return count; // whatever is the last count; could have been updated since lock release
     }
 
 
