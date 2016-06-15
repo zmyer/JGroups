@@ -1481,25 +1481,22 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
 
             if(oob_batch != null && !oob_batch.isEmpty()) {
                 num_oob_msgs_received+=oob_batch.size();
-                oob_thread_pool.execute(new BatchHandler(oob_batch));
+                submitToThreadPool(oob_thread_pool, new BatchHandler(oob_batch));
             }
             if(batch != null) {
                 num_incoming_msgs_received+=batch.size();
-                thread_pool.execute(new BatchHandler(batch));
+                submitToThreadPool(thread_pool, new BatchHandler(batch));
             }
             if(internal_batch_oob != null && !internal_batch_oob.isEmpty()) {
                 num_oob_msgs_received+=internal_batch_oob.size();
                 Executor pool=internal_thread_pool != null? internal_thread_pool : oob_thread_pool;
-                pool.execute(new BatchHandler(internal_batch_oob));
+                submitToThreadPool(pool, new BatchHandler(internal_batch_oob));
             }
             if(internal_batch != null) {
                 num_internal_msgs_received+=internal_batch.size();
                 Executor pool=internal_thread_pool != null? internal_thread_pool : oob_thread_pool;
-                pool.execute(new BatchHandler(internal_batch));
+                submitToThreadPool(pool, new BatchHandler(internal_batch));
             }
-        }
-        catch(RejectedExecutionException rejected) {
-            num_rejected_msgs++;
         }
         catch(Throwable t) {
             log.error(Util.getMessage("IncomingMsgFailure"), local_addr, t);
@@ -1535,10 +1532,7 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
                 num_incoming_msgs_received++;
 
             Executor pool=pickThreadPool(oob, internal);
-            pool.execute(new SingleMessageHandler(msg));
-        }
-        catch(RejectedExecutionException ex) {
-            num_rejected_msgs++;
+            submitToThreadPool(pool, new SingleMessageHandler(msg));
         }
         catch(Throwable t) {
             log.error(Util.getMessage("IncomingMsgFailure"), local_addr, t);
@@ -1552,28 +1546,28 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
         for(MessageBatch oob_batch: oob_batches) {
             if(oob_batch == null)
                 continue;
-
             for(Message msg: oob_batch) {
                 if(msg.isFlagSet(Message.Flag.DONT_BUNDLE) && msg.isFlagSet(Message.Flag.OOB)) {
                     boolean oob=msg.isFlagSet(Message.Flag.OOB), internal=msg.isFlagSet(Message.Flag.INTERNAL);
                     msg.putHeader(id, new TpHeader(oob_batch.clusterName()));
                     Executor pool=pickThreadPool(oob, internal);
-                    try {
-                        oob_batch.remove(msg);
-                        pool.execute(new SingleMessageHandler(msg));
-                        num_oob_msgs_received++;
-                    }
-                    catch(RejectedExecutionException ex) {
-                        num_rejected_msgs++;
-                        if (log.isDebugEnabled())
-                            log.debug("%s: failed submitting DONT_BUNDLE message to thread pool: %s. Msg: %s",
-                                      local_addr, ex, msg.printHeaders());
-                    }
-                    catch(Throwable t) {
-                        log.error(Util.getMessage("IncomingMsgFailure"), local_addr, t);
-                    }
+                    oob_batch.remove(msg);
+                    num_oob_msgs_received++;
+                    submitToThreadPool(pool, new SingleMessageHandler(msg));
                 }
             }
+        }
+    }
+
+    protected void submitToThreadPool(Executor thread_pool, Runnable task) {
+        try {
+            thread_pool.execute(task);
+        }
+        catch(RejectedExecutionException ex) {
+            num_rejected_msgs++;
+        }
+        catch(Throwable t) {
+            log.error(Util.getMessage("IncomingMsgFailure"), local_addr, t);
         }
     }
 
