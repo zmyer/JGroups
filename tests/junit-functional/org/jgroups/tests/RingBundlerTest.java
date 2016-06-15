@@ -13,8 +13,11 @@ import org.testng.annotations.Test;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.locks.LockSupport;
+import java.util.stream.Stream;
 
 /**
  * @author Bela Ban
@@ -42,6 +45,8 @@ public class RingBundlerTest {
         assert rb.readIndex() == 6;
         assert rb.writeIndex() == 6;
         assert rb.count() == 0;
+        assert transport.map.get(null) == 1;
+        transport.map.clear();
 
         for(Message msg: create(10000, null, a,a,a,b,c,d,d,a, null, null, a))
             bundler.send(msg);
@@ -57,6 +62,7 @@ public class RingBundlerTest {
         assert rb.readIndex() == 2;
         assert rb.writeIndex() == 2;
         assert rb.count() == 0;
+        Stream.of(null, a,b,c,d).forEach(a -> {assert transport.map.get(a) == 1;});
     }
 
     public void testFullBufferAndRead() throws Exception {
@@ -117,6 +123,7 @@ public class RingBundlerTest {
 
 
     protected static class MockTransport extends TP {
+        protected final Map<Address,Integer> map=new HashMap<>();
 
         public MockTransport() {
             this.cluster_name=new AsciiString("mock");
@@ -127,12 +134,13 @@ public class RingBundlerTest {
             return false;
         }
 
-        public void doSend(byte[] buf, int offset, int length, Address dest) throws Exception {
-
-        }
 
         public void sendMulticast(byte[] data, int offset, int length) throws Exception {
+            incrCount(null);
+        }
 
+        protected void sendToSingleMember(Address dest, byte[] buf, int offset, int length) throws Exception {
+            incrCount(dest);
         }
 
         public void sendUnicast(PhysicalAddress dest, byte[] data, int offset, int length) throws Exception {
@@ -145,6 +153,14 @@ public class RingBundlerTest {
 
         protected PhysicalAddress getPhysicalAddress() {
             return null;
+        }
+
+        protected void incrCount(Address dest) {
+            Integer count=map.get(dest);
+            if(count == null)
+                map.put(dest, 1);
+            else
+                map.put(dest, count+1);
         }
     }
 }
