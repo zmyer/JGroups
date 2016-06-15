@@ -308,7 +308,7 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
     }
 
     @ManagedAttribute(description="Sets the wait strategy in the RingBufferBundler. Allowed values are \"spin\", " +
-      "\"yield\", \"park\", \"spin_park\" and \"spin_yield\" or a fully qualified classname")
+      "\"yield\", \"park\", \"spin-park\" and \"spin-yield\" or a fully qualified classname")
     public void bundlerWaitStrategy(String strategy) {
         if(bundler instanceof RingBufferBundler) {
             ((RingBufferBundler)bundler).waitStrategy(strategy);
