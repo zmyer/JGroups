@@ -107,7 +107,7 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
 
     protected void readMessages() throws InterruptedException {
         int available_msgs=rb.waitForMessages(num_spins, wait_strategy);
-        int read_index=rb.readIndex();
+        int read_index=rb.readIndexLockless();
         Message[] buf=rb.buf();
         sendBundledMessages(buf, read_index, available_msgs);
         rb.publishReadIndex(available_msgs);
