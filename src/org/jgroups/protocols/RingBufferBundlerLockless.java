@@ -12,6 +12,7 @@ import org.jgroups.Message;
 import org.jgroups.util.Util;
 
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
@@ -19,17 +20,20 @@ import java.util.function.BiConsumer;
 
 /**
  * This bundler adds all (unicast or multicast) messages to a ring buffer until max size has been exceeded, but does
- * send messages immediately when no other messages are available. https://issues.jboss.org/browse/JGRP-1540
+ * send messages immediately when no other messages are available. If no space is available, a message by a sender
+ * thread is simply dropped, as it will get retransmitted anyway. This makes this implementation completely non-blocking.
+ * https://issues.jboss.org/browse/JGRP-1540
  */
 public class RingBufferBundlerLockless extends BaseBundler implements Runnable {
     protected Message[]                   buf;
     protected int                         read_index;
-    protected final AtomicInteger         write_index=new AtomicInteger(0);
+    protected volatile int                write_index=0;
     protected final AtomicInteger         tmp_write_index=new AtomicInteger(0);
     protected final AtomicInteger         write_permits; // number of permits to write tmp_write_index
     protected final AtomicInteger         size=new AtomicInteger(0); // number of messages to be read: read_index + count == write_index
     protected final AtomicInteger         num_threads=new AtomicInteger(0); // number of threads currently in send()
     protected final AtomicLong            accumulated_bytes=new AtomicLong(0); // total number of bytes of unread msgs
+    protected final AtomicBoolean         unparking=new AtomicBoolean(false);
 
     protected volatile Thread             bundler_thread;
     protected volatile boolean            running=true;
@@ -63,7 +67,7 @@ public class RingBufferBundlerLockless extends BaseBundler implements Runnable {
     }
 
     public int                       readIndex()             {return read_index;}
-    public int                       writeIndex()            {return write_index.get();}
+    public int                       writeIndex()            {return write_index;}
     public Thread                    getThread()             {return bundler_thread;}
     public int                       getBufferSize()         {return size.get();}
     public int                       numSpins()              {return num_spins;}
@@ -80,6 +84,7 @@ public class RingBufferBundlerLockless extends BaseBundler implements Runnable {
         if(running)
             stop();
         bundler_thread=transport.getThreadFactory().newThread(this, THREAD_NAME);
+        // bundler_thread.setPriority(Thread.MAX_PRIORITY);
         running=true;
         bundler_thread.start();
     }
@@ -123,19 +128,22 @@ public class RingBufferBundlerLockless extends BaseBundler implements Runnable {
           ||  no_other_threads;
 
 
-        if(unpark) { // only few threads should do this
+        // only 2 threads at a time should do this (1st cond and 2nd cond), so we have to reduce this to
+        // 1 thread as advanceWriteIndex() is not thread safe
+        if(unpark && unparking.compareAndSet(false, true)) {
 
             int num_advanced=advanceWriteIndex();
             size.addAndGet(num_advanced);
 
-           // System.out.printf("** [%d] acc_bytes=%d, no_other_threads=%b, advanced write-index by %d, bundler=%s\n",
-             //                 Thread.currentThread().getId(), acc_bytes, no_other_threads, num_advanced, toString());
+            // System.out.printf("** [%d] acc_bytes=%d, no_other_threads=%b, advanced write-index by %d, bundler=%s\n",
+            //                 Thread.currentThread().getId(), acc_bytes, no_other_threads, num_advanced, toString());
 
             //System.out.printf("[%d] advanced write index by %d messages to %d: tmp_index: %d\n",
             //                Thread.currentThread().getId(), num_advanced, write_index.get(), tmp_write_index.get());
 
             if(num_advanced > 0)
                 LockSupport.unpark(bundler_thread);
+            unparking.set(false);
         }
     }
 
@@ -176,19 +184,16 @@ public class RingBufferBundlerLockless extends BaseBundler implements Runnable {
 
     // Advance write_index up to tmp_write_index as long as no null msg is found
     protected int advanceWriteIndex() {
-        int num=0, start=write_index.get();
-
+        int num=0, start=write_index;
         for(;;) {
             if(buf[start] == null)
                 break;
-            int next_index=index(start+1);
-            if(!write_index.compareAndSet(start, next_index))
-                break;
             num++;
-            start=next_index;
+            start=index(start+1);
             if(start == tmp_write_index.get())
                 break;
         }
+        write_index=start;
         return num;
     }
 
@@ -250,7 +255,7 @@ public class RingBufferBundlerLockless extends BaseBundler implements Runnable {
     }
 
     public String toString() {
-        return String.format("read-index=%d write-index=%d size=%d cap=%d\n", read_index, write_index.get(), size.get(), buf.length);
+        return String.format("read-index=%d write-index=%d size=%d cap=%d\n", read_index, write_index, size.get(), buf.length);
     }
 
     public int _readMessages() throws InterruptedException {
@@ -303,7 +308,7 @@ public class RingBufferBundlerLockless extends BaseBundler implements Runnable {
         }
         if(clear_queue) {
             read_index=0;
-            write_index.set(0);
+            write_index=0;
             tmp_write_index.set(0);
             size.set(0);
         }
