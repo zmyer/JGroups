@@ -13,6 +13,7 @@ import org.jgroups.util.Util;
 
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.BiConsumer;
@@ -26,7 +27,7 @@ import java.util.function.BiConsumer;
 public class RingBufferBundlerLockless2 extends BaseBundler implements Runnable {
     protected Message[]                   buf;
     protected volatile int                read_index;
-    protected final AtomicInteger         write_index=new AtomicInteger(1);
+    protected volatile int                write_index=1;
     protected final AtomicLong            accumulated_bytes=new AtomicLong(0);
     protected final AtomicInteger         num_threads=new AtomicInteger(0);
 
@@ -35,7 +36,7 @@ public class RingBufferBundlerLockless2 extends BaseBundler implements Runnable 
     protected int                         num_spins=40; // number of times we call Thread.yield before acquiring the lock (0 disables)
     protected static final String         THREAD_NAME="RingBufferBundlerLockless2";
     protected BiConsumer<Integer,Integer> wait_strategy=SPIN_PARK;
-
+    protected static final AtomicIntegerFieldUpdater write_updater;
     protected static final Message        NULL_MSG=new Message(false);
     protected static final BiConsumer<Integer,Integer> SPIN=(it,spins) -> {;};
     protected static final BiConsumer<Integer,Integer> YIELD=(it,spins) -> Thread.yield();
@@ -51,6 +52,11 @@ public class RingBufferBundlerLockless2 extends BaseBundler implements Runnable 
         Thread.yield(); //, then switch to yield()
     };
 
+    static {
+        //noinspection AtomicFieldUpdaterIssues
+        write_updater=AtomicIntegerFieldUpdater.newUpdater(RingBufferBundlerLockless2.class, "write_index");
+    }
+
 
     public RingBufferBundlerLockless2() {
         this(1024);
@@ -62,8 +68,8 @@ public class RingBufferBundlerLockless2 extends BaseBundler implements Runnable 
     }
 
     public int                        readIndex()             {return read_index;}
-    public int                        writeIndex()            {return write_index.get();}
-    public RingBufferBundlerLockless2 reset()                 {read_index=0; write_index.set(1); return this;}
+    public int                        writeIndex()            {return write_index;}
+    public RingBufferBundlerLockless2 reset()                 {read_index=0; write_index=1; return this;}
     public Thread                     getThread()             {return bundler_thread;}
     public int                        numSpins()              {return num_spins;}
     public RingBufferBundlerLockless2 numSpins(int n)         {num_spins=n; return this;}
@@ -71,7 +77,7 @@ public class RingBufferBundlerLockless2 extends BaseBundler implements Runnable 
     public RingBufferBundlerLockless2 waitStrategy(String st) {wait_strategy=createWaitStrategy(st, YIELD); return this;}
 
     public int getBufferSize() {
-        int ri=read_index, wi=write_index.get();
+        int ri=read_index, wi=write_index;
         return ri < wi? wi-ri-1 : buf.length - ri -1 +wi;
     }
 
@@ -102,10 +108,10 @@ public class RingBufferBundlerLockless2 extends BaseBundler implements Runnable 
 
         num_threads.incrementAndGet();
 
-       int tmp_write_index=getWriteIndex();
+       int tmp_write_index=getWriteIndex(read_index);
         // System.out.printf("[%d] tmp_write_index=%d\n", Thread.currentThread().getId(), tmp_write_index);
         if(tmp_write_index == -1) {
-            System.err.printf("buf is full: read_index=%d, write_index=%d\n", read_index, write_index.get()); //todo: change to log stmt
+            System.err.printf("buf is full: read_index=%d, write_index=%d\n", read_index, write_index); //todo: change to log stmt
             num_threads.decrementAndGet();
             return;
         }
@@ -142,23 +148,22 @@ public class RingBufferBundlerLockless2 extends BaseBundler implements Runnable 
         }
     }
 
-    protected int getWriteIndex() {
+    protected int getWriteIndex(int ri) {
         for(;;) {
-            int wi=write_index.get();
+            int wi=write_index;
             int next_wi=index(wi+1);
-            if(next_wi == read_index)
+            if(next_wi == ri)
                 return -1;
-            if(write_index.compareAndSet(wi, next_wi))
+            if(write_updater.compareAndSet(this, wi, next_wi))
                 return wi;
         }
     }
 
 
 
-
     public int _readMessages() throws InterruptedException {
         int ri=read_index;
-        int wi=write_index.get();
+        int wi=write_index;
 
         if(index(ri+1) == wi)
             return 0;
@@ -220,7 +225,7 @@ public class RingBufferBundlerLockless2 extends BaseBundler implements Runnable 
 
     public String toString() {
         return String.format("read-index=%d write-index=%d size=%d cap=%d\n",
-                             read_index, write_index.get(), getBufferSize(), buf.length);
+                             read_index, write_index, getBufferSize(), buf.length);
     }
 
 
