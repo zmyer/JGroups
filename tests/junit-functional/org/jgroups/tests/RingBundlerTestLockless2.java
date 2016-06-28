@@ -11,6 +11,7 @@ import org.jgroups.util.DefaultThreadFactory;
 import org.jgroups.util.Util;
 import org.testng.annotations.Test;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -85,6 +86,30 @@ public class RingBundlerTestLockless2 {
         assert bundler.writeIndex() == 3;
         assert bundler.getBufferSize() == 0;
         Stream.of(null, a, b, c, d).forEach(msg -> {assert transport.map.get(msg) == 1;});
+    }
+
+    public void testSendWithNULL_MSG() throws Exception {
+        RingBufferBundlerLockless2 bundler=new RingBufferBundlerLockless2(16);
+        RingBundlerTest.MockTransport transport=new RingBundlerTest.MockTransport();
+        bundler.init(transport);
+
+        Message[] buf=(Message[])Util.getField(Util.getField(RingBufferBundlerLockless2.class, "buf"), bundler);
+        Field write_index_field=Util.getField(RingBufferBundlerLockless2.class, "write_index");
+        write_index_field.setAccessible(true);
+        buf[1]=buf[2]=RingBufferBundlerLockless2.NULL_MSG;
+        buf[3]=null;
+        write_index_field.set(bundler, 4);
+        System.out.println("bundler = " + bundler);
+        assert bundler.getBufferSize() == 3;
+        bundler._readMessages();
+        System.out.println("bundler = " + bundler);
+        assert bundler.writeIndex() == 4;
+        assert bundler.readIndex() == 2;
+        assert bundler.getBufferSize() == 1;
+        buf[3]=new Message(null);
+        bundler._readMessages();
+        assert bundler.readIndex() == 3;
+        assert bundler.getBufferSize() == 0;
     }
 
 
