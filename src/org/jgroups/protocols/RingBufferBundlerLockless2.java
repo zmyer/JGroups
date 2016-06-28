@@ -16,7 +16,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
-import java.util.function.BiConsumer;
 
 /**
  * This bundler adds all (unicast or multicast) messages to a ring buffer until max size has been exceeded, but does
@@ -33,24 +32,13 @@ public class RingBufferBundlerLockless2 extends BaseBundler implements Runnable 
 
     protected volatile Thread             bundler_thread;
     protected volatile boolean            running=true;
-    protected int                         num_spins=40; // number of times we call Thread.yield before acquiring the lock (0 disables)
     protected static final String         THREAD_NAME="RingBufferBundlerLockless2";
-    protected BiConsumer<Integer,Integer> wait_strategy=SPIN_PARK;
     protected static final AtomicIntegerFieldUpdater write_updater;
     protected static final Message        NULL_MSG=new Message(false);
-    protected static final BiConsumer<Integer,Integer> SPIN=(it,spins) -> {;};
-    protected static final BiConsumer<Integer,Integer> YIELD=(it,spins) -> Thread.yield();
-    protected static final BiConsumer<Integer,Integer> PARK=(it,spins) -> LockSupport.parkNanos(1);
-    protected static final BiConsumer<Integer,Integer> SPIN_PARK=(it, spins) -> {
-        if(it < spins/10)
-            ; // spin for the first 10% of all iterations, then switch to park()
-        LockSupport.parkNanos(1);
-    };
-    protected static final BiConsumer<Integer,Integer> SPIN_YIELD=(it, spins) -> {
-        if(it < spins/10)
-            ;           // spin for the first 10% of the total number of iterations
-        Thread.yield(); //, then switch to yield()
-    };
+
+
+    // stats
+
 
     static {
         //noinspection AtomicFieldUpdaterIssues
@@ -71,10 +59,6 @@ public class RingBufferBundlerLockless2 extends BaseBundler implements Runnable 
     public int                        writeIndex()            {return write_index;}
     public RingBufferBundlerLockless2 reset()                 {read_index=0; write_index=1; return this;}
     public Thread                     getThread()             {return bundler_thread;}
-    public int                        numSpins()              {return num_spins;}
-    public RingBufferBundlerLockless2 numSpins(int n)         {num_spins=n; return this;}
-    public String                     waitStrategy()          {return print(wait_strategy);}
-    public RingBufferBundlerLockless2 waitStrategy(String st) {wait_strategy=createWaitStrategy(st, YIELD); return this;}
 
     public int getBufferSize() {
         int ri=read_index, wi=write_index;
@@ -262,37 +246,6 @@ public class RingBufferBundlerLockless2 extends BaseBundler implements Runnable 
             reset();
     }
 
-    protected static String print(BiConsumer<Integer,Integer> wait_strategy) {
-        if(wait_strategy      == null)            return null;
-        if(wait_strategy      == SPIN)            return "spin";
-        else if(wait_strategy == YIELD)           return "yield";
-        else if(wait_strategy == PARK)            return "park";
-        else if(wait_strategy == SPIN_PARK)       return "spin-park";
-        else if(wait_strategy == SPIN_YIELD)      return "spin-yield";
-        else return wait_strategy.getClass().getSimpleName();
-    }
-
-    protected BiConsumer<Integer,Integer> createWaitStrategy(String st, BiConsumer<Integer,Integer> default_wait_strategy) {
-        if(st == null) return default_wait_strategy != null? default_wait_strategy : null;
-        switch(st) {
-            case "spin":            return wait_strategy=SPIN;
-            case "yield":           return wait_strategy=YIELD;
-            case "park":            return wait_strategy=PARK;
-            case "spin_park":
-            case "spin-park":       return wait_strategy=SPIN_PARK;
-            case "spin_yield":
-            case "spin-yield":      return wait_strategy=SPIN_YIELD;
-            default:
-                try {
-                    Class<BiConsumer<Integer,Integer>> clazz=Util.loadClass(st, this.getClass());
-                    return clazz.newInstance();
-                }
-                catch(Throwable t) {
-                    log.error("failed creating wait_strategy " + st, t);
-                    return default_wait_strategy != null? default_wait_strategy : null;
-                }
-        }
-    }
 
     protected static int assertPositive(int value, String message) {
         if(value <= 0) throw new IllegalArgumentException(message);
