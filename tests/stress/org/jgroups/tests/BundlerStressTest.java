@@ -26,6 +26,7 @@ public class BundlerStressTest {
     protected boolean                details;
     protected static final Address[] ADDRESSES;
     protected final TP               transport=new MockTransport();
+    protected static final int       BUFSIZE=50000;
 
 
     static {
@@ -50,8 +51,9 @@ public class BundlerStressTest {
         boolean looping=true;
         while(looping) {
             int c=Util.keyPress(String.format("[1] send [2] num_msgs (%d) [3] senders (%d)\n" +
-                                                "[b] change bundler (%s) [d] details (%b) [x] exit\n",
-                                              num_msgs, num_senders, bundler.getClass().getSimpleName(), details));
+                                                "[b] change bundler (%s) [d] details (%b) [x] exit\nbundler: %s\n",
+                                              num_msgs, num_senders, bundler.getClass().getSimpleName(), details,
+                                              bundler.toString()));
             try {
                 switch(c) {
                     case '1':
@@ -130,30 +132,29 @@ public class BundlerStressTest {
                 send_avg.merge(sender.send);
         }
 
-
-
-
         double msgs_sec=num_msgs / (time_us / 1_000.0);
-
         System.out.printf(Util.bold("\n\nreqs/ms    = %.2f (time: %d us)" +
                                       "\nsend-time  = min/avg/max: %d / %.2f / %d ns\n"),
-                          msgs_sec, time_us,
-                          send_avg.min(), send_avg.average(), send_avg.max());
+                          msgs_sec, time_us, send_avg.min(), send_avg.average(), send_avg.max());
     }
 
     protected Bundler createBundler(String bundler) {
         if(bundler == null)
             throw new IllegalArgumentException("bundler type has to be non-null");
         if(bundler.equals("stq"))
-            return new SimplifiedTransferQueueBundler(20000);
+            return new SimplifiedTransferQueueBundler(BUFSIZE);
         if(bundler.equals("tq"))
-            return new TransferQueueBundler(20000);
+            return new TransferQueueBundler(BUFSIZE);
         if(bundler.startsWith("sender-sends") || bundler.equals("ss"))
             return new SenderSendsBundler();
-        if(bundler.startsWith("ring-buffer") || bundler.equals("rb"))
-                   return new RingBufferBundler(16384);
+        if(bundler.endsWith("ring-buffer") || bundler.equals("rb"))
+            return new RingBufferBundler(BUFSIZE);
+        if(bundler.equals("ring-buffer-lockless") || bundler.equals("rbl"))
+            return new RingBufferBundlerLockless(BUFSIZE);
+        if(bundler.equals("ring-buffer-lockless2") || bundler.equals("rbl2"))
+            return new RingBufferBundlerLockless2(BUFSIZE);
         if(bundler.startsWith("no-bundler") || bundler.equals("nb"))
-            return new NoBundler().poolSize(16384).initialBufSize(25);
+            return new NoBundler().poolSize(BUFSIZE).initialBufSize(25);
         try {
             Class<Bundler> clazz=Util.loadClass(bundler, getClass());
             return clazz.newInstance();
@@ -175,7 +176,7 @@ public class BundlerStressTest {
     }
 
     public static void main(String[] args) {
-        String bundler="no-bundler";
+        String bundler="ring-buffer-lockless2";
         for(int i=0; i < args.length; i++) {
             if(args[i].equals("-bundler")) {
                 bundler=args[++i];

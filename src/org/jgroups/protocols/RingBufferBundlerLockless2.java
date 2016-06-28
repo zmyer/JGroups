@@ -103,35 +103,31 @@ public class RingBufferBundlerLockless2 extends BaseBundler implements Runnable 
     }
 
     public void send(Message msg) throws Exception {
+        if(msg == null)
+            throw new IllegalArgumentException("message must not be null");
         if(!running)
             return;
 
         num_threads.incrementAndGet();
 
-       int tmp_write_index=getWriteIndex(read_index);
+        int tmp_write_index=getWriteIndex(read_index);
         // System.out.printf("[%d] tmp_write_index=%d\n", Thread.currentThread().getId(), tmp_write_index);
         if(tmp_write_index == -1) {
-            System.err.printf("buf is full: read_index=%d, write_index=%d\n", read_index, write_index); //todo: change to log stmt
-            num_threads.decrementAndGet();
+            System.err.printf("buf is full: %s\n", toString()); //todo: change to log stmt
+            unparkIfNeeded(0);
             return;
         }
 
         buf[tmp_write_index]=msg;
-        // System.out.printf("[%d] wrote index[%d]\n", Thread.currentThread().getId(), tmp_write_index);
-        long acc_bytes=accumulated_bytes.addAndGet(msg.size());
+        unparkIfNeeded(msg.size());
+    }
 
-        //System.out.printf("[%d] acc_bytes=%d, num_threads=%d\n",
-          //                Thread.currentThread().getId(), accumulated_bytes.get(), num_threads.get());
-
-        int current_threads=num_threads.decrementAndGet();
-        //System.out.printf("[%d] acc_bytes=%d, current_threads=%d\n",
-          //                Thread.currentThread().getId(), accumulated_bytes.get(), current_threads);
-
-        boolean no_other_threads=current_threads == 0;
+    protected void unparkIfNeeded(long size) {
+        long acc_bytes=size > 0? accumulated_bytes.addAndGet(size) : accumulated_bytes.get();
+        boolean no_other_threads=num_threads.decrementAndGet() == 0;
 
         boolean unpark=(acc_bytes >= transport.getMaxBundleSize() && accumulated_bytes.compareAndSet(acc_bytes, 0))
           ||  no_other_threads;
-
 
         // only 2 threads at a time should do this in parallel (1st cond and 2nd cond)
         if(unpark)
@@ -148,11 +144,11 @@ public class RingBufferBundlerLockless2 extends BaseBundler implements Runnable 
         }
     }
 
-    protected int getWriteIndex(int ri) {
+    protected int getWriteIndex(int current_read_index) {
         for(;;) {
             int wi=write_index;
             int next_wi=index(wi+1);
-            if(next_wi == ri)
+            if(next_wi == current_read_index)
                 return -1;
             if(write_updater.compareAndSet(this, wi, next_wi))
                 return wi;
@@ -236,7 +232,7 @@ public class RingBufferBundlerLockless2 extends BaseBundler implements Runnable 
         int num_msgs=0, bytes=0;
         for(int i=start_index; i != end_index; i=increment(i)) {
             Message msg=buf[i];
-            if(msg != null && Objects.equals(dest, msg.dest())) {
+            if(msg != null && msg != NULL_MSG && Objects.equals(dest, msg.dest())) {
                 long msg_size=msg.size();
                 if(bytes + msg_size > max_bundle_size)
                     break;

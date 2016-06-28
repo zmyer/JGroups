@@ -106,7 +106,7 @@ public class RingBufferBundlerLockless extends BaseBundler implements Runnable {
         int tmp_index=getTmpIndex(); // decrements write_permits
         // System.out.printf("[%d] tmp_index=%d\n", Thread.currentThread().getId(), tmp_index);
         if(tmp_index == -1) { //todo: spin then block on not_full condition
-            System.err.printf("buf is full (num_permits: %d)\n", write_permits.get()); //todo: change to log stmt
+            System.err.printf("buf is full (num_permits: %d, bundler: %s)\n", write_permits.get(), toString()); //todo: change to log stmt
             // LockSupport.unpark(bundler_thread);
             num_threads.decrementAndGet();
             return;
@@ -255,7 +255,7 @@ public class RingBufferBundlerLockless extends BaseBundler implements Runnable {
     }
 
     public String toString() {
-        return String.format("read-index=%d write-index=%d size=%d cap=%d\n", read_index, write_index, size.get(), buf.length);
+        return String.format("read-index=%d write-index=%d size=%d cap=%d", read_index, write_index, size.get(), buf.length);
     }
 
     public int _readMessages() throws InterruptedException {
