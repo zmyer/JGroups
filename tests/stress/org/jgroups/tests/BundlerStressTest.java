@@ -22,7 +22,7 @@ import static org.jgroups.tests.FragTest2.type;
 public class BundlerStressTest {
     protected String                 bundler_type;
     protected Bundler                bundler;
-    protected int                    num_msgs=50000, num_senders=20;
+    protected int                    num_msgs=50000, num_senders=20, msg_size=1000;
     protected boolean                details;
     protected static final Address[] ADDRESSES;
     protected final TP               transport=new MockTransport();
@@ -50,10 +50,10 @@ public class BundlerStressTest {
     protected void loop() {
         boolean looping=true;
         while(looping) {
-            int c=Util.keyPress(String.format("[1] send [2] num_msgs (%d) [3] senders (%d)\n" +
+            int c=Util.keyPress(String.format("[1] send [2] num_msgs (%d) [3] senders (%d) [4] msg size (%d bytes)\n" +
                                                 "[b] change bundler (%s) [d] details (%b) [x] exit\nbundler: %s\n",
-                                              num_msgs, num_senders, bundler.getClass().getSimpleName(), details,
-                                              bundler.toString()));
+                                              num_msgs, num_senders, msg_size, bundler.getClass().getSimpleName(),
+                                              details, bundler.toString()));
             try {
                 switch(c) {
                     case '1':
@@ -64,6 +64,9 @@ public class BundlerStressTest {
                         break;
                     case '3':
                         num_senders=Util.readIntFromStdin("num_senders: ");
+                        break;
+                    case '4':
+                        msg_size=Util.readIntFromStdin("msg_size: ");
                         break;
                     case 'b':
                         try {
@@ -164,10 +167,10 @@ public class BundlerStressTest {
         }
     }
 
-    protected static Message[] generateMessages(int num) {
+    protected Message[] generateMessages(int num) {
         Message[] msgs=new Message[num];
         for(int i=0; i < msgs.length; i++)
-            msgs[i]=new Message(pickAddress());
+            msgs[i]=new Message(pickAddress(), new byte[msg_size]);
         return msgs;
     }
 
