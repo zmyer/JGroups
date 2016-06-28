@@ -6,9 +6,7 @@ import org.jgroups.logging.LogFactory;
 import org.jgroups.protocols.TP;
 import org.jgroups.tests.rt.RtReceiver;
 import org.jgroups.tests.rt.RtTransport;
-import org.jgroups.util.DirectExecutor;
 import org.jgroups.util.MessageBatch;
-import org.jgroups.util.Profiler;
 import org.jgroups.util.Util;
 
 import java.util.List;
