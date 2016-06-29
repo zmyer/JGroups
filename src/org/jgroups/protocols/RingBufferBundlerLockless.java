@@ -80,7 +80,7 @@ public class RingBufferBundlerLockless extends BaseBundler {
             throw new IllegalArgumentException("message must not be null");
         num_threads.incrementAndGet();
 
-        int tmp_index=getTmpIndex(); // decrements write_permits
+        int tmp_index=getWriteIndex(); // decrements write_permits
         // System.out.printf("[%d] tmp_index=%d\n", Thread.currentThread().getId(), tmp_index);
         if(tmp_index == -1) {
             log.warn("buf is full (num_permits: %d, bundler: %s)\n", write_permits.get(), toString());
@@ -113,27 +113,23 @@ public class RingBufferBundlerLockless extends BaseBundler {
 
 
 
-    protected int getTmpIndex() {
+    protected int getWriteIndex() {
         int permit=getPermitToWrite();
         if(permit < 0)
             return -1;
 
         // here we're guaranteed to have space available for writing, we now need to find the right one
-        for(;;) {
-            int curr_tmp=tmp_write_index.get();
-            int next_index=index(curr_tmp +1);
-            if(tmp_write_index.compareAndSet(curr_tmp, next_index))
-                return curr_tmp;
-        }
+        int next=tmp_write_index.getAndIncrement();
+        int next_index=index(next);
+        tmp_write_index.compareAndSet(next, next_index);
+        return next_index;
     }
 
     protected int getPermitToWrite() {
-        for(;;) {
-            int available=write_permits.get();
-            int remaining=available-1;
-            if(remaining < 0 || write_permits.compareAndSet(available, remaining))
-                return remaining;
-        }
+        int remaining=write_permits.decrementAndGet();
+        if(remaining < 0)
+            write_permits.incrementAndGet();
+        return remaining;
     }
 
 
