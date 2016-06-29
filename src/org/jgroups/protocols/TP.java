@@ -1335,7 +1335,7 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
         if(type.equals("ring-buffer") || type.equals("rb"))
             return new RingBufferBundler(bundler_capacity).numSpins(bundler_num_spins).waitStrategy(bundler_wait_strategy);
         if(type.equals("ring-buffer-lockless") || type.equals("rbl"))
-            return new RingBufferBundlerLockless(bundler_capacity).numSpins(bundler_num_spins).waitStrategy(bundler_wait_strategy);
+            return new RingBufferBundlerLockless(bundler_capacity);
         if(type.equals("ring-buffer-lockless2") || type.equals("rbl2"))
             return new RingBufferBundlerLockless2(bundler_capacity);
         if(type.startsWith("no-bundler") || type.equals("nb"))
