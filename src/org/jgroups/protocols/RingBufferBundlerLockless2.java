@@ -9,12 +9,13 @@ package org.jgroups.protocols;
 import org.jgroups.Address;
 import org.jgroups.Global;
 import org.jgroups.Message;
-import org.jgroups.util.AverageMinMax;
+import org.jgroups.util.Runner;
 import org.jgroups.util.Util;
 
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 
@@ -25,26 +26,29 @@ import java.util.concurrent.locks.LockSupport;
  * https://issues.jboss.org/browse/JGRP-1540
  */
 public class RingBufferBundlerLockless2 extends BaseBundler {
-    protected Message[]                   buf;
-    protected final AtomicInteger         read_index=new AtomicInteger(0);
-    protected final AtomicInteger         write_index=new AtomicInteger(1);
-    protected final AtomicLong            accumulated_bytes=new AtomicLong(0);
-    protected final AtomicInteger         num_threads=new AtomicInteger(0);
+    protected Message[]                              buf;
+    protected volatile int                           read_index=0; // shared by reader and writers (reader only writes it)
+    protected int                                    ri=0; // only used by reader
+    //protected int i1,i2,i3,i4; // 16 bytes
+    //protected int i5,i6,i7,i8; // 16 bytes
+    //protected int i9,i10,i11,i12;
+    //protected int i13,i14,i15,i16;
+    //protected int i17,i18,i19,i20;
+    protected volatile int                           write_index=1;
+    protected final AtomicLong                       accumulated_bytes=new AtomicLong(0);
+    protected final AtomicInteger                    num_threads=new AtomicInteger(0);
+    protected final AtomicBoolean                    unparking=new AtomicBoolean(false);
+    protected Runner                                 bundler_thread;
+    protected final Runnable                         run_function=this::readMessages;
+    protected static final String                    THREAD_NAME=RingBufferBundlerLockless2.class.getSimpleName();
+    public static final Message                      NULL_MSG=new Message(false); // public for unit test
+    protected static final AtomicIntegerFieldUpdater write_updater;
 
-    protected static final String         THREAD_NAME=RingBufferBundlerLockless2.class.getSimpleName();
-    //protected static final AtomicIntegerFieldUpdater write_updater;
-    public static final Message           NULL_MSG=new Message(false);
-    protected final AtomicBoolean         unparking=new AtomicBoolean(false);
-    protected final BundlerThread         bundler_thread=new BundlerThread();
 
-    // stats
-    protected final AverageMinMax         num_tries_to_get_write_index=new AverageMinMax();
-    protected final AtomicInteger         no_write_index=new AtomicInteger(0);
-    protected final AtomicInteger         num_unparks=new AtomicInteger(0);
-    protected final AtomicInteger         num_reads=new AtomicInteger(0);
-    protected final AtomicInteger         num_unparks_by_size=new AtomicInteger(0);
-    protected final AtomicInteger         num_unparks_by_threads=new AtomicInteger(0);
-
+    static {
+        //noinspection AtomicFieldUpdaterIssues
+        write_updater=AtomicIntegerFieldUpdater.newUpdater(RingBufferBundlerLockless2.class, "write_index");
+    }
 
 
     public RingBufferBundlerLockless2() {
@@ -54,20 +58,14 @@ public class RingBufferBundlerLockless2 extends BaseBundler {
 
     public RingBufferBundlerLockless2(int capacity) {
         buf=new Message[Util.getNextHigherPowerOfTwo(capacity)]; // for efficient % (mod) op
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.printf("num_tries_to_get_write_index: %s, no_write_index=%d, num_unparks=%d, num_reads=%d\n" +
-                                "num_unparks_size=%d, num_unparks_threads=%d\n",
-                              num_tries_to_get_write_index, no_write_index.get(), num_unparks.get(), num_reads.get(),
-                              num_unparks_by_size.get(), num_unparks_by_threads.get());
-        }));
     }
 
-    public int                        readIndex()             {return read_index.get();}
-    public int                        writeIndex()            {return write_index.get();}
-    public RingBufferBundlerLockless2 reset()                 {read_index.set(0); write_index.set(1); return this;}
+    public int                        readIndex()             {return read_index;}
+    public int                        writeIndex()            {return write_index;}
+    public RingBufferBundlerLockless2 reset()                 {ri=read_index=0; write_index=1; return this;}
 
     public int getBufferSize() {
-        return _size(read_index.get(), write_index.get());
+        return _size(read_index, write_index);
     }
 
     protected int _size(int ri, int wi) {
@@ -76,19 +74,17 @@ public class RingBufferBundlerLockless2 extends BaseBundler {
 
     public void init(TP transport) {
         super.init(transport);
+        bundler_thread=new Runner(transport.getThreadFactory(), THREAD_NAME, run_function, this::reset);
     }
 
-    public synchronized void start() {
+    public void start() {
         bundler_thread.start();
     }
 
-    public synchronized void stop() {
+    public void stop() {
         bundler_thread.stop();
     }
 
-    public synchronized void stopAndFlush() {
-        bundler_thread.stop(false);
-    }
 
     public void send(Message msg) throws Exception {
         if(msg == null)
@@ -96,15 +92,13 @@ public class RingBufferBundlerLockless2 extends BaseBundler {
 
         num_threads.incrementAndGet();
 
-        int tmp_write_index=getWriteIndex(read_index.get());
+        int tmp_write_index=getWriteIndex(read_index);
         // System.out.printf("[%d] tmp_write_index=%d\n", Thread.currentThread().getId(), tmp_write_index);
         if(tmp_write_index == -1) {
-            System.err.printf("buf is full: %s\n", toString()); //todo: change to log stmt
-            no_write_index.incrementAndGet();
+            log.warn("buf is full: %s\n", toString());
             unparkIfNeeded(0);
             return;
         }
-
         buf[tmp_write_index]=msg;
         unparkIfNeeded(msg.size());
     }
@@ -118,90 +112,54 @@ public class RingBufferBundlerLockless2 extends BaseBundler {
 
         // only 2 threads at a time should do this in parallel (1st cond and 2nd cond)
         if(unpark && unparking.compareAndSet(false, true)) {
-            bundler_thread.unpark();
-
-            num_unparks.incrementAndGet();
-            if(size_exceeded) {
-                num_unparks_by_size.incrementAndGet();
-                // System.out.printf("** unparked because acc_bytes is %d (size=%d)\n", acc_bytes, size);
-            }
-            if(no_other_threads) {
-                num_unparks_by_threads.incrementAndGet();
-                // System.out.printf("** unparked because num_threads=0\n");
-            }
+            Thread thread=bundler_thread.getThread();
+            if(thread != null)
+                LockSupport.unpark(thread);
             unparking.set(false);
         }
     }
 
 
     protected int getWriteIndex(int current_read_index) {
-        int num_tries=0;
+        for(;;) {
+            int wi=write_index;
+            int next_wi=index(wi + 1);
+            if(next_wi == current_read_index)
+                return -1;
+            // if(write_index.compareAndSet(wi, next_wi))
+            if(write_updater.compareAndSet(this, wi, next_wi))
+                return wi;
+        }
+    }
+
+    protected int getWriteIndexWithLock(int current_read_index) {
+        lock.lock();
         try {
-            for(;;) {
-                int wi=write_index.get();
-                int next_wi=index(wi + 1);
-                if(next_wi == current_read_index)
-                    return -1;
-                if(write_index.compareAndSet(wi, next_wi)) {
-                    num_tries++;
-                    return wi;
-                }
-            }
+            int wi=write_index;
+            int next_wi=index(wi + 1);
+            if(next_wi == current_read_index)
+                return -1;
+            write_index=next_wi;
+            return wi;
         }
         finally {
-            if(num_tries > 0)
-                num_tries_to_get_write_index.add(num_tries);
+            lock.unlock();
         }
     }
 
 
-
-    public int _readMessages() throws InterruptedException {
-        num_reads.incrementAndGet();
-
-        int ri=read_index.get();
-        int wi=write_index.get();
-
-        // System.out.printf("** _read(): ri=%d, wi=%d\n", ri, wi);
-
+    public int _readMessages() {
+        int wi=write_index;
         if(index(ri+1) == wi)
             return 0;
-
         int sent_msgs=sendBundledMessages(buf, ri, wi);
-
-        // read_index=index(ri + sent_msgs); // publish read_index to main memory
-        advanceReadIndex(ri, wi); // publish read_index into main memory
-        // System.out.printf("** advancing read_index from %d to %d (write_index=%d)\n", read_index, tmp, write_index);
-
+        advanceReadIndex(wi); // publish read_index into main memory
         return sent_msgs;
     }
 
 
-    public int _readMessagesNew() throws InterruptedException {
-        int sent_msgs=0;
 
-        for(;;) {
-            num_reads.incrementAndGet();
-
-            int ri=read_index.get();
-            int wi=write_index.get();
-
-            // System.out.printf("** _read(): ri=%d, wi=%d\n", ri, wi);
-
-            if(index(ri+1) == wi)
-                break;
-
-            sent_msgs+=sendBundledMessages(buf, ri, wi);
-
-            // read_index=index(ri + sent_msgs); // publish read_index to main memory
-            if(!advanceReadIndex(ri, wi)) // publish read_index into main memory
-                break;
-        }
-
-        return sent_msgs;
-    }
-
-    protected boolean advanceReadIndex(int ri, final int wi) {
+    protected boolean advanceReadIndex(final int wi) {
         boolean advanced=false;
         for(int i=increment(ri); i != wi; i=increment(i)) {
             if(buf[i] != NULL_MSG)
@@ -211,11 +169,11 @@ public class RingBufferBundlerLockless2 extends BaseBundler {
             advanced=true;
         }
         if(advanced)
-            read_index.set(ri);
+            read_index=ri; // publish the internal ri to read_index so writers get the update
         return advanced;
     }
 
-    protected void readMessages() throws InterruptedException {
+    protected void readMessages() {
         _readMessages();
         LockSupport.park();
     }
@@ -259,8 +217,8 @@ public class RingBufferBundlerLockless2 extends BaseBundler {
     }
 
     public String toString() {
-        return String.format("read-index=%d write-index=%d size=%d cap=%d\n",
-                             read_index.get(), write_index.get(), getBufferSize(), buf.length);
+        int tmp_ri=read_index, tmp_wi=write_index, size=_size(tmp_ri, tmp_wi);
+        return String.format("read-index=%d write-index=%d size=%d cap=%d\n", tmp_ri, tmp_wi, size, buf.length);
     }
 
 
@@ -293,55 +251,4 @@ public class RingBufferBundlerLockless2 extends BaseBundler {
         return value;
     }
 
-    protected class BundlerThread implements Runnable {
-        protected volatile boolean running=true;
-        protected Thread           runner;
-
-
-        protected synchronized void start() {
-            stop();
-            running=true;
-            runner=transport.getThreadFactory().newThread(this, THREAD_NAME);
-            running=true;
-            runner.start();
-        }
-
-        protected synchronized void stop() {
-            stop(true);
-        }
-
-        protected synchronized void stop(boolean clear_queue) {
-            running=false;
-            _stop(clear_queue);
-        }
-
-        protected void _stop(boolean clear_queue) {
-            running=false;
-            Thread tmp=runner;
-            runner=null;
-            if(tmp != null) {
-                tmp.interrupt();
-                if(tmp.isAlive()) {
-                    try {tmp.join(500);} catch(InterruptedException e) {}
-                }
-            }
-            if(clear_queue)
-                reset();
-        }
-
-        public void run() {
-            while(running) {
-                try {
-                    readMessages();
-                }
-                catch(Throwable t) {
-                }
-            }
-        }
-
-        protected void unpark() {
-            LockSupport.unpark(runner);
-        }
-
-    }
 }

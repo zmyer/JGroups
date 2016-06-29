@@ -10,6 +10,7 @@ import org.jgroups.Address;
 import org.jgroups.Global;
 import org.jgroups.Message;
 import org.jgroups.util.RingBuffer;
+import org.jgroups.util.Runner;
 import org.jgroups.util.Util;
 
 import java.util.Objects;
@@ -20,14 +21,14 @@ import java.util.function.BiConsumer;
  * This bundler adds all (unicast or multicast) messages to a queue until max size has been exceeded, but does send
  * messages immediately when no other messages are available. https://issues.jboss.org/browse/JGRP-1540
  */
-public class RingBufferBundler extends BaseBundler implements Runnable {
+public class RingBufferBundler extends BaseBundler {
     protected RingBuffer<Message>         rb;
-    protected volatile Thread             bundler_thread;
-    protected volatile boolean            running=true;
+    protected Runner                      bundler_thread;
     protected int                         num_spins=40; // number of times we call Thread.yield before acquiring the lock (0 disables)
     protected static final String         THREAD_NAME="RingBufferBundler";
     protected BiConsumer<Integer,Integer> wait_strategy=SPIN_PARK;
     protected int                         capacity;
+    protected final Runnable              run_function=this::readMessages;
 
     protected static final BiConsumer<Integer,Integer> SPIN=(it,spins) -> {;};
     protected static final BiConsumer<Integer,Integer> YIELD=(it,spins) -> Thread.yield();
@@ -57,7 +58,7 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
     }
 
     public RingBuffer<Message> buf()                     {return rb;}
-    public Thread              getThread()               {return bundler_thread;}
+    public Thread              getThread()               {return bundler_thread.getThread();}
     public int                 getBufferSize()           {return rb.size();}
     public int                 numSpins()                {return num_spins;}
     public RingBufferBundler   numSpins(int n)           {num_spins=n; return this;}
@@ -71,46 +72,34 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
             rb=new RingBuffer<>(Message.class, assertPositive(transport.getBundlerCapacity(), "bundler capacity cannot be " + transport.getBundlerCapacity()));
             this.capacity=rb.capacity();
         }
+        bundler_thread=new Runner(transport.getThreadFactory(), THREAD_NAME, run_function, () -> rb.clear());
     }
 
-    public synchronized void start() {
-        if(running)
-            stop();
-        bundler_thread=transport.getThreadFactory().newThread(this, THREAD_NAME);
-        running=true;
+    public void start() {
         bundler_thread.start();
     }
 
-    public synchronized void stop() {
-        _stop(true);
-    }
-
-    public synchronized void stopAndFlush() {
-        _stop(false);
+    public void stop() {
+        bundler_thread.stop();
     }
 
     public void send(Message msg) throws Exception {
-        if(running)
-            rb.put(msg);
+        rb.put(msg);
     }
 
-    public void run() {
-        while(running) {
-            try {
-                readMessages();
-            }
-            catch(Throwable t) {
-            }
+
+
+    protected void readMessages() {
+        try {
+            int available_msgs=rb.waitForMessages(num_spins, wait_strategy);
+            int read_index=rb.readIndexLockless();
+            Message[] buf=rb.buf();
+            sendBundledMessages(buf, read_index, available_msgs);
+            rb.publishReadIndex(available_msgs);
         }
-    }
-
-
-    protected void readMessages() throws InterruptedException {
-        int available_msgs=rb.waitForMessages(num_spins, wait_strategy);
-        int read_index=rb.readIndexLockless();
-        Message[] buf=rb.buf();
-        sendBundledMessages(buf, read_index, available_msgs);
-        rb.publishReadIndex(available_msgs);
+        catch(Throwable t) {
+            ;
+        }
     }
 
 
@@ -181,19 +170,6 @@ public class RingBufferBundler extends BaseBundler implements Runnable {
     protected final int advance(int index) {return index+1 == capacity? 0 : index+1;}
     protected final int index(int idx)     {return idx & (capacity-1);}    // fast equivalent to %
 
-    protected void _stop(boolean clear_queue) {
-        running=false;
-        Thread tmp=bundler_thread;
-        bundler_thread=null;
-        if(tmp != null) {
-            tmp.interrupt();
-            if(tmp.isAlive()) {
-                try {tmp.join(500);} catch(InterruptedException e) {}
-            }
-        }
-        if(clear_queue)
-            rb.clear();
-    }
 
     protected static String print(BiConsumer<Integer,Integer> wait_strategy) {
         if(wait_strategy      == null)            return null;
