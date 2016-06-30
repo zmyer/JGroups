@@ -40,7 +40,6 @@ public class SimplifiedTransferQueueBundler extends TransferQueueBundler {
             }
             else {
                 sendBundledMessages(); // sets curr to 0
-                // curr=0;
                 msg_queue[0]=msg;
             }
         }

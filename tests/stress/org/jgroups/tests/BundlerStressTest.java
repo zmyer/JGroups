@@ -124,8 +124,7 @@ public class BundlerStressTest {
 
             LockSupport.parkNanos(park_time);
             if(i % 10000 == 0) {
-                park_time=Math.min(park_time*2, 1_000_000);
-                // System.out.printf("-- %d msgs left, park_time=%d\n", pending_msgs, park_time);
+                park_time=Math.min(park_time*2, 1_000_000); // 1 ms max park time
             }
 
         }
