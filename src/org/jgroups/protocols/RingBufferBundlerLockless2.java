@@ -9,13 +9,11 @@ package org.jgroups.protocols;
 import org.jgroups.Address;
 import org.jgroups.Global;
 import org.jgroups.Message;
-import org.jgroups.util.Runner;
-import org.jgroups.util.Util;
+import org.jgroups.util.*;
 
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 
@@ -27,28 +25,17 @@ import java.util.concurrent.locks.LockSupport;
  */
 public class RingBufferBundlerLockless2 extends BaseBundler {
     protected Message[]                              buf;
-    protected volatile int                           read_index=0; // shared by reader and writers (reader only writes it)
-    protected int                                    ri=0; // only used by reader
-    //protected int i1,i2,i3,i4; // 16 bytes
-    //protected int i5,i6,i7,i8; // 16 bytes
-    //protected int i9,i10,i11,i12;
-    //protected int i13,i14,i15,i16;
-    //protected int i17,i18,i19,i20;
-    protected volatile int                           write_index=1;
-    protected final AtomicLong                       accumulated_bytes=new AtomicLong(0);
-    protected final AtomicInteger                    num_threads=new AtomicInteger(0);
-    protected final AtomicBoolean                    unparking=new AtomicBoolean(false);
-    protected Runner                                 bundler_thread;
-    protected final Runnable                         run_function=this::readMessages;
-    protected static final String                    THREAD_NAME=RingBufferBundlerLockless2.class.getSimpleName();
-    public static final Message                      NULL_MSG=new Message(false); // public for unit test
-    protected static final AtomicIntegerFieldUpdater write_updater;
+    protected final AtomicInteger   read_index=new PaddedAtomicInteger(0); // shared by reader and writers (reader only writes it)
+    protected int                   ri=0; // only used by reader
+    protected final AtomicInteger   write_index=new PaddedAtomicInteger(1);
+    protected final AtomicLong      accumulated_bytes=new PaddedAtomicLong(0);
+    protected final AtomicInteger   num_threads=new PaddedAtomicInteger(0);
+    protected final AtomicBoolean   unparking=new PaddedAtomicBoolean(false);
+    protected Runner                bundler_thread;
+    protected final Runnable        run_function=this::readMessages;
+    protected static final String   THREAD_NAME=RingBufferBundlerLockless2.class.getSimpleName();
+    public static final Message     NULL_MSG=new Message(false); // public for unit test
 
-
-    static {
-        //noinspection AtomicFieldUpdaterIssues
-        write_updater=AtomicIntegerFieldUpdater.newUpdater(RingBufferBundlerLockless2.class, "write_index");
-    }
 
 
     public RingBufferBundlerLockless2() {
@@ -60,12 +47,12 @@ public class RingBufferBundlerLockless2 extends BaseBundler {
         buf=new Message[Util.getNextHigherPowerOfTwo(capacity)]; // for efficient % (mod) op
     }
 
-    public int                        readIndex()             {return read_index;}
-    public int                        writeIndex()            {return write_index;}
-    public RingBufferBundlerLockless2 reset()                 {ri=read_index=0; write_index=1; return this;}
+    public int                        readIndex()             {return read_index.get();}
+    public int                        writeIndex()            {return write_index.get();}
+    public RingBufferBundlerLockless2 reset()                 {ri=0; read_index.set(0); write_index.set(1); return this;}
 
     public int getBufferSize() {
-        return _size(read_index, write_index);
+        return _size(read_index.get(), write_index.get());
     }
 
     protected int _size(int ri, int wi) {
@@ -92,7 +79,7 @@ public class RingBufferBundlerLockless2 extends BaseBundler {
 
         num_threads.incrementAndGet();
 
-        int tmp_write_index=getWriteIndex(read_index);
+        int tmp_write_index=getWriteIndex(read_index.get());
         // System.out.printf("[%d] tmp_write_index=%d\n", Thread.currentThread().getId(), tmp_write_index);
         if(tmp_write_index == -1) {
             log.warn("buf is full: %s\n", toString());
@@ -122,34 +109,20 @@ public class RingBufferBundlerLockless2 extends BaseBundler {
 
     protected int getWriteIndex(int current_read_index) {
         for(;;) {
-            int wi=write_index;
+            int wi=write_index.get();
             int next_wi=index(wi + 1);
             if(next_wi == current_read_index)
                 return -1;
-            // if(write_index.compareAndSet(wi, next_wi))
-            if(write_updater.compareAndSet(this, wi, next_wi))
+            if(write_index.compareAndSet(wi, next_wi))
+                // if(write_updater.compareAndSet(this, wi, next_wi))
                 return wi;
         }
     }
 
-    protected int getWriteIndexWithLock(int current_read_index) {
-        lock.lock();
-        try {
-            int wi=write_index;
-            int next_wi=index(wi + 1);
-            if(next_wi == current_read_index)
-                return -1;
-            write_index=next_wi;
-            return wi;
-        }
-        finally {
-            lock.unlock();
-        }
-    }
 
 
     public int _readMessages() {
-        int wi=write_index;
+        int wi=write_index.get();
         if(index(ri+1) == wi)
             return 0;
         int sent_msgs=sendBundledMessages(buf, ri, wi);
@@ -169,7 +142,7 @@ public class RingBufferBundlerLockless2 extends BaseBundler {
             advanced=true;
         }
         if(advanced)
-            read_index=ri; // publish the internal ri to read_index so writers get the update
+            read_index.set(ri); // publish the internal ri to read_index so writers get the update
         return advanced;
     }
 
@@ -217,7 +190,7 @@ public class RingBufferBundlerLockless2 extends BaseBundler {
     }
 
     public String toString() {
-        int tmp_ri=read_index, tmp_wi=write_index, size=_size(tmp_ri, tmp_wi);
+        int tmp_ri=read_index.get(), tmp_wi=write_index.get(), size=_size(tmp_ri, tmp_wi);
         return String.format("read-index=%d write-index=%d size=%d cap=%d\n", tmp_ri, tmp_wi, size, buf.length);
     }
 
