@@ -50,9 +50,9 @@ public class RingBufferBundlerLockless extends BaseBundler {
         this.write_permits=new AtomicInteger(buf.length);
     }
 
-    public int                       readIndex()             {return read_index;}
-    public int                       writeIndex()            {return write_index;}
-    public int                       getBufferSize()         {return size.get();}
+    public int                       readIndex()     {return read_index;}
+    public int                       writeIndex()    {return write_index;}
+    public int                       size()          {return size.get();}
 
 
     public void init(TP transport) {

@@ -59,7 +59,7 @@ public class RingBufferBundler extends BaseBundler {
 
     public RingBuffer<Message> buf()                     {return rb;}
     public Thread              getThread()               {return bundler_thread.getThread();}
-    public int                 getBufferSize()           {return rb.size();}
+    public int                 size()                    {return rb.size();}
     public int                 numSpins()                {return num_spins;}
     public RingBufferBundler   numSpins(int n)           {num_spins=n; return this;}
     public String              waitStrategy()            {return print(wait_strategy);}

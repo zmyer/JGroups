@@ -27,6 +27,10 @@ public class SimplifiedTransferQueueBundler extends TransferQueueBundler {
         super(new ArrayBlockingQueue<>(assertPositive(capacity, "bundler capacity cannot be " + capacity)));
     }
 
+    public int size() {
+        return curr + removeQueueSize();
+    }
+
     protected void addMessage(Message msg, long size) {
         try {
             while(curr < MSG_BUF_SIZE && msg_queue[curr] != null) ++curr;
@@ -35,8 +39,8 @@ public class SimplifiedTransferQueueBundler extends TransferQueueBundler {
                 ++curr;
             }
             else {
-                sendBundledMessages();
-                curr=0;
+                sendBundledMessages(); // sets curr to 0
+                // curr=0;
                 msg_queue[0]=msg;
             }
         }
@@ -46,6 +50,15 @@ public class SimplifiedTransferQueueBundler extends TransferQueueBundler {
     }
 
     protected void sendBundledMessages() {
+        try {
+            _sendBundledMessages();
+        }
+        finally {
+            curr=0;
+        }
+    }
+
+    protected void _sendBundledMessages() {
         int start=0;
         for(;;) {
             for(; start < MSG_BUF_SIZE && msg_queue[start] == null; ++start) ;

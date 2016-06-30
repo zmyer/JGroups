@@ -54,6 +54,14 @@ public abstract class BaseBundler implements Bundler {
         }
     }
 
+    public int size() {
+        int num=0;
+        Collection<List<Message>> values=msgs.values();
+        for(List<Message> list: values)
+            num+=list.size();
+        return num;
+    }
+
     /**
      * Sends all messages in the map. Messages for the same destination are bundled into a message list.
      * The map will be cleared when done.
@@ -61,7 +69,7 @@ public abstract class BaseBundler implements Bundler {
     protected void sendBundledMessages() {
         if(log.isTraceEnabled()) {
             double percentage=100.0 / transport.getMaxBundleSize() * count;
-            log.trace(BUNDLE_MSG, transport.localAddress(), numMessages(), count, percentage, msgs.size(), msgs.keySet());
+            log.trace(BUNDLE_MSG, transport.localAddress(), size(), count, percentage, msgs.size(), msgs.keySet());
         }
 
         for(Map.Entry<Address,List<Message>> entry: msgs.entrySet()) {
@@ -85,14 +93,6 @@ public abstract class BaseBundler implements Bundler {
 
     @GuardedBy("lock") protected void clearMessages() {
         msgs.values().stream().filter(list -> list != null).forEach(List::clear);
-    }
-
-    protected int numMessages() {
-        int num=0;
-        Collection<List<Message>> values=msgs.values();
-        for(List<Message> list: values)
-            num+=list.size();
-        return num;
     }
 
 

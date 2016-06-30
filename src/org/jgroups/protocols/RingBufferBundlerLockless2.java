@@ -24,7 +24,7 @@ import java.util.concurrent.locks.LockSupport;
  * https://issues.jboss.org/browse/JGRP-1540
  */
 public class RingBufferBundlerLockless2 extends BaseBundler {
-    protected Message[]                              buf;
+    protected Message[]             buf;
     protected final AtomicInteger   read_index=new PaddedAtomicInteger(0); // shared by reader and writers (reader only writes it)
     protected int                   ri=0; // only used by reader
     protected final AtomicInteger   write_index=new PaddedAtomicInteger(1);
@@ -47,13 +47,10 @@ public class RingBufferBundlerLockless2 extends BaseBundler {
         buf=new Message[Util.getNextHigherPowerOfTwo(capacity)]; // for efficient % (mod) op
     }
 
-    public int                        readIndex()             {return read_index.get();}
-    public int                        writeIndex()            {return write_index.get();}
-    public RingBufferBundlerLockless2 reset()                 {ri=0; read_index.set(0); write_index.set(1); return this;}
-
-    public int getBufferSize() {
-        return _size(read_index.get(), write_index.get());
-    }
+    public int                        readIndex()     {return read_index.get();}
+    public int                        writeIndex()    {return write_index.get();}
+    public RingBufferBundlerLockless2 reset()         {ri=0; read_index.set(0); write_index.set(1); return this;}
+    public int                        size()          {return _size(read_index.get(), write_index.get());}
 
     protected int _size(int ri, int wi) {
         return ri < wi? wi-ri-1 : buf.length - ri -1 +wi;

@@ -59,7 +59,7 @@ public class RingBundlerTestLockless2 {
         for(int i =0; i < 6; i++)
             bundler.send(new Message(null));
 
-        int cnt=bundler.getBufferSize();
+        int cnt=bundler.size();
         assert cnt == 6;
 
         bundler._readMessages();
@@ -67,7 +67,7 @@ public class RingBundlerTestLockless2 {
 
         assert bundler.readIndex() == 6;
         assert bundler.writeIndex() == 7;
-        assert bundler.getBufferSize() == 0;
+        assert bundler.size() == 0;
         assert transport.map.get(null) == 1;
         transport.map.clear();
 
@@ -75,7 +75,7 @@ public class RingBundlerTestLockless2 {
             bundler.send(msg);
         System.out.println("bundler = " + bundler);
 
-        cnt=bundler.getBufferSize();
+        cnt=bundler.size();
         assert cnt == 12;
         assert bundler.readIndex() == 6;
         assert bundler.writeIndex() == 3;
@@ -84,7 +84,7 @@ public class RingBundlerTestLockless2 {
 
         assert bundler.readIndex() == 2;
         assert bundler.writeIndex() == 3;
-        assert bundler.getBufferSize() == 0;
+        assert bundler.size() == 0;
         Stream.of(null, a, b, c, d).forEach(msg -> {assert transport.map.get(msg) == 1;});
     }
 
@@ -100,16 +100,16 @@ public class RingBundlerTestLockless2 {
         buf[3]=null;
         write_index_field.set(bundler, 4);
         System.out.println("bundler = " + bundler);
-        assert bundler.getBufferSize() == 3;
+        assert bundler.size() == 3;
         bundler._readMessages();
         System.out.println("bundler = " + bundler);
         assert bundler.writeIndex() == 4;
         assert bundler.readIndex() == 2;
-        assert bundler.getBufferSize() == 1;
+        assert bundler.size() == 1;
         buf[3]=new Message(null);
         bundler._readMessages();
         assert bundler.readIndex() == 3;
-        assert bundler.getBufferSize() == 0;
+        assert bundler.size() == 0;
     }
 
 

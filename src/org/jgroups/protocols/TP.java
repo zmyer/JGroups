@@ -298,11 +298,11 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
         if(bundler instanceof TransferQueueBundler)
             return ((TransferQueueBundler)bundler).getBufferSize();
         if(bundler instanceof RingBufferBundler)
-            return ((RingBufferBundler)bundler).getBufferSize();
+            return ((RingBufferBundler)bundler).size();
         if(bundler instanceof RingBufferBundlerLockless)
-            return ((RingBufferBundlerLockless)bundler).getBufferSize();
+            return ((RingBufferBundlerLockless)bundler).size();
         if(bundler instanceof RingBufferBundlerLockless2)
-            return ((RingBufferBundlerLockless2)bundler).getBufferSize();
+            return ((RingBufferBundlerLockless2)bundler).size();
         return 0;
     }
 

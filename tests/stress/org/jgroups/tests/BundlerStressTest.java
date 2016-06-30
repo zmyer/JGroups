@@ -11,6 +11,7 @@ import org.jgroups.util.Util;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.LockSupport;
 
 import static org.jgroups.tests.FragTest2.type;
 
@@ -114,15 +115,22 @@ public class BundlerStressTest {
         for(Sender sender: senders)
             sender.join();
 
-        // if the bundler has a transfer queue, we need to wait until the queue is empty
-        if(bundler instanceof TransferQueueBundler) {
-            TransferQueueBundler b=(TransferQueueBundler)bundler;
-            b.stopAndFlush();
-            for(;;) {
-                if(b.getBufferSize() == 0)
-                    break;
+        // wait until the bundler has no pending msgs left
+        long park_time=1;
+        for(int i=0; i < 1_000_000; i++) {
+            int pending_msgs=bundler.size();
+            if(pending_msgs == 0)
+                break;
+
+            LockSupport.parkNanos(park_time);
+            if(i % 10000 == 0) {
+                park_time=Math.min(park_time*2, 1_000_000);
+                // System.out.printf("-- %d msgs left, park_time=%d\n", pending_msgs, park_time);
             }
+
         }
+        if(bundler.size() > 0)
+            throw new Exception(String.format("bundler still has %d pending messages", bundler.size()));
 
         long time_us=Util.micros()-start;
         AverageMinMax send_avg=null;
