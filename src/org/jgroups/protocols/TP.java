@@ -1326,20 +1326,31 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
     protected Bundler createBundler(String type) {
         if(type == null)
             throw new IllegalArgumentException("bundler type has to be non-null");
-        if(type.startsWith("transfer-queue") || type.equals("tq"))
-            return new TransferQueueBundler(bundler_capacity);
-        if(type.startsWith("simplified-transfer-queue") || type.equals("stq"))
-            return new SimplifiedTransferQueueBundler(bundler_capacity);
-        if(type.startsWith("sender-sends") || type.equals("ss"))
-            return new SenderSendsBundler();
-        if(type.equals("ring-buffer") || type.equals("rb"))
-            return new RingBufferBundler(bundler_capacity).numSpins(bundler_num_spins).waitStrategy(bundler_wait_strategy);
-        if(type.equals("ring-buffer-lockless") || type.equals("rbl"))
-            return new RingBufferBundlerLockless(bundler_capacity);
-        if(type.equals("ring-buffer-lockless2") || type.equals("rbl2"))
-            return new RingBufferBundlerLockless2(bundler_capacity);
-        if(type.startsWith("no-bundler") || type.equals("nb"))
-            return new NoBundler().poolSize(no_bundler_pool_size).initialBufSize(no_bundler_initial_buf_size);
+
+        switch(type) {
+            case "transfer-queue":
+            case "tq":
+                return new TransferQueueBundler(bundler_capacity);
+            case "simplified-transfer-queue":
+            case "stq":
+                return new SimplifiedTransferQueueBundler(bundler_capacity);
+            case "sender-sends":
+            case "ss":
+                return new SenderSendsBundler();
+            case "ring-buffer":
+            case "rb":
+                return new RingBufferBundler(bundler_capacity).numSpins(bundler_num_spins).waitStrategy(bundler_wait_strategy);
+            case "ring-buffer-lockless":
+            case "rbl":
+                return new RingBufferBundlerLockless(bundler_capacity);
+            case "ring-buffer-lockless2":
+            case "rbl2":
+                return new RingBufferBundlerLockless2(bundler_capacity);
+            case "no-bundler":
+            case "nb":
+                return new NoBundler().poolSize(no_bundler_pool_size).initialBufSize(no_bundler_initial_buf_size);
+        }
+
         try {
             Class<Bundler> clazz=Util.loadClass(type, getClass());
             return clazz.newInstance();

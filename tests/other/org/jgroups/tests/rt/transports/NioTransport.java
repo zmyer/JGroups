@@ -78,14 +78,14 @@ public class NioTransport implements RtTransport {
             System.out.println("server started (ctrl-c to kill)");
             for(;;) {
                 client_channel=srv_channel.accept();
-                client_channel.socket().setTcpNoDelay(true); // we're concerned about latency
+                // client_channel.socket().setTcpNoDelay(true); // we're concerned about latency
                 receiver_thread=new Receiver();
                 receiver_thread.start();
             }
         }
         else {
             client_channel=SocketChannel.open();
-            client_channel.socket().setTcpNoDelay(true);
+            //client_channel.socket().setTcpNoDelay(true);
             client_channel.connect(new InetSocketAddress(host, port));
             receiver_thread=new Receiver();
             receiver_thread.start();
