@@ -1,6 +1,7 @@
 package org.jgroups.blocks.cs;
 
 import org.jgroups.Address;
+import org.jgroups.util.Buffer;
 import org.jgroups.util.Util;
 
 import java.nio.ByteBuffer;
@@ -25,5 +26,7 @@ public class ReceiverAdapter implements Receiver {
         Util.bufferToArray(sender, buf, this);
     }
 
-
+    public void receive(Address sender, Buffer buf) {
+        receive(sender, buf.getBuf(), buf.getOffset(), buf.getLength());
+    }
 }

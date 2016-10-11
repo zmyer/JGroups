@@ -124,14 +124,11 @@ public abstract class BasicTCP extends TP implements Receiver {
 
     public abstract void retainAll(Collection<Address> members);
 
-    /** BaseServer.Receiver interface */
-    public void receive(Address sender, byte[] data, int offset, int length) {
-        super.receive(sender, data, offset, length);
-    }
 
     public void receive(Address sender, ByteBuffer buf) {
         Util.bufferToArray(sender, buf, this);
     }
+
 
     protected Object handleDownEvent(Event evt) {
         Object ret=super.handleDownEvent(evt);

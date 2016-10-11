@@ -165,6 +165,11 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
             this.receiver.receive(sender, buf);
     }
 
+    public void receive(Address sender, Buffer buf) {
+        if(this.receiver != null)
+            this.receiver.receive(sender, buf);
+    }
+
 
 
     public void send(Address dest, byte[] data, int offset, int length) throws Exception {

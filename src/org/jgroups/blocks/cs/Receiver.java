@@ -1,6 +1,7 @@
 package org.jgroups.blocks.cs;
 
 import org.jgroups.Address;
+import org.jgroups.util.Buffer;
 
 import java.nio.ByteBuffer;
 
@@ -31,4 +32,6 @@ public interface Receiver {
      *            Note that buf could be a direct ByteBuffer.
      */
     void receive(Address sender, ByteBuffer buf); // should be a default method in Java 8
+
+    void receive(Address sender, Buffer buf);
 }

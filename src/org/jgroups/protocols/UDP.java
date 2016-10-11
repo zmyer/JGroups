@@ -8,6 +8,8 @@ import org.jgroups.annotations.ManagedAttribute;
 import org.jgroups.annotations.ManagedOperation;
 import org.jgroups.annotations.Property;
 import org.jgroups.stack.IpAddress;
+import org.jgroups.util.Buffer;
+import org.jgroups.util.BufferPool;
 import org.jgroups.util.SuppressLog;
 import org.jgroups.util.Util;
 
@@ -606,6 +608,8 @@ public class UDP extends TP {
     /* ----------------------------- Inner Classes ---------------------------------------- */
 
 
+
+
     public class PacketReceiver implements Runnable {
         private       Thread         thread=null;
         private final DatagramSocket receiver_socket;
@@ -650,23 +654,26 @@ public class UDP extends TP {
 
 
         public void run() {
-            final byte           receive_buf[]=new byte[66000]; // to be on the safe side (IPv6 == 65575 bytes, IPv4 = 65535)
-            final DatagramPacket packet=new DatagramPacket(receive_buf, receive_buf.length);
+            // final byte           receive_buf[]=new byte[66000]; // to be on the safe side (IPv6 == 65575 bytes, IPv4 = 65535)
+            // final DatagramPacket packet=new DatagramPacket(receive_buf, receive_buf.length);
 
             while(thread != null && Thread.currentThread().equals(thread)) {
+                Buffer receive_buf=null;
                 try {
+                    receive_buf=buf_pool.get(66000);
+                    System.out.printf("got buffer %s: pool size: %d\n", receive_buf, buf_pool.size());
+                    DatagramPacket packet=new DatagramPacket(receive_buf.getBuf(), receive_buf.getLength());
 
                     // solves Android ISSUE #24748 - DatagramPacket truncated UDP in ICS
                     if(is_android)
-                        packet.setLength(receive_buf.length);
+                        packet.setLength(receive_buf.getLength());
 
                     receiver_socket.receive(packet);
                     int len=packet.getLength();
-                    if(len > receive_buf.length && log.isErrorEnabled())
-                        log.error(Util.getMessage("SizeOfTheReceivedPacket"), len, receive_buf.length, receive_buf.length);
+                    if(len > receive_buf.getLength() && log.isErrorEnabled())
+                        log.error(Util.getMessage("SizeOfTheReceivedPacket"), len, receive_buf.getLength(), receive_buf.getLength());
 
-                    receive(new IpAddress(packet.getAddress(), packet.getPort()),
-                            receive_buf, packet.getOffset(), len);
+                    receive(new IpAddress(packet.getAddress(), packet.getPort()), receive_buf);
                 }
                 catch(SocketException sock_ex) {
                     if(receiver_socket.isClosed()) {
@@ -678,6 +685,10 @@ public class UDP extends TP {
                 catch(Throwable ex) {
                     if(log.isErrorEnabled())
                         log.error(Util.getMessage("FailedReceivingPacket"), ex);
+                }
+                finally {
+                    buf_pool.release(receive_buf);
+                    System.out.printf("returned buffer %s: pool size: %d\n", receive_buf, buf_pool.size());
                 }
             }
             if(log.isDebugEnabled()) log.debug(name + " thread terminated");

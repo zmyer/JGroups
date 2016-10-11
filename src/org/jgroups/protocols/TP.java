@@ -437,7 +437,14 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
 
     //http://jira.jboss.org/jira/browse/JGRP-849
     protected final ReentrantLock connectLock = new ReentrantLock();
-    
+
+    @ManagedAttribute(description="Number of buffers in the buffer pool")
+    public int getBufferPoolSize() {return buf_pool.size();}
+
+    @ManagedOperation(description="Prints the buffer pool")
+    public String printBufferPool() {return buf_pool.toString();}
+
+    protected final BufferPool buf_pool=new BufferPool();
 
     // ================================== Thread pool ======================
 
@@ -1226,11 +1233,35 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
             handleSingleMessage(sender, data, offset, length);
     }
 
+    public void receive(Address sender, Buffer data) {
+        if(data == null) return;
+
+        // drop message from self; it has already been looped back up (https://issues.jboss.org/browse/JGRP-1765)
+        if(Objects.equals(local_physical_addr, sender))
+            return;
+
+        byte flags=data.getBuf()[data.getOffset()+Global.SHORT_SIZE];
+        boolean is_message_list=(flags & LIST) == LIST;
+
+        if(is_message_list) // used if message bundling is enabled
+            handleMessageBatch(sender, data);
+        else
+            handleSingleMessage(sender, data);
+    }
+
+
 
     protected void handleMessageBatch(Address sender, byte[] data, int offset, int length) {
         byte[] copy=new byte[length];
         System.arraycopy(data, offset, copy, 0, length);
         BatchHandlerParse handler=new BatchHandlerParse(copy, 0, copy.length, sender);
+        submitToThreadPool(thread_pool, handler, true, true);
+    }
+
+
+    protected void handleMessageBatch(Address sender, Buffer data) {
+        Buffer copy=data.copy();
+        BatchHandlerParse handler=new BatchHandlerParse(copy, sender);
         submitToThreadPool(thread_pool, handler, true, true);
     }
 
@@ -1242,6 +1273,13 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
         SingleMessageHandlerParse handler=new SingleMessageHandlerParse(copy, 0, copy.length, sender);
         submitToThreadPool(thread_pool, handler, true, true);
     }
+
+    protected void handleSingleMessage(Address sender, Buffer data) {
+        Buffer copy=data.copy();
+        SingleMessageHandlerParse handler=new SingleMessageHandlerParse(copy, sender);
+        submitToThreadPool(thread_pool, handler, true, true);
+    }
+
 
     /**
      * Removes messages with flags DONT_BUNDLE and OOB set and executes them in the oob or internal thread pool. JGRP-1737
@@ -1347,21 +1385,22 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
 
 
     protected class SingleMessageHandlerParse implements Runnable {
-        protected final byte[] buf;
-        protected final int offset, length;
+        protected final Buffer buf;
         protected final Address sender;
 
         public SingleMessageHandlerParse(byte[] buf, int offset, int length, Address sender) {
+            this(new Buffer(buf, offset, length), sender);
+        }
+
+        public SingleMessageHandlerParse(Buffer buf, Address sender) {
             this.buf=buf;
-            this.offset=offset;
-            this.length=length;
             this.sender=sender;
         }
 
 
         public void run() {
             try {
-                ByteArrayDataInputStream in=new ByteArrayDataInputStream(buf, offset, length);
+                ByteArrayDataInputStream in=new ByteArrayDataInputStream(buf);
                 short version=in.readShort();
                 if(!versionMatch(version, sender))
                     return;
@@ -1440,22 +1479,22 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
     }
 
     protected class BatchHandlerParse implements Runnable {
-        protected final byte[] buf;
-        protected final int offset, length;
+        protected final Buffer  buf;
         protected final Address sender;
 
-
         public BatchHandlerParse(byte[] buf, int offset, int length, Address sender) {
+            this(new Buffer(buf, offset, length), sender);
+        }
+
+        public BatchHandlerParse(Buffer buf, Address sender) {
             this.buf=buf;
-            this.offset=offset;
-            this.length=length;
             this.sender=sender;
         }
 
 
         public void run() {
             try {
-                ByteArrayDataInputStream in=new ByteArrayDataInputStream(buf, offset, length);
+                ByteArrayDataInputStream in=new ByteArrayDataInputStream(buf);
                 short version=in.readShort();
                 if(!versionMatch(version, sender))
                     return;

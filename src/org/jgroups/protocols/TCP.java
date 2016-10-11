@@ -65,6 +65,7 @@ public class TCP extends BasicTCP {
 
     public void start() throws Exception {
         server=new TcpServer(getThreadFactory(), getSocketFactory(), bind_addr, bind_port, bind_port+port_range, external_addr, external_port);
+        server.bufferPool(buf_pool);
         server.receiver(this)
           .timeService(time_service)
           .receiveBufferSize(recv_buf_size)

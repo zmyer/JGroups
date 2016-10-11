@@ -1,6 +1,7 @@
 package org.jgroups.blocks.cs;
 
 import org.jgroups.Address;
+import org.jgroups.util.BufferPool;
 import org.jgroups.util.SocketFactory;
 import org.jgroups.util.ThreadFactory;
 
@@ -11,6 +12,7 @@ import org.jgroups.util.ThreadFactory;
  */
 public abstract class TcpBaseServer extends BaseServer {
     protected int               peer_addr_read_timeout=2000; // max time in milliseconds to block on reading peer address
+    protected BufferPool        buf_pool;
 
     protected TcpBaseServer(ThreadFactory f, SocketFactory sf) {
         super(f, sf);
@@ -24,5 +26,7 @@ public abstract class TcpBaseServer extends BaseServer {
 
     public int           peerAddressReadTimeout()                {return peer_addr_read_timeout;}
     public TcpBaseServer peerAddressReadTimeout(int timeout)     {this.peer_addr_read_timeout=timeout; return this;}
+    public BufferPool    bufferPool()                            {return buf_pool;}
+    public TcpBaseServer bufferPool(BufferPool pool)             {this.buf_pool=pool; return this;}
 
 }

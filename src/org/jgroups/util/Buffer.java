@@ -8,7 +8,7 @@ package org.jgroups.util;
 public class Buffer {
     private final byte[] buf;
     private final int offset;
-    private final int length;
+    private int length;
 
     public Buffer(byte[] buf, int offset, int length) {
         this.buf=buf;
@@ -31,6 +31,10 @@ public class Buffer {
     public int getLength() {
         return length;
     }
+
+    public Buffer setLength(int len) {this.length=len; return this;}
+
+    public Buffer reset() {if(buf != null) this.length=buf.length; return this;}
 
     public Buffer copy() {
         byte[] new_buf=buf != null? new byte[length] : null;

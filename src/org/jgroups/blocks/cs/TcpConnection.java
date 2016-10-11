@@ -3,6 +3,7 @@ package org.jgroups.blocks.cs;
 import org.jgroups.Address;
 import org.jgroups.Version;
 import org.jgroups.stack.IpAddress;
+import org.jgroups.util.Buffer;
 import org.jgroups.util.ThreadFactory;
 import org.jgroups.util.Util;
 
@@ -244,7 +245,6 @@ public class TcpConnection extends Connection {
     protected class Receiver implements Runnable {
         protected final Thread     recv;
         protected volatile boolean receiving=true;
-        protected volatile byte[]  buffer;
 
         public Receiver(ThreadFactory f) {
             recv=f.newThread(this,"Connection.Receiver [" + getSockAddress() + "]");
@@ -264,18 +264,18 @@ public class TcpConnection extends Connection {
 
         public boolean isRunning()  {return receiving;}
         public boolean canRun()     {return isRunning() && isConnected();}
-        public int     bufferSize() {return buffer != null? buffer.length : 0;}
+        public int     bufferSize() {return 0;}
 
         public void run() {
             Throwable t=null;
             while(canRun()) {
+                Buffer buffer=null;
                 try {
                     int len=in.readInt();
-                    if(buffer == null || buffer.length < len)
-                        buffer=new byte[len];
-                    in.readFully(buffer, 0, len);
+                    buffer=server.bufferPool().get(len).setLength(len);
+                    in.readFully(buffer.getBuf(), 0, len);
                     updateLastAccessed();
-                    server.receive(peer_addr, buffer, 0, len);
+                    server.receive(peer_addr, buffer);
                 }
                 catch(OutOfMemoryError mem_ex) {
                     t=mem_ex;
@@ -286,6 +286,11 @@ public class TcpConnection extends Connection {
                     break;
                 }
                 catch(Throwable e) {
+                }
+                finally {
+                    if(buffer != null) {
+                        server.bufferPool().release(buffer.reset());
+                    }
                 }
             }
             server.notifyConnectionClosed(TcpConnection.this, String.format("%s: %s", getClass().getSimpleName(),

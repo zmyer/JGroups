@@ -28,6 +28,10 @@ public class ByteArrayDataInputStream implements DataInput {
         this.pos=checkBounds(offset);
     }
 
+    public ByteArrayDataInputStream(Buffer buf) {
+        this(buf.getBuf(), buf.getOffset(), buf.getLength());
+    }
+
     public ByteArrayDataInputStream(ByteBuffer buffer) {
         int offset=buffer.hasArray()? buffer.arrayOffset() + buffer.position() : buffer.position(),
           len=buffer.remaining();
