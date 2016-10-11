@@ -9,7 +9,6 @@ import org.jgroups.annotations.ManagedOperation;
 import org.jgroups.annotations.Property;
 import org.jgroups.stack.IpAddress;
 import org.jgroups.util.Buffer;
-import org.jgroups.util.BufferPool;
 import org.jgroups.util.SuppressLog;
 import org.jgroups.util.Util;
 
@@ -661,7 +660,6 @@ public class UDP extends TP {
                 Buffer receive_buf=null;
                 try {
                     receive_buf=buf_pool.get(66000);
-                    System.out.printf("got buffer %s: pool size: %d\n", receive_buf, buf_pool.size());
                     DatagramPacket packet=new DatagramPacket(receive_buf.getBuf(), receive_buf.getLength());
 
                     // solves Android ISSUE #24748 - DatagramPacket truncated UDP in ICS
@@ -688,7 +686,6 @@ public class UDP extends TP {
                 }
                 finally {
                     buf_pool.release(receive_buf);
-                    System.out.printf("returned buffer %s: pool size: %d\n", receive_buf, buf_pool.size());
                 }
             }
             if(log.isDebugEnabled()) log.debug(name + " thread terminated");
