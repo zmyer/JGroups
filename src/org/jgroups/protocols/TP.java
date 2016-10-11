@@ -1228,75 +1228,19 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
 
 
     protected void handleMessageBatch(Address sender, byte[] data, int offset, int length) {
-        try {
-            ByteArrayDataInputStream in=new ByteArrayDataInputStream(data, offset, length);
-            short version=in.readShort();
-            if(!versionMatch(version, sender))
-                return;
-
-            byte flags=in.readByte();
-            final boolean multicast=(flags & MULTICAST) == MULTICAST;
-
-            final MessageBatch[] batches=Util.readMessageBatch(in, multicast);
-            final MessageBatch batch=batches[0], oob_batch=batches[1], internal_batch_oob=batches[2], internal_batch=batches[3];
-
-            removeAndDispatchNonBundledMessages(oob_batch, internal_batch_oob);
-
-            if(oob_batch != null && !oob_batch.isEmpty()) {
-                num_oob_msgs_received+=oob_batch.size();
-                submitToThreadPool(new BatchHandler(oob_batch), false);
-            }
-            if(batch != null) {
-                num_incoming_msgs_received+=batch.size();
-                submitToThreadPool(new BatchHandler(batch), false);
-            }
-            if(internal_batch_oob != null && !internal_batch_oob.isEmpty()) {
-                num_oob_msgs_received+=internal_batch_oob.size();
-                submitToThreadPool(new BatchHandler(internal_batch_oob), true);
-            }
-            if(internal_batch != null) {
-                num_internal_msgs_received+=internal_batch.size();
-                submitToThreadPool(new BatchHandler(internal_batch), true);
-            }
-        }
-        catch(Throwable t) {
-            log.error(Util.getMessage("IncomingMsgFailure"), local_addr, t);
-        }
+        byte[] copy=new byte[length];
+        System.arraycopy(data, offset, copy, 0, length);
+        BatchHandlerParse handler=new BatchHandlerParse(copy, 0, copy.length, sender);
+        submitToThreadPool(thread_pool, handler, true, true);
     }
 
 
 
     protected void handleSingleMessage(Address sender, byte[] data, int offset, int length) {
-        try {
-            ByteArrayDataInputStream in=new ByteArrayDataInputStream(data, offset, length);
-            short version=in.readShort();
-            if(!versionMatch(version, sender))
-                return;
-
-            byte flags=in.readByte();
-            final boolean multicast=(flags & MULTICAST) == MULTICAST;
-            Message msg=new Message(false); // don't create headers, readFrom() will do this
-            msg.readFrom(in);
-
-            if(!multicast) {
-                Address dest=msg.getDest();
-                if(dest != null && !(Objects.equals(dest, local_addr) || Objects.equals(dest, local_physical_addr)))
-                    return;
-            }
-
-            boolean oob=msg.isFlagSet(Message.Flag.OOB), internal=msg.isFlagSet(Message.Flag.INTERNAL);
-            if(oob)
-                num_oob_msgs_received++;
-            else if(internal)
-                num_internal_msgs_received++;
-            else
-                num_incoming_msgs_received++;
-
-            submitToThreadPool(new SingleMessageHandler(msg), internal);
-        }
-        catch(Throwable t) {
-            log.error(Util.getMessage("IncomingMsgFailure"), local_addr, t);
-        }
+        byte[] copy=new byte[length];
+        System.arraycopy(data, offset, copy, 0, length);
+        SingleMessageHandlerParse handler=new SingleMessageHandlerParse(copy, 0, copy.length, sender);
+        submitToThreadPool(thread_pool, handler, true, true);
     }
 
     /**
@@ -1402,6 +1346,72 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
     }
 
 
+    protected class SingleMessageHandlerParse implements Runnable {
+        protected final byte[] buf;
+        protected final int offset, length;
+        protected final Address sender;
+
+        public SingleMessageHandlerParse(byte[] buf, int offset, int length, Address sender) {
+            this.buf=buf;
+            this.offset=offset;
+            this.length=length;
+            this.sender=sender;
+        }
+
+
+        public void run() {
+            try {
+                ByteArrayDataInputStream in=new ByteArrayDataInputStream(buf, offset, length);
+                short version=in.readShort();
+                if(!versionMatch(version, sender))
+                    return;
+
+                byte flags=in.readByte();
+                final boolean multicast=(flags & MULTICAST) == MULTICAST;
+                Message msg=new Message(false); // don't create headers, readFrom() will do this
+                msg.readFrom(in);
+
+                if(!multicast) {
+                    Address dest=msg.getDest();
+                    if(dest != null && !(Objects.equals(dest, local_addr) || Objects.equals(dest, local_physical_addr)))
+                        return;
+                }
+
+                boolean oob=msg.isFlagSet(Message.Flag.OOB), internal=msg.isFlagSet(Message.Flag.INTERNAL);
+                if(oob)
+                    num_oob_msgs_received++;
+                else if(internal)
+                    num_internal_msgs_received++;
+                else
+                    num_incoming_msgs_received++;
+
+                Address dest=msg.getDest();
+                try {
+                    // this check is already done before creating a SingleMessageHandler
+                    // if(!multicast && !Objects.equals(dest, local_addr) && !Objects.equals(dest, local_physical_addr))
+                    // return;
+
+                    if(stats) {
+                        num_msgs_received++;
+                        num_single_msgs_received++;
+                        num_bytes_received+=msg.getLength();
+                    }
+
+                    TpHeader hdr=msg.getHeader(id);
+                    AsciiString cname=new AsciiString(hdr.cluster_name);
+                    passMessageUp(msg, cname, true, multicast, true);
+                }
+                catch(Throwable t) {
+                    log.error(Util.getMessage("PassUpFailure"), t);
+                }
+
+            }
+            catch(Throwable t) {
+                log.error(Util.getMessage("IncomingMsgFailure"), local_addr, t);
+            }
+        }
+    }
+
 
     protected class BatchHandler implements Runnable {
         protected final MessageBatch batch;
@@ -1426,6 +1436,58 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
             }
 
             passBatchUp(batch, true, true);
+        }
+    }
+
+    protected class BatchHandlerParse implements Runnable {
+        protected final byte[] buf;
+        protected final int offset, length;
+        protected final Address sender;
+
+
+        public BatchHandlerParse(byte[] buf, int offset, int length, Address sender) {
+            this.buf=buf;
+            this.offset=offset;
+            this.length=length;
+            this.sender=sender;
+        }
+
+
+        public void run() {
+            try {
+                ByteArrayDataInputStream in=new ByteArrayDataInputStream(buf, offset, length);
+                short version=in.readShort();
+                if(!versionMatch(version, sender))
+                    return;
+
+                byte flags=in.readByte();
+                final boolean multicast=(flags & MULTICAST) == MULTICAST;
+
+                final MessageBatch[] batches=Util.readMessageBatch(in, multicast);
+                final MessageBatch batch=batches[0], oob_batch=batches[1], internal_batch_oob=batches[2], internal_batch=batches[3];
+
+                removeAndDispatchNonBundledMessages(oob_batch, internal_batch_oob);
+
+                if(oob_batch != null && !oob_batch.isEmpty()) {
+                    num_oob_msgs_received+=oob_batch.size();
+                    submitToThreadPool(new BatchHandler(oob_batch), false);
+                }
+                if(batch != null) {
+                    num_incoming_msgs_received+=batch.size();
+                    submitToThreadPool(new BatchHandler(batch), false);
+                }
+                if(internal_batch_oob != null && !internal_batch_oob.isEmpty()) {
+                    num_oob_msgs_received+=internal_batch_oob.size();
+                    submitToThreadPool(new BatchHandler(internal_batch_oob), true);
+                }
+                if(internal_batch != null) {
+                    num_internal_msgs_received+=internal_batch.size();
+                    submitToThreadPool(new BatchHandler(internal_batch), true);
+                }
+            }
+            catch(Throwable t) {
+                log.error(Util.getMessage("IncomingMsgFailure"), local_addr, t);
+            }
         }
     }
 
