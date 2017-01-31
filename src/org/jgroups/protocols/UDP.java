@@ -260,6 +260,8 @@ public class UDP extends TP {
                 sock.send(packet);
             }
             catch(IOException ex) {
+                ex.printStackTrace();
+
                 if(suppress_log_out_of_buffer_space != null)
                     suppress_log_out_of_buffer_space.log(SuppressLog.Level.warn, dest, suppress_time_out_of_buffer_space,
                                                          local_addr, dest == null? "cluster" : dest, ex);
