@@ -1355,7 +1355,7 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
                     if(highest > prev_seqno)
                         xmit_task_map.put(target, highest);
                     if(!missing.isEmpty()) {
-                        System.out.printf("** xmit-req to %s, missing: %s\n", target, missing);
+                        // System.out.printf("** xmit-req to %s, missing: %s\n", target, missing);
                         retransmit(missing, target);
                     }
                 }
