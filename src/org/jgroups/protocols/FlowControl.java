@@ -304,8 +304,8 @@ public abstract class FlowControl extends Protocol {
 
 
     public Object down(Message msg) {
-        if(msg.isFlagSet(Message.Flag.NO_FC))
-            return down_prot.down(msg);
+        //if(msg.isFlagSet(Message.Flag.NO_FC))
+          //  return down_prot.down(msg);
 
         Address dest=msg.getDest();
         boolean multicast=dest == null;
@@ -341,8 +341,8 @@ public abstract class FlowControl extends Protocol {
     }
 
     public Object up(Message msg) {
-        if(msg.isFlagSet(Message.Flag.NO_FC))
-            return up_prot.up(msg);
+        //if(msg.isFlagSet(Message.Flag.NO_FC))
+          //  return up_prot.up(msg);
 
         Address dest=msg.getDest();
         boolean multicast=dest == null;
@@ -394,8 +394,8 @@ public abstract class FlowControl extends Protocol {
     public void up(MessageBatch batch) {
         int length=0;
         for(Message msg: batch) {
-            if(msg.isFlagSet(Message.Flag.NO_FC))
-                continue;
+            //if(msg.isFlagSet(Message.Flag.NO_FC))
+              //  continue;
 
             Address dest=msg.getDest();
             boolean multicast=dest == null;
