@@ -1,15 +1,16 @@
 package org.jgroups;
 
-import org.jgroups.util.Util;
-
-import java.io.*;
+import java.io.DataInput;
+import java.io.DataOutput;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.function.Supplier;
+import org.jgroups.util.Util;
 
 /**
- * This type of address represents a subset of the cluster members in which the total order properties must be applied,
- * e.g. if the cluster membership is {A,B,C,D,E}, an AnycastAddress could be {D,E}.
+ * This type of address represents a subset of the cluster members in which the total order
+ * properties must be applied, e.g. if the cluster membership is {A,B,C,D,E}, an AnycastAddress
+ * could be {D,E}.
  *
  * @author Pedro Ruivo
  * @since 3.1
@@ -83,8 +84,10 @@ public class AnycastAddress implements Address, Constructable<AnycastAddress> {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
 
         AnycastAddress that = (AnycastAddress) o;
         return !(destinations != null ? !destinations.equals(that.destinations) : that.destinations != null);
@@ -98,10 +101,11 @@ public class AnycastAddress implements Address, Constructable<AnycastAddress> {
     public int compareTo(Address o) {
         int hc1, hc2;
 
-        if (this == o) return 0;
+        if (this == o)
+            return 0;
         if (!(o instanceof AnycastAddress))
             throw new ClassCastException("comparison between different classes: the other object is " +
-                    (o != null ? o.getClass() : o));
+                (o != null ? o.getClass() : o));
         AnycastAddress other = (AnycastAddress) o;
 
         hc1 = this.hashCode();

@@ -1,11 +1,14 @@
 package org.jgroups.util;
 
 /**
- * Interface implementing Streamable and returning the size of the marshalled object. Might get merged into
- * Streamable itself in 4.0.
+ * Interface implementing Streamable and returning the size of the marshalled object. Might get
+ * merged into Streamable itself in 4.0.
+ *
  * @author Bela Ban
- * @since  3.3
+ * @since 3.3
  */
+
+// TODO: 17/5/25 by zmyer
 public interface SizeStreamable extends Streamable {
     /** Returns the size (in bytes) of the marshalled object */
     int serializedSize();

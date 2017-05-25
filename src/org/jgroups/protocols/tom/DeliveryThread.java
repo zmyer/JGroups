@@ -1,10 +1,9 @@
 package org.jgroups.protocols.tom;
 
+import java.util.List;
 import org.jgroups.Message;
 import org.jgroups.logging.Log;
 import org.jgroups.logging.LogFactory;
-
-import java.util.List;
 
 /**
  * The delivery thread. Is the only thread that delivers the Total Order Anycast message in order
@@ -13,7 +12,7 @@ import java.util.List;
  * @since 3.1
  */
 public class DeliveryThread extends Thread {
-    private DeliveryManager  deliveryManager;
+    private DeliveryManager deliveryManager;
     private volatile boolean running = false;
     private final DeliveryProtocol deliveryProtocol;
 
@@ -24,7 +23,7 @@ public class DeliveryThread extends Thread {
         if (protocol == null) {
             throw new NullPointerException("TOA Protocol can't be null");
         }
-        this.deliveryProtocol= protocol;
+        this.deliveryProtocol = protocol;
     }
 
     public void start(DeliveryManager deliveryManager) {
@@ -54,7 +53,7 @@ public class DeliveryThread extends Thread {
                 for (Message msg : messages) {
                     try {
                         deliveryProtocol.deliver(msg);
-                    } catch(Throwable t) {
+                    } catch (Throwable t) {
                         log.warn("Exception caught while delivering message " + msg, t);
                     }
                 }

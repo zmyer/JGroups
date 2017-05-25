@@ -7,7 +7,6 @@ import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
-
 import org.jgroups.util.FutureListener;
 import org.jgroups.util.NotifyingFuture;
 
@@ -19,7 +18,7 @@ import org.jgroups.util.NotifyingFuture;
  * when processing groups of tasks.
  * <p>
  * This class must be used instead of a {@link ExecutorCompletionService}
- * provided from java.util.concurrent package.  The 
+ * provided from java.util.concurrent package.  The
  * {@link ExecutorCompletionService} may not be used since it requires the use
  * of a non serializable RunnableFuture object.  Since a ExecutionService
  * may only be used with serializable request objects, this class must be used
@@ -29,15 +28,15 @@ public class ExecutionCompletionService<V> implements CompletionService<V> {
     protected final ExecutionService executor;
     protected final BlockingQueue<NotifyingFuture<V>> completionQueue;
     protected final QueueingListener listener;
-    
+
     protected class QueueingListener implements FutureListener<V> {
         @Override
         public void futureDone(Future<V> future) {
             // This is a safe cast since this listener should only used
             // in this class
-            completionQueue.add((NotifyingFuture<V>)future);
+            completionQueue.add((NotifyingFuture<V>) future);
         }
-        
+
     }
 
     /**
@@ -58,45 +57,43 @@ public class ExecutionCompletionService<V> implements CompletionService<V> {
      * completion queue.
      *
      * @param executor the executor to use
-     * @param completionQueue the queue to use as the completion queue
-     * normally one dedicated for use by this service
+     * @param completionQueue the queue to use as the completion queue normally one dedicated for
+     * use by this service
      * @throws NullPointerException if executor is <tt>null</tt>
      */
     public ExecutionCompletionService(ExecutionService executor,
-                                     BlockingQueue<NotifyingFuture<V>> completionQueue) {
+        BlockingQueue<NotifyingFuture<V>> completionQueue) {
         this(executor, completionQueue, null);
     }
-    
+
     /**
-     * This constructor is here if someone wants to override this class and 
+     * This constructor is here if someone wants to override this class and
      * provide their own QueueingListener to possibly listen in on futures
      * being finished
+     *
      * @param executor the executor to use
-     * @param completionQueue the queue to use as the completion queue
-     * normally one dedicated for use by this service
-     * @param listener the listener to notify.  To work properly this listner
-     *        should at minimum call the super.futureDone or else this
-     *        completion service may not work correctly.
+     * @param completionQueue the queue to use as the completion queue normally one dedicated for
+     * use by this service
+     * @param listener the listener to notify.  To work properly this listner should at minimum call
+     * the super.futureDone or else this completion service may not work correctly.
      * @throws NullPointerException if executor is <tt>null</tt>
      */
     protected ExecutionCompletionService(ExecutionService executor,
-                                     BlockingQueue<NotifyingFuture<V>> completionQueue,
-                                     QueueingListener listener) {
+        BlockingQueue<NotifyingFuture<V>> completionQueue,
+        QueueingListener listener) {
         if (executor == null)
             throw new NullPointerException();
         this.executor = executor;
-        
+
         if (completionQueue == null) {
             this.completionQueue = new LinkedBlockingQueue<>();
-        }
-        else {
+        } else {
             this.completionQueue = completionQueue;
         }
-        
+
         if (listener == null) {
             this.listener = new QueueingListener();
-        }
-        else {
+        } else {
             this.listener = listener;
         }
     }
@@ -108,7 +105,8 @@ public class ExecutionCompletionService<V> implements CompletionService<V> {
      * internally this class sets the listener to provide ability to add to the queue.
      */
     public Future<V> submit(Callable<V> task) {
-        if (task == null) throw new NullPointerException();
+        if (task == null)
+            throw new NullPointerException();
         NotifyingFuture<V> f = executor.submit(task);
         f.setListener(listener);
         return f;
@@ -121,7 +119,8 @@ public class ExecutionCompletionService<V> implements CompletionService<V> {
      * internally this class sets the listener to provide ability to add to the queue.
      */
     public Future<V> submit(Runnable task, V result) {
-        if (task == null) throw new NullPointerException();
+        if (task == null)
+            throw new NullPointerException();
         NotifyingFuture<V> f = executor.submit(task, result);
         f.setListener(listener);
         return f;
@@ -139,12 +138,12 @@ public class ExecutionCompletionService<V> implements CompletionService<V> {
     }
 
     /**
-    * {@inheritDoc CompletionService}
-    * <p>
-    * This future may safely be used as a NotifyingFuture if desired.  This
-    * is because if it tries to set a listener it will be called immediately
-    * since the task has already been completed.
-    */
+     * {@inheritDoc CompletionService}
+     * <p>
+     * This future may safely be used as a NotifyingFuture if desired.  This
+     * is because if it tries to set a listener it will be called immediately
+     * since the task has already been completed.
+     */
     public NotifyingFuture<V> poll() {
         return completionQueue.poll();
     }

@@ -1,12 +1,11 @@
 package org.jgroups.demos;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import org.jgroups.JChannel;
 import org.jgroups.Message;
 import org.jgroups.ReceiverAdapter;
 import org.jgroups.View;
-
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 
 public class Chat extends ReceiverAdapter {
     JChannel channel;
@@ -16,13 +15,13 @@ public class Chat extends ReceiverAdapter {
     }
 
     public void receive(Message msg) {
-        String line="[" + msg.getSrc() + "]: " + msg.getObject();
+        String line = "[" + msg.getSrc() + "]: " + msg.getObject();
         System.out.println(line);
     }
 
     /** Method called from other app, injecting channel */
     public void start(JChannel ch) throws Exception {
-        channel=ch;
+        channel = ch;
         channel.setReceiver(this);
         channel.connect("ChatCluster");
         eventLoop();
@@ -30,8 +29,8 @@ public class Chat extends ReceiverAdapter {
     }
 
     private void start(String props, String name) throws Exception {
-        channel=new JChannel(props);
-        if(name != null)
+        channel = new JChannel(props);
+        if (name != null)
             channel.name(name);
         channel.setReceiver(this);
         channel.connect("ChatCluster");
@@ -40,34 +39,33 @@ public class Chat extends ReceiverAdapter {
     }
 
     private void eventLoop() {
-        BufferedReader in=new BufferedReader(new InputStreamReader(System.in));
-        while(true) {
+        BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
+        while (true) {
             try {
-                System.out.print("> "); System.out.flush();
-                String line=in.readLine().toLowerCase();
-                if(line.startsWith("quit") || line.startsWith("exit")) {
+                System.out.print("> ");
+                System.out.flush();
+                String line = in.readLine().toLowerCase();
+                if (line.startsWith("quit") || line.startsWith("exit")) {
                     break;
                 }
-                Message msg=new Message(null, line);
+                Message msg = new Message(null, line);
                 channel.send(msg);
-            }
-            catch(Exception e) {
+            } catch (Exception e) {
             }
         }
     }
 
-
     public static void main(String[] args) throws Exception {
-        String props="udp.xml";
-        String name=null;
+        String props = "udp.xml";
+        String name = null;
 
-        for(int i=0; i < args.length; i++) {
-            if(args[i].equals("-props")) {
-                props=args[++i];
+        for (int i = 0; i < args.length; i++) {
+            if (args[i].equals("-props")) {
+                props = args[++i];
                 continue;
             }
-            if(args[i].equals("-name")) {
-                name=args[++i];
+            if (args[i].equals("-name")) {
+                name = args[++i];
                 continue;
             }
             help();

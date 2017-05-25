@@ -1,14 +1,24 @@
 package org.jgroups.util;
 
 import java.io.IOException;
-import java.net.*;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.MulticastSocket;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.net.SocketAddress;
+import java.net.SocketException;
 import java.nio.channels.ServerSocketChannel;
 import java.util.Map;
 
 /**
  * Default implementation, ignores service names
+ *
  * @author Bela Ban
  */
+
+// TODO: 17/5/25 by zmyer
 public class DefaultSocketFactory implements SocketFactory {
 
     public Socket createSocket(String service_name) throws IOException {
@@ -19,15 +29,18 @@ public class DefaultSocketFactory implements SocketFactory {
         return new Socket(host, port);
     }
 
-    public Socket createSocket(String service_name, InetAddress address, int port) throws IOException {
+    public Socket createSocket(String service_name, InetAddress address,
+        int port) throws IOException {
         return new Socket(address, port);
     }
 
-    public Socket createSocket(String service_name, String host, int port, InetAddress localAddr, int localPort) throws IOException {
+    public Socket createSocket(String service_name, String host, int port, InetAddress localAddr,
+        int localPort) throws IOException {
         return new Socket(host, port, localAddr, localPort);
     }
 
-    public Socket createSocket(String service_name, InetAddress address, int port, InetAddress localAddr, int localPort) throws IOException {
+    public Socket createSocket(String service_name, InetAddress address, int port,
+        InetAddress localAddr, int localPort) throws IOException {
         return new Socket(address, port, localAddr, localPort);
     }
 
@@ -39,28 +52,34 @@ public class DefaultSocketFactory implements SocketFactory {
         return new ServerSocket(port);
     }
 
-    public ServerSocket createServerSocket(String service_name, int port, int backlog) throws IOException {
+    public ServerSocket createServerSocket(String service_name, int port,
+        int backlog) throws IOException {
         return new ServerSocket(port, backlog);
     }
 
-    public ServerSocket createServerSocket(String service_name, int port, int backlog, InetAddress bindAddr) throws IOException {
+    public ServerSocket createServerSocket(String service_name, int port, int backlog,
+        InetAddress bindAddr) throws IOException {
         return new ServerSocket(port, backlog, bindAddr);
     }
 
+    // TODO: 17/5/25 by zmyer
     @SuppressWarnings("UnusedParameters")
     public ServerSocketChannel createServerSocketChannel(String service_name) throws IOException {
         return ServerSocketChannel.open();
     }
 
-    public ServerSocketChannel createServerSocketChannel(String service_name, int port) throws IOException {
+    public ServerSocketChannel createServerSocketChannel(String service_name,
+        int port) throws IOException {
         return createServerSocketChannel(service_name).bind(new InetSocketAddress(port));
     }
 
-    public ServerSocketChannel createServerSocketChannel(String service_name, int port, int backlog) throws IOException {
+    public ServerSocketChannel createServerSocketChannel(String service_name, int port,
+        int backlog) throws IOException {
         return createServerSocketChannel(service_name).bind(new InetSocketAddress(port), backlog);
     }
 
-    public ServerSocketChannel createServerSocketChannel(String service_name, int port, int backlog, InetAddress bindAddr) throws IOException {
+    public ServerSocketChannel createServerSocketChannel(String service_name, int port, int backlog,
+        InetAddress bindAddr) throws IOException {
         return createServerSocketChannel(service_name).bind(new InetSocketAddress(bindAddr, port), backlog);
     }
 
@@ -68,15 +87,18 @@ public class DefaultSocketFactory implements SocketFactory {
         return new DatagramSocket();
     }
 
-    public DatagramSocket createDatagramSocket(String service_name, SocketAddress bindaddr) throws SocketException {
+    public DatagramSocket createDatagramSocket(String service_name,
+        SocketAddress bindaddr) throws SocketException {
         return new DatagramSocket(bindaddr);
     }
 
-    public DatagramSocket createDatagramSocket(String service_name, int port) throws SocketException {
+    public DatagramSocket createDatagramSocket(String service_name,
+        int port) throws SocketException {
         return new DatagramSocket(port);
     }
 
-    public DatagramSocket createDatagramSocket(String service_name, int port, InetAddress laddr) throws SocketException {
+    public DatagramSocket createDatagramSocket(String service_name, int port,
+        InetAddress laddr) throws SocketException {
         return new DatagramSocket(port, laddr);
     }
 
@@ -88,7 +110,8 @@ public class DefaultSocketFactory implements SocketFactory {
         return new MulticastSocket(port);
     }
 
-    public MulticastSocket createMulticastSocket(String service_name, SocketAddress bindaddr) throws IOException {
+    public MulticastSocket createMulticastSocket(String service_name,
+        SocketAddress bindaddr) throws IOException {
         return new MulticastSocket(bindaddr);
     }
 
@@ -104,9 +127,8 @@ public class DefaultSocketFactory implements SocketFactory {
         Util.close(sock);
     }
 
-    public Map<Object,String> getSockets() {
+    public Map<Object, String> getSockets() {
         return null;
     }
-
 
 }

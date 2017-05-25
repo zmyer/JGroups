@@ -1,12 +1,11 @@
 package org.jgroups.logging;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.Function;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Logger that delivers messages to a SLF4J logger
@@ -16,8 +15,8 @@ import java.util.function.Function;
  */
 public class Slf4jLogImpl implements Log {
     private static final Map<Function<Logger, Boolean>, String> LEVELS = new LinkedHashMap<>();
-    private static final Locale                 LOCALE = new Locale(System.getProperty("user.language"),
-                                                                    System.getProperty("user.country"));
+    private static final Locale LOCALE = new Locale(System.getProperty("user.language"),
+        System.getProperty("user.country"));
 
     static {
         LEVELS.put(Logger::isErrorEnabled, "ERROR");

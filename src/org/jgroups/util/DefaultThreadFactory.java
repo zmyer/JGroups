@@ -1,59 +1,59 @@
 package org.jgroups.util;
 
 /**
- * Thread factory mainly responsible for naming of threads. Can be replaced by
- * user. If use_numbering is set, a thread THREAD will be called THREAD-1,
- * THREAD-2, and so on.<p/> If a pattern has been set (through setPattern()),
- * then the cluster name and local address will also be added, e.g.
- * THREAD-5,MyCluster,192.168.1.5:63754 or THREAD,MyCluster,192.168.1.5:63754
+ * Thread factory mainly responsible for naming of threads. Can be replaced by user. If
+ * use_numbering is set, a thread THREAD will be called THREAD-1, THREAD-2, and so on.<p/> If a
+ * pattern has been set (through setPattern()), then the cluster name and local address will also be
+ * added, e.g. THREAD-5,MyCluster,192.168.1.5:63754 or THREAD,MyCluster,192.168.1.5:63754
  * <p/>
- * If includeClusterName and includeLocalAddress are both false, and clusterName is set, then we assume we
- * have a shared transport, and therefore print shared=clusterName.
+ * If includeClusterName and includeLocalAddress are both false, and clusterName is set, then we
+ * assume we have a shared transport, and therefore print shared=clusterName.
+ *
  * @author Vladimir Blagojevic
  * @author Bela Ban
  */
+
+// TODO: 17/5/25 by zmyer
 public class DefaultThreadFactory implements ThreadFactory {
-    protected final String  baseName;
+    protected final String baseName;
     protected final boolean createDaemons;
     protected final boolean use_numbering;
-    protected short         counter; // if numbering is enabled
-    protected boolean       includeClusterName;
-    protected String        clusterName;
-    protected boolean       includeLocalAddress;
-    protected String        address;
-
-
+    protected short counter; // if numbering is enabled
+    protected boolean includeClusterName;
+    protected String clusterName;
+    protected boolean includeLocalAddress;
+    protected String address;
 
     public DefaultThreadFactory(String baseName, boolean createDaemons) {
         this(baseName, createDaemons, false);
     }
 
     public DefaultThreadFactory(String baseName, boolean createDaemons, boolean use_numbering) {
-        this.baseName=baseName;
-        this.createDaemons=createDaemons;
-        this.use_numbering=use_numbering;
+        this.baseName = baseName;
+        this.createDaemons = createDaemons;
+        this.use_numbering = use_numbering;
     }
 
     public void setPattern(String pattern) {
-        if(pattern != null) {
-            includeClusterName=pattern.contains("c");
-            includeLocalAddress=pattern.contains("l");
+        if (pattern != null) {
+            includeClusterName = pattern.contains("c");
+            includeLocalAddress = pattern.contains("l");
         }
     }
 
     public void setIncludeClusterName(boolean includeClusterName) {
-        this.includeClusterName=includeClusterName;
+        this.includeClusterName = includeClusterName;
     }
 
     public void setClusterName(String channelName) {
-        clusterName=channelName;
+        clusterName = channelName;
     }
 
     public void setAddress(String address) {
-        this.address=address;
+        this.address = address;
     }
 
-
+    // TODO: 17/5/25 by zmyer
     public Thread newThread(Runnable r, String name) {
         return newThread(r, name, null, null);
     }
@@ -62,12 +62,13 @@ public class DefaultThreadFactory implements ThreadFactory {
         return newThread(r, baseName, null, null);
     }
 
+    // TODO: 17/5/25 by zmyer
     protected Thread newThread(Runnable r,
-                               String name,
-                               String addr,
-                               String cluster_name) {
-        String thread_name=getNewThreadName(name, addr, cluster_name);
-        Thread retval=new Thread(r, thread_name);
+        String name,
+        String addr,
+        String cluster_name) {
+        String thread_name = getNewThreadName(name, addr, cluster_name);
+        Thread retval = new Thread(r, thread_name);
         retval.setDaemon(createDaemons);
         return retval;
     }
@@ -77,17 +78,19 @@ public class DefaultThreadFactory implements ThreadFactory {
     }
 
     /**
-     * Names a thread according to base_name, cluster name and local address. If includeClusterName and includeLocalAddress
-     * are null, but cluster_name is set, then we assume we have a shared transport and name the thread shared=clusterName.
-     * In the latter case, clusterName points to the singleton_name of TP.
+     * Names a thread according to base_name, cluster name and local address. If includeClusterName
+     * and includeLocalAddress are null, but cluster_name is set, then we assume we have a shared
+     * transport and name the thread shared=clusterName. In the latter case, clusterName points to
+     * the singleton_name of TP.
+     *
      * @param base_name
      * @param thread
      * @param addr
      * @param cluster_name
      */
     public void renameThread(String base_name, Thread thread, String addr, String cluster_name) {
-        String thread_name=getThreadName(base_name, thread, addr, cluster_name);
-        if(thread_name != null)
+        String thread_name = getThreadName(base_name, thread, addr, cluster_name);
+        if (thread_name != null)
             thread.setName(thread_name);
     }
 
@@ -95,66 +98,67 @@ public class DefaultThreadFactory implements ThreadFactory {
         renameThread(null, thread);
     }
 
-    protected String getThreadName(String base_name, final Thread thread, String addr, String cluster_name) {
-        if(thread == null)
+    protected String getThreadName(String base_name, final Thread thread, String addr,
+        String cluster_name) {
+        if (thread == null)
             return null;
-        StringBuilder sb=new StringBuilder(base_name != null? base_name : thread.getName());
-        if(use_numbering) {
+        StringBuilder sb = new StringBuilder(base_name != null ? base_name : thread.getName());
+        if (use_numbering) {
             short id;
-            synchronized(this) {
-                id=++counter;
+            synchronized (this) {
+                id = ++counter;
             }
             sb.append("-").append(id);
         }
 
-        if(cluster_name == null)
-            cluster_name=clusterName;
-        if(addr == null)
-            addr=this.address;
+        if (cluster_name == null)
+            cluster_name = clusterName;
+        if (addr == null)
+            addr = this.address;
 
-        if(!includeClusterName && !includeLocalAddress && cluster_name != null) {
+        if (!includeClusterName && !includeLocalAddress && cluster_name != null) {
             sb.append(",shared=").append(cluster_name);
             return sb.toString();
         }
 
-        if(includeClusterName)
+        if (includeClusterName)
             sb.append(',').append(cluster_name);
 
-        if(includeLocalAddress)
+        if (includeLocalAddress)
             sb.append(',').append(addr);
 
-        if(use_numbering || includeClusterName || includeLocalAddress)
+        if (use_numbering || includeClusterName || includeLocalAddress)
             return sb.toString();
         return null;
     }
 
+    // TODO: 17/5/25 by zmyer
     protected String getNewThreadName(String base_name, String addr, String cluster_name) {
-        StringBuilder sb=new StringBuilder(base_name != null? base_name : "thread");
-        if(use_numbering) {
+        StringBuilder sb = new StringBuilder(base_name != null ? base_name : "thread");
+        if (use_numbering) {
             short id;
-            synchronized(this) {
-                id=++counter;
+            synchronized (this) {
+                id = ++counter;
             }
             sb.append("-").append(id);
         }
 
-        if(cluster_name == null)
-            cluster_name=clusterName;
-        if(addr == null)
-            addr=this.address;
+        if (cluster_name == null)
+            cluster_name = clusterName;
+        if (addr == null)
+            addr = this.address;
 
-        if(!includeClusterName && !includeLocalAddress && cluster_name != null) {
+        if (!includeClusterName && !includeLocalAddress && cluster_name != null) {
             sb.append(",shared=").append(cluster_name);
             return sb.toString();
         }
 
-        if(includeClusterName)
+        if (includeClusterName)
             sb.append(',').append(cluster_name);
 
-        if(includeLocalAddress)
+        if (includeLocalAddress)
             sb.append(',').append(addr);
 
         return sb.toString();
     }
-
 }

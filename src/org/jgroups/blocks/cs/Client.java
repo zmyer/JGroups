@@ -1,13 +1,13 @@
 package org.jgroups.blocks.cs;
 
-import org.jgroups.Address;
-
 import java.nio.ByteBuffer;
+import org.jgroups.Address;
 
 /**
  * Defines common operations for clients (TCP or NIO)
+ *
  * @author Bela Ban
- * @since  3.6.5
+ * @since 3.6.5
  */
 public interface Client {
     Address localAddress();

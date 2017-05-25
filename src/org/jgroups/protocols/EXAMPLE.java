@@ -1,27 +1,28 @@
 
 package org.jgroups.protocols;
 
-import org.jgroups.*;
-import org.jgroups.annotations.MBean;
-import org.jgroups.annotations.Unsupported;
-import org.jgroups.stack.Protocol;
-import org.jgroups.util.MessageBatch;
-
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
-
+import org.jgroups.Address;
+import org.jgroups.Event;
+import org.jgroups.Header;
+import org.jgroups.Message;
+import org.jgroups.View;
+import org.jgroups.annotations.MBean;
+import org.jgroups.annotations.Unsupported;
+import org.jgroups.stack.Protocol;
+import org.jgroups.util.MessageBatch;
 
 /**
  * Example of a protocol layer. Contains no real functionality, can be used as a template.
  */
 @Unsupported
-@MBean(description="Sample protocol")
+@MBean(description = "Sample protocol")
 public class EXAMPLE extends Protocol {
-    final List<Address> members=new ArrayList<>();
-
+    final List<Address> members = new ArrayList<>();
 
     /**
      * Just remove if you don't need to reset any state
@@ -29,15 +30,14 @@ public class EXAMPLE extends Protocol {
     public static void reset() {
     }
 
-
     public Object down(Event evt) {
-        switch(evt.getType()) {
+        switch (evt.getType()) {
             case Event.TMP_VIEW:
             case Event.VIEW_CHANGE:
-                List<Address> new_members=((View)evt.getArg()).getMembers();
-                synchronized(members) {
+                List<Address> new_members = ((View) evt.getArg()).getMembers();
+                synchronized (members) {
                     members.clear();
-                    if(new_members != null && !new_members.isEmpty())
+                    if (new_members != null && !new_members.isEmpty())
                         members.addAll(new_members);
                 }
                 return down_prot.down(evt);
@@ -58,21 +58,24 @@ public class EXAMPLE extends Protocol {
     }
 
     public void up(MessageBatch batch) {
-        for(Message msg: batch) {
+        for (Message msg : batch) {
             // do something; perhaps check for the presence of a header
         }
-        if(!batch.isEmpty())
+        if (!batch.isEmpty())
             up_prot.up(batch);
     }
-
-
 
     public static class ExampleHeader extends Header {
         // your variables
 
+        public Supplier<? extends Header> create() {
+            return ExampleHeader::new;
+        }
 
-        public Supplier<? extends Header> create() {return ExampleHeader::new;}
-        public short getMagicId() {return 21000;}
+        public short getMagicId() {
+            return 21000;
+        }
+
         public int serializedSize() {
             return 0; // return serialized size of all variables sent across the wire
         }
@@ -89,6 +92,5 @@ public class EXAMPLE extends Protocol {
             // initialize variables from stream
         }
     }
-
 
 }

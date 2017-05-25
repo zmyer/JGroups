@@ -10,12 +10,14 @@ public interface Counter {
 
     /**
      * Gets the current value of the counter
+     *
      * @return The current value
      */
     public long get();
 
     /**
      * Sets the counter to a new value
+     *
      * @param new_value The new value
      */
     public void set(long new_value);
@@ -31,16 +33,17 @@ public interface Counter {
 
     /**
      * Atomically increments the counter and returns the new value
+     *
      * @return The new value
      */
     public long incrementAndGet();
 
     /**
      * Atomically decrements the counter and returns the new value
+     *
      * @return The new value
      */
     public long decrementAndGet();
-
 
     /**
      * Atomically adds the given value to the current value.

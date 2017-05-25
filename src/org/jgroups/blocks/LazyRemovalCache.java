@@ -1,32 +1,39 @@
 package org.jgroups.blocks;
 
-import org.jgroups.util.Util;
-
-import java.util.*;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.jgroups.util.Util;
 
 /**
- * Cache which doesn't remove elements on remove(), removeAll() or retainAll(), but only removes elements when a
- * configurable size limit has been exceeded. In that case, all elements marked as removable and older than a
- * configurable time are evicted. Elements are marked as removable by remove(), removeAll() and retainAll(). When
- * an elements is marked as removable, but later reinserted, the mark is removed.
+ * Cache which doesn't remove elements on remove(), removeAll() or retainAll(), but only removes
+ * elements when a configurable size limit has been exceeded. In that case, all elements marked as
+ * removable and older than a configurable time are evicted. Elements are marked as removable by
+ * remove(), removeAll() and retainAll(). When an elements is marked as removable, but later
+ * reinserted, the mark is removed.
+ *
  * @author Bela Ban
  */
-public class LazyRemovalCache<K,V> {
-    private final ConcurrentMap<K, Entry<V>> map=Util.createConcurrentMap();
+public class LazyRemovalCache<K, V> {
+    private final ConcurrentMap<K, Entry<V>> map = Util.createConcurrentMap();
 
-    /** Max number of elements, if exceeded, we remove all elements marked as removable and older than max_age ms */
-    private final int  max_elements;
+    /**
+     * Max number of elements, if exceeded, we remove all elements marked as removable and older
+     * than max_age ms
+     */
+    private final int max_elements;
     private final long max_age; // ns
 
-
-    public interface Printable<K,V> {
+    public interface Printable<K, V> {
         String print(K key, V entry);
     }
-
 
     public LazyRemovalCache() {
         this(200, 5000L);
@@ -34,29 +41,30 @@ public class LazyRemovalCache<K,V> {
 
     /**
      * Creates a new instance
+     *
      * @param max_elements The max number of elements in the cache
-     * @param max_age The max age (in ms) an entry can have before it is considered expired (and can be removed on
-     *                the next sweep)
+     * @param max_age The max age (in ms) an entry can have before it is considered expired (and can
+     * be removed on the next sweep)
      */
     public LazyRemovalCache(int max_elements, long max_age) {
-        this.max_elements=max_elements;
-        this.max_age=TimeUnit.NANOSECONDS.convert(max_age, TimeUnit.MILLISECONDS);
+        this.max_elements = max_elements;
+        this.max_age = TimeUnit.NANOSECONDS.convert(max_age, TimeUnit.MILLISECONDS);
     }
 
     public boolean add(K key, V val) {
-        boolean added=false;
-        if(key != null && val != null)
-            added=map.put(key, new Entry<>(val)) == null; // overwrite existing element (new timestamp, and possible removable mark erased)
+        boolean added = false;
+        if (key != null && val != null)
+            added = map.put(key, new Entry<>(val)) == null; // overwrite existing element (new timestamp, and possible removable mark erased)
         checkMaxSizeExceeded();
         return added;
     }
 
-    public void addAll(Map<K,V> m) {
-        if(m == null)
+    public void addAll(Map<K, V> m) {
+        if (m == null)
             return;
-        for(Map.Entry<K,V> entry: m.entrySet()) {
-            K key=entry.getKey();
-            V val=entry.getValue();
+        for (Map.Entry<K, V> entry : m.entrySet()) {
+            K key = entry.getKey();
+            V val = entry.getValue();
             map.put(key, new Entry<>(val));
         }
     }
@@ -69,27 +77,30 @@ public class LazyRemovalCache<K,V> {
         return map.containsKey(key);
     }
 
-    /** Returns true if all of the keys in keys are present. Returns false if one or more of the keys are absent */
+    /**
+     * Returns true if all of the keys in keys are present. Returns false if one or more of the keys
+     * are absent
+     */
     public boolean containsKeys(Collection<K> keys) {
-        for(K key: keys)
-            if(!map.containsKey(key))
+        for (K key : keys)
+            if (!map.containsKey(key))
                 return false;
         return true;
     }
 
-
     public V get(K key) {
-        if(key == null)
+        if (key == null)
             return null;
-        Entry<V> entry=map.get(key);
-        return entry != null? entry.val : null;
+        Entry<V> entry = map.get(key);
+        return entry != null ? entry.val : null;
     }
 
     public K getByValue(V val) {
-        if(val == null) return null;
-        for(Map.Entry<K,Entry<V>> entry: map.entrySet()) {
-            Entry<V> v=entry.getValue();
-            if(Objects.equals(v.val, val))
+        if (val == null)
+            return null;
+        for (Map.Entry<K, Entry<V>> entry : map.entrySet()) {
+            Entry<V> v = entry.getValue();
+            if (Objects.equals(v.val, val))
                 return entry.getKey();
         }
         return null;
@@ -100,13 +111,13 @@ public class LazyRemovalCache<K,V> {
     }
 
     public void remove(K key, boolean force) {
-        if(key == null)
+        if (key == null)
             return;
-        if(force)
+        if (force)
             map.remove(key);
         else {
-            Entry<V> entry=map.get(key);
-            if(entry != null)
+            Entry<V> entry = map.get(key);
+            if (entry != null)
                 entry.setRemovable(true);
         }
         checkMaxSizeExceeded();
@@ -117,14 +128,14 @@ public class LazyRemovalCache<K,V> {
     }
 
     public void removeAll(Collection<K> keys, boolean force) {
-        if(keys == null || keys.isEmpty())
+        if (keys == null || keys.isEmpty())
             return;
-        if(force)
+        if (force)
             map.keySet().removeAll(keys);
         else {
-            for(K key: keys) {
-                Entry<V> entry=map.get(key);
-                if(entry != null)
+            for (K key : keys) {
+                Entry<V> entry = map.get(key);
+                if (entry != null)
                     entry.setRemovable(true);
             }
         }
@@ -132,14 +143,14 @@ public class LazyRemovalCache<K,V> {
     }
 
     public void clear(boolean force) {
-        if(force)
+        if (force)
             map.clear();
         else {
-            for(Map.Entry<K,Entry<V>> entry: map.entrySet()) {
-                Entry<V> val=entry.getValue();
-                if(val != null) {
-                    Entry<V> tmp=entry.getValue();
-                    if(tmp != null)
+            for (Map.Entry<K, Entry<V>> entry : map.entrySet()) {
+                Entry<V> val = entry.getValue();
+                if (val != null) {
+                    Entry<V> tmp = entry.getValue();
+                    if (tmp != null)
                         tmp.setRemovable(true);
                 }
             }
@@ -151,22 +162,22 @@ public class LazyRemovalCache<K,V> {
     }
 
     public void retainAll(Collection<K> keys, boolean force) {
-        if(keys == null || keys.isEmpty())
+        if (keys == null || keys.isEmpty())
             return;
-        if(force)
+        if (force)
             map.keySet().retainAll(keys);
         else {
             map.entrySet().stream().filter(entry -> !keys.contains(entry.getKey())).forEach(entry -> {
-                Entry<V> val=entry.getValue();
-                if(val != null)
+                Entry<V> val = entry.getValue();
+                if (val != null)
                     val.setRemovable(true);
             });
         }
 
         // now make sure that all elements in keys have removable=false
-        for(K key: keys) {
-            Entry<V> val=map.get(key);
-            if(val != null && val.removable)
+        for (K key : keys) {
+            Entry<V> val = map.get(key);
+            if (val != null && val.removable)
                 val.setRemovable(false);
         }
 
@@ -187,21 +198,22 @@ public class LazyRemovalCache<K,V> {
 
     /**
      * Adds all value which have not been marked as removable to the returned set
+     *
      * @return
      */
     public Set<V> nonRemovedValues() {
         return map.values().stream().filter(entry -> !entry.removable).map(entry -> entry.val).collect(Collectors.toSet());
     }
 
-    public Map<K,V> contents() {
+    public Map<K, V> contents() {
         return contents(false);
     }
 
-    public Map<K,V> contents(boolean skip_removed_values) {
-        Map<K,V> retval=new HashMap<>();
-        for(Map.Entry<K,Entry<V>> entry: map.entrySet()) {
-            Entry<V> val=entry.getValue();
-            if(val.isRemovable() && skip_removed_values)
+    public Map<K, V> contents(boolean skip_removed_values) {
+        Map<K, V> retval = new HashMap<>();
+        for (Map.Entry<K, Entry<V>> entry : map.entrySet()) {
+            Entry<V> val = entry.getValue();
+            if (val.isRemovable() && skip_removed_values)
                 continue;
             retval.put(entry.getKey(), entry.getValue().val);
         }
@@ -213,17 +225,17 @@ public class LazyRemovalCache<K,V> {
     }
 
     public String printCache() {
-        StringBuilder sb=new StringBuilder();
-        for(Map.Entry<K,Entry<V>> entry: map.entrySet()) {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<K, Entry<V>> entry : map.entrySet()) {
             sb.append(entry.getKey()).append(": ").append(entry.getValue()).append("\n");
         }
         return sb.toString();
     }
 
     public String printCache(Printable print_function) {
-        StringBuilder sb=new StringBuilder();
-        for(Map.Entry<K,Entry<V>> entry: map.entrySet()) {
-            K key=entry.getKey();
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<K, Entry<V>> entry : map.entrySet()) {
+            K key = entry.getKey();
             sb.append(print_function.print(key, entry.getValue()));
         }
         return sb.toString();
@@ -233,24 +245,25 @@ public class LazyRemovalCache<K,V> {
         return printCache();
     }
 
-
     private void checkMaxSizeExceeded() {
-        if(map.size() > max_elements)
+        if (map.size() > max_elements)
             removeMarkedElements(false);
     }
 
     /**
      * Removes elements marked as removable
-     * @param force If set to true, all elements marked as 'removable' will get removed, regardless of expiration
+     *
+     * @param force If set to true, all elements marked as 'removable' will get removed, regardless
+     * of expiration
      */
     public void removeMarkedElements(boolean force) {
-        long curr_time=System.nanoTime();
-        for(Iterator<Map.Entry<K,Entry<V>>> it=map.entrySet().iterator(); it.hasNext();) {
-            Map.Entry<K, Entry<V>> entry=it.next();
-            Entry<V> tmp=entry.getValue();
-            if(tmp == null)
+        long curr_time = System.nanoTime();
+        for (Iterator<Map.Entry<K, Entry<V>>> it = map.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<K, Entry<V>> entry = it.next();
+            Entry<V> tmp = entry.getValue();
+            if (tmp == null)
                 continue;
-            if(tmp.removable && (force || (curr_time - tmp.timestamp) >= max_age)) {
+            if (tmp.removable && (force || (curr_time - tmp.timestamp) >= max_age)) {
                 it.remove();
             }
         }
@@ -263,14 +276,13 @@ public class LazyRemovalCache<K,V> {
         removeMarkedElements(false);
     }
 
-
     public static class Entry<V> {
-        protected final V    val;
-        protected long       timestamp=System.nanoTime();
-        protected boolean    removable=false;
+        protected final V val;
+        protected long timestamp = System.nanoTime();
+        protected boolean removable = false;
 
         public Entry(V val) {
-            this.val=val;
+            this.val = val;
         }
 
         public boolean isRemovable() {
@@ -278,9 +290,9 @@ public class LazyRemovalCache<K,V> {
         }
 
         public void setRemovable(boolean flag) {
-            if(this.removable != flag) {
-                this.removable=flag;
-                timestamp=System.nanoTime();
+            if (this.removable != flag) {
+                this.removable = flag;
+                timestamp = System.nanoTime();
             }
         }
 
@@ -292,14 +304,14 @@ public class LazyRemovalCache<K,V> {
             return toString(null);
         }
 
-        public String toString(Function<V,String> print_val) {
-            StringBuilder sb=new StringBuilder(print_val != null? print_val.apply(val) : val.toString()).append(" (");
-            long age=TimeUnit.MILLISECONDS.convert(System.nanoTime() - timestamp, TimeUnit.NANOSECONDS);
-            if(age < 1000)
+        public String toString(Function<V, String> print_val) {
+            StringBuilder sb = new StringBuilder(print_val != null ? print_val.apply(val) : val.toString()).append(" (");
+            long age = TimeUnit.MILLISECONDS.convert(System.nanoTime() - timestamp, TimeUnit.NANOSECONDS);
+            if (age < 1000)
                 sb.append(age).append(" ms");
             else
                 sb.append(TimeUnit.SECONDS.convert(age, TimeUnit.MILLISECONDS)).append(" secs");
-            sb.append(" old").append((removable? ", removable" : "")).append(")");
+            sb.append(" old").append((removable ? ", removable" : "")).append(")");
             return sb.toString();
         }
 

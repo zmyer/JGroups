@@ -1,58 +1,64 @@
 
 package org.jgroups.demos;
 
-
-import org.jgroups.*;
+import java.awt.Button;
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.Frame;
+import java.awt.Label;
+import java.awt.Rectangle;
+import java.awt.TextField;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.WindowEvent;
+import java.awt.event.WindowListener;
+import java.util.Map;
+import org.jgroups.Address;
+import org.jgroups.JChannel;
+import org.jgroups.MembershipListener;
+import org.jgroups.View;
 import org.jgroups.blocks.RequestOptions;
 import org.jgroups.blocks.ResponseMode;
 import org.jgroups.blocks.RpcDispatcher;
 import org.jgroups.util.Rsp;
 import org.jgroups.util.RspList;
 
-import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.WindowEvent;
-import java.awt.event.WindowListener;
-import java.util.Map;
-
-
 /**
- * Used in conjunction with QuoteServer: a client is member of a group of quote servers which replicate
- * stock quotes among themselves. The client broadcasts its request (set, get quotes) and (in the case of get
- * waits for the first reply received (usually the one from the quote server closest to it). The client
- * can get and set quotes as long as a minimum of 1 server (in the group) is running.
+ * Used in conjunction with QuoteServer: a client is member of a group of quote servers which
+ * replicate stock quotes among themselves. The client broadcasts its request (set, get quotes) and
+ * (in the case of get waits for the first reply received (usually the one from the quote server
+ * closest to it). The client can get and set quotes as long as a minimum of 1 server (in the group)
+ * is running.
+ *
  * @author Bela Ban
  */
 public class QuoteClient extends Frame implements WindowListener, ActionListener,
-        MembershipListener {
-    static final String channel_name="Quotes";
+    MembershipListener {
+    static final String channel_name = "Quotes";
     RpcDispatcher disp;
     JChannel channel;
-    final Button get=new Button("Get");
-    final Button set=new Button("Set");
-    final Button quit=new Button("Quit");
-    final Button get_all=new Button("All");
-    final Label stock=new Label("Stock");
-    final Label value=new Label("Value");
-    final Label err_msg=new Label("Error");
-    final TextField stock_field=new TextField();
-    final TextField value_field=new TextField();
-    final java.awt.List listbox=new java.awt.List();
-    final Font default_font=new Font("Helvetica", Font.PLAIN, 12);
+    final Button get = new Button("Get");
+    final Button set = new Button("Set");
+    final Button quit = new Button("Quit");
+    final Button get_all = new Button("All");
+    final Label stock = new Label("Stock");
+    final Label value = new Label("Value");
+    final Label err_msg = new Label("Error");
+    final TextField stock_field = new TextField();
+    final TextField value_field = new TextField();
+    final java.awt.List listbox = new java.awt.List();
+    final Font default_font = new Font("Helvetica", Font.PLAIN, 12);
 
-    static final String props=null; // default stack from JChannel
-
+    static final String props = null; // default stack from JChannel
 
     public QuoteClient() {
         super();
         try {
-            channel=new JChannel(props);
+            channel = new JChannel(props);
             channel.setDiscardOwnMessages(true);
-            disp=(RpcDispatcher)new RpcDispatcher(channel, this).setMembershipListener(this);
+            disp = (RpcDispatcher) new RpcDispatcher(channel, this).setMembershipListener(this);
             channel.connect(channel_name);
-        }
-        catch(Exception e) {
+        } catch (Exception e) {
             System.err.println("QuoteClient(): " + e);
         }
         addWindowListener(this);
@@ -66,7 +72,6 @@ public class QuoteClient extends Frame implements WindowListener, ActionListener
     private void clearMsg() {
         err_msg.setVisible(false);
     }
-
 
     public void start() {
         setLayout(null);
@@ -106,7 +111,6 @@ public class QuoteClient extends Frame implements WindowListener, ActionListener
         setVisible(true);
     }
 
-
     public void windowActivated(WindowEvent e) {
     }
 
@@ -129,83 +133,81 @@ public class QuoteClient extends Frame implements WindowListener, ActionListener
     public void windowOpened(WindowEvent e) {
     }
 
-
     public void actionPerformed(ActionEvent e) {
-        String command=e.getActionCommand();
+        String command = e.getActionCommand();
 
         try {
-            switch(command) {
+            switch (command) {
                 case "Get": {
-                    String stock_name=stock_field.getText();
-                    if(stock_name == null || stock_name.isEmpty()) {
+                    String stock_name = stock_field.getText();
+                    if (stock_name == null || stock_name.isEmpty()) {
                         showMsg("Stock name is empty !");
                         return;
                     }
                     showMsg("Looking up value for " + stock_name + ':');
-                    RspList<Object> quotes=disp.callRemoteMethods(null, "getQuote", new Object[]{stock_name},
-                                                                  new Class[]{String.class},
-                                                                  new RequestOptions(ResponseMode.GET_ALL, 10000));
+                    RspList<Object> quotes = disp.callRemoteMethods(null, "getQuote", new Object[] {stock_name},
+                        new Class[] {String.class},
+                        new RequestOptions(ResponseMode.GET_ALL, 10000));
 
-                    Float val=null;
-                    for(Rsp<Object> rsp : quotes.values()) {
-                        Object quote=rsp.getValue();
-                        if(quote == null || quote instanceof Throwable)
+                    Float val = null;
+                    for (Rsp<Object> rsp : quotes.values()) {
+                        Object quote = rsp.getValue();
+                        if (quote == null || quote instanceof Throwable)
                             continue;
-                        val=(Float)quote;
+                        val = (Float) quote;
                         break;
                     }
 
-                    if(val != null) {
+                    if (val != null) {
                         value_field.setText(val.toString());
                         clearMsg();
-                    }
-                    else {
+                    } else {
                         value_field.setText("");
                         showMsg("Value for " + stock_name + " not found");
                     }
                     break;
                 }
                 case "Set":
-                    String stock_name=stock_field.getText();
-                    String stock_val=value_field.getText();
-                    if(stock_name == null || stock_val == null || stock_name.isEmpty() ||
-                      stock_val.isEmpty()) {
+                    String stock_name = stock_field.getText();
+                    String stock_val = value_field.getText();
+                    if (stock_name == null || stock_val == null || stock_name.isEmpty() ||
+                        stock_val.isEmpty()) {
                         showMsg("Stock name and value have to be present to enter a new value");
                         return;
                     }
-                    Float val=new Float(stock_val);
-                    disp.callRemoteMethods(null, "setQuote", new Object[]{stock_name, val},
-                                           new Class[]{String.class, Float.class},
-                                           new RequestOptions(ResponseMode.GET_FIRST, 0));
+                    Float val = new Float(stock_val);
+                    disp.callRemoteMethods(null, "setQuote", new Object[] {stock_name, val},
+                        new Class[] {String.class, Float.class},
+                        new RequestOptions(ResponseMode.GET_FIRST, 0));
 
                     showMsg("Stock " + stock_name + " set to " + val);
                     break;
                 case "All":
                     listbox.removeAll();
                     showMsg("Getting all stocks:");
-                    RspList<Object> rsp_list=disp.callRemoteMethods(null, "getAllStocks",
-                                                                    null, null,
-                                                                    new RequestOptions(ResponseMode.GET_ALL, 5000));
+                    RspList<Object> rsp_list = disp.callRemoteMethods(null, "getAllStocks",
+                        null, null,
+                        new RequestOptions(ResponseMode.GET_ALL, 5000));
 
                     System.out.println("rsp_list is " + rsp_list);
 
-                    Map<String,Float> all_stocks=null;
-                    for(Rsp rsp : rsp_list.values()) {
-                        Object obj=rsp.getValue();
-                        if(obj == null || obj instanceof Throwable)
+                    Map<String, Float> all_stocks = null;
+                    for (Rsp rsp : rsp_list.values()) {
+                        Object obj = rsp.getValue();
+                        if (obj == null || obj instanceof Throwable)
                             continue;
-                        all_stocks=(Map<String,Float>)obj;
+                        all_stocks = (Map<String, Float>) obj;
                         break;
                     }
 
-                    if(all_stocks == null) {
+                    if (all_stocks == null) {
                         showMsg("No stocks found");
                         return;
                     }
                     clearMsg();
                     listbox.removeAll();
                     all_stocks.entrySet().stream().filter(entry -> entry.getValue() != null)
-                      .forEach(entry -> listbox.add(entry.getKey() + ": " + entry.getValue().toString()));
+                        .forEach(entry -> listbox.add(entry.getKey() + ": " + entry.getValue().toString()));
                     break;
                 case "Quit":
                     setVisible(false);
@@ -215,15 +217,12 @@ public class QuoteClient extends Frame implements WindowListener, ActionListener
                     System.out.println("Unknown action");
                     break;
             }
-        }
-        catch(Exception ex) {
+        } catch (Exception ex) {
             value_field.setText("");
             ex.printStackTrace();
             showMsg(ex.toString());
         }
     }
-
-
 
     @SuppressWarnings("UnusedParameters")
     public static void setQuote(String stock_name, Float value) {
@@ -232,7 +231,6 @@ public class QuoteClient extends Frame implements WindowListener, ActionListener
 
     public void printAllStocks() {
     }
-
 
     public void viewAccepted(View new_view) {
         setTitle("Members in " + channel_name + ": " + (new_view.size() - 1));
@@ -248,7 +246,7 @@ public class QuoteClient extends Frame implements WindowListener, ActionListener
     }
 
     public static void main(String args[]) {
-        QuoteClient client=new QuoteClient();
+        QuoteClient client = new QuoteClient();
         client.start();
     }
 
