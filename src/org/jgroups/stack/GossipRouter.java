@@ -63,6 +63,7 @@ import org.jgroups.util.Util;
  * @author Ovidiu Feodorov <ovidiuf@users.sourceforge.net>
  * @since 2.1.1
  */
+// TODO: 17/7/5 by zmyer
 public class GossipRouter extends ReceiverAdapter implements ConnectionListener {
     @ManagedAttribute(description = "address to which the GossipRouter should bind", writable = true, name = "bind_address")
     protected String bind_addr;

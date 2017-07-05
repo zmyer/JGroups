@@ -12,6 +12,8 @@ import org.jgroups.util.MessageBatch;
  * @author Bela Ban
  * @since 2.0
  */
+
+// TODO: 17/5/25 by zmyer
 public class ReceiverAdapter implements Receiver {
 
     public void receive(Message msg) {
@@ -21,7 +23,7 @@ public class ReceiverAdapter implements Receiver {
         for (Message msg : batch) {
             try {
                 receive(msg);
-            } catch (Throwable t) {
+            } catch (Throwable ignored) {
             }
         }
     }

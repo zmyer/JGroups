@@ -6,37 +6,47 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 
-
 /**
- * Ring buffer of fixed capacity designed for multiple writers but only a single reader. Advancing the read or
- * write index blocks until it is possible to do so.
+ * Ring buffer of fixed capacity designed for multiple writers but only a single reader. Advancing
+ * the read or write index blocks until it is possible to do so.
+ *
  * @author Bela Ban
- * @since  4.0
+ * @since 4.0
  */
 public class RingBuffer<T> {
-    protected final T[]          buf;
-    protected int                ri, wi;   // read and write indices
-    protected int                count;    // number of elements available to be read
-    protected final Lock         lock=new ReentrantLock();
-    protected final Condition    not_empty=lock.newCondition(); // reader can block on this
-    protected final Condition    not_full=lock.newCondition();  // writes can block on this
+    protected final T[] buf;
+    protected int ri, wi;   // read and write indices
+    protected int count;    // number of elements available to be read
+    protected final Lock lock = new ReentrantLock();
+    protected final Condition not_empty = lock.newCondition(); // reader can block on this
+    protected final Condition not_full = lock.newCondition();  // writes can block on this
 
     public RingBuffer(Class<T> element_type, int capacity) {
-        int c=Util.getNextHigherPowerOfTwo(capacity); // power of 2 for faster mod operation
-        buf=(T[])Array.newInstance(element_type, c);
+        int c = Util.getNextHigherPowerOfTwo(capacity); // power of 2 for faster mod operation
+        buf = (T[]) Array.newInstance(element_type, c);
     }
 
-    public T[] buf()               {return buf;}
-    public int capacity()          {return buf.length;}
-    public int readIndexLockless() {return ri;}
-    public int countLockLockless() {return count;}
+    public T[] buf() {
+        return buf;
+    }
+
+    public int capacity() {
+        return buf.length;
+    }
+
+    public int readIndexLockless() {
+        return ri;
+    }
+
+    public int countLockLockless() {
+        return count;
+    }
 
     public int readIndex() {
         lock.lock();
         try {
             return ri;
-        }
-        finally {
+        } finally {
             lock.unlock();
         }
     }
@@ -45,8 +55,7 @@ public class RingBuffer<T> {
         lock.lock();
         try {
             return wi;
-        }
-        finally {
+        } finally {
             lock.unlock();
         }
     }
@@ -55,71 +64,65 @@ public class RingBuffer<T> {
         lock.lock();
         try {
             return count;
-        }
-        finally {
+        } finally {
             lock.unlock();
         }
     }
 
-
-
     /**
-     * Tries to add a new element at the current write index and advances the write index. If the write index is at the
-     * same position as the read index, this will block until the read index is advanced.
-     * @param element the element to be added. Must not be null, or else this operation returns immediately without
-     *                adding the null element
+     * Tries to add a new element at the current write index and advances the write index. If the
+     * write index is at the same position as the read index, this will block until the read index
+     * is advanced.
+     *
+     * @param element the element to be added. Must not be null, or else this operation returns
+     * immediately without adding the null element
      */
     public RingBuffer<T> put(T element) throws InterruptedException {
-        if(element == null)
+        if (element == null)
             return this;
         lock.lock();
         try {
-            while(count == buf.length)
+            while (count == buf.length)
                 not_full.await();
 
-            buf[wi]=element;
-            if(++wi == buf.length)
-                wi=0;
+            buf[wi] = element;
+            if (++wi == buf.length)
+                wi = 0;
             count++;
             not_empty.signal();
             return this;
-        }
-        finally {
+        } finally {
             lock.unlock();
         }
     }
-
 
     public T take() throws InterruptedException {
         lock.lock();
         try {
-            while(count == 0)
+            while (count == 0)
                 not_empty.await();
-            T el=buf[ri];
-            buf[ri]=null;
-            if(++ri == buf.length)
-                ri=0;
+            T el = buf[ri];
+            buf[ri] = null;
+            if (++ri == buf.length)
+                ri = 0;
             count--;
             not_full.signal();
             return el;
-        }
-        finally {
+        } finally {
             lock.unlock();
         }
     }
 
-
     public RingBuffer<T> publishReadIndex(int num_elements_read) {
         // this.ri is only read/written by the consumer, and since there's only 1 consumer, there's no need to synchronize on it
-        this.ri=realIndex(this.ri + num_elements_read);
+        this.ri = realIndex(this.ri + num_elements_read);
 
         lock.lock();
         try {
-            this.count-=num_elements_read;
+            this.count -= num_elements_read;
             not_full.signalAll(); // wake up all writers
             return this;
-        }
-        finally {
+        } finally {
             lock.unlock();
         }
     }
@@ -130,43 +133,42 @@ public class RingBuffer<T> {
     }
 
     /**
-     *  Blocks until messages are available
-     *  @param num_spins the number of times we should spin before acquiring a lock
-     *  @param wait_strategy the strategy used to spin. The first parameter is the iteration count and the second
-     *                       parameter is the max number of spins
+     * Blocks until messages are available
+     *
+     * @param num_spins the number of times we should spin before acquiring a lock
+     * @param wait_strategy the strategy used to spin. The first parameter is the iteration count
+     * and the second parameter is the max number of spins
      */
 
-    public int waitForMessages(int num_spins, final BiConsumer<Integer,Integer> wait_strategy) throws InterruptedException {
+    public int waitForMessages(int num_spins,
+        final BiConsumer<Integer, Integer> wait_strategy) throws InterruptedException {
         // try spinning first (experimental)
-        for(int i=0; i < num_spins && count == 0; i++) {
-            if(wait_strategy != null)
+        for (int i = 0; i < num_spins && count == 0; i++) {
+            if (wait_strategy != null)
                 wait_strategy.accept(i, num_spins);
             else
                 Thread.yield();
         }
-        if(count == 0) {
+        if (count == 0) {
             lock.lock();
             try {
-                while(count == 0)
+                while (count == 0)
                     not_empty.await();
-            }
-            finally {
+            } finally {
                 lock.unlock();
             }
         }
         return count; // whatever is the last count; could have been updated since lock release
     }
 
-
     public RingBuffer<T> clear() {
         lock.lock();
         try {
-            count=ri=wi=0;
-            for(int i=0; i < buf.length; i++)
-                buf[i]=null;
+            count = ri = wi = 0;
+            for (int i = 0; i < buf.length; i++)
+                buf[i] = null;
             return this;
-        }
-        finally {
+        } finally {
             lock.unlock();
         }
     }
@@ -175,8 +177,7 @@ public class RingBuffer<T> {
         lock.lock();
         try {
             return count;
-        }
-        finally {
+        } finally {
             lock.unlock();
         }
     }
@@ -185,8 +186,7 @@ public class RingBuffer<T> {
         lock.lock();
         try {
             return ri == wi;
-        }
-        finally {
+        } finally {
             lock.unlock();
         }
     }
@@ -195,11 +195,8 @@ public class RingBuffer<T> {
         return String.format("[ri=%d wi=%d size=%d cap=%d]", ri, wi, size(), buf.length);
     }
 
-
     /** Apparently much more efficient than mod (%) */
-    protected int realIndex(int index) {
-        return index & (buf.length -1);
+    private int realIndex(int index) {
+        return index & (buf.length - 1);
     }
-
-
 }

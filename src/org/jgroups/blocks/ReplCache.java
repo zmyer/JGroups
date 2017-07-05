@@ -33,8 +33,8 @@ import org.jgroups.util.Util;
  *
  * @author Bela Ban
  */
+// TODO: 17/7/4 by zmyer
 public class ReplCache<K, V> implements MembershipListener, Cache.ChangeListener {
-
     /**
      * The cache in which all entries are located. The value is a tuple, consisting of the
      * replication count and the actual value
@@ -110,15 +110,15 @@ public class ReplCache<K, V> implements MembershipListener, Cache.ChangeListener
         }
     }
 
-    public interface HashFunction<K> {
+    interface HashFunction<K> {
 
         /**
          * Function that, given a key and a replication count, returns replication_count number of
          * <em>different</em> addresses of nodes.
          *
-         * @param key
-         * @param replication_count
-         * @return
+         * @param key key
+         * @param replication_count replication count
+         * @return address list
          */
         List<Address> hash(K key, short replication_count);
 
@@ -126,12 +126,12 @@ public class ReplCache<K, V> implements MembershipListener, Cache.ChangeListener
          * When the topology changes, this method will be called. Implementations will typically
          * cache the node list
          *
-         * @param nodes
+         * @param nodes node address list
          */
         void installNodes(List<Address> nodes);
     }
 
-    public interface HashFunctionFactory<K> {
+    interface HashFunctionFactory<K> {
         HashFunction<K> create();
     }
 
@@ -384,6 +384,7 @@ public class ReplCache<K, V> implements MembershipListener, Cache.ChangeListener
      * @param key The key, has to be serializable
      * @return The value associated with key, or null
      */
+    @SuppressWarnings("unchecked")
     @ManagedOperation
     public V get(K key) {
 
@@ -457,7 +458,8 @@ public class ReplCache<K, V> implements MembershipListener, Cache.ChangeListener
     public void remove(K key, boolean synchronous) {
         try {
             disp.callRemoteMethods(null, new MethodCall(REMOVE, key),
-                new RequestOptions(synchronous ? ResponseMode.GET_ALL : ResponseMode.GET_NONE, call_timeout));
+                new RequestOptions(synchronous ?
+                    ResponseMode.GET_ALL : ResponseMode.GET_NONE, call_timeout));
             if (l1_cache != null)
                 l1_cache.remove(key);
         } catch (Throwable t) {
@@ -475,22 +477,19 @@ public class ReplCache<K, V> implements MembershipListener, Cache.ChangeListener
         mcastClear(keys, false);
     }
 
-    public V _put(K key, V val, short repl_count, long timeout) {
+    private V _put(K key, V val, short repl_count, long timeout) {
         return _put(key, val, repl_count, timeout, false);
     }
 
     /**
-     * @param key
-     * @param val
-     * @param repl_count
-     * @param timeout
+     * @param key key
+     * @param val value
+     * @param repl_count replication count
+     * @param timeout timeout
      * @param force Skips acceptance checking and simply adds the key/value
-     * @return
      */
-    public V _put(K key, V val, short repl_count, long timeout, boolean force) {
-
+    private V _put(K key, V val, short repl_count, long timeout, boolean force) {
         if (!force) {
-
             // check if we need to host the data
             boolean accept = repl_count == -1;
 
@@ -498,7 +497,8 @@ public class ReplCache<K, V> implements MembershipListener, Cache.ChangeListener
                 if (view != null && repl_count >= view.size()) {
                     accept = true;
                 } else {
-                    List<Address> selected_hosts = hash_function != null ? hash_function.hash(key, repl_count) : null;
+                    List<Address> selected_hosts =
+                        hash_function != null ? hash_function.hash(key, repl_count) : null;
                     if (selected_hosts != null) {
                         if (log.isTraceEnabled())
                             log.trace("local=" + local_addr + ", hosts=" + selected_hosts);
@@ -529,13 +529,13 @@ public class ReplCache<K, V> implements MembershipListener, Cache.ChangeListener
         return retval != null ? retval.getVal() : null;
     }
 
-    public Cache.Value<Value<V>> _get(K key) {
+    private Cache.Value<Value<V>> _get(K key) {
         if (log.isTraceEnabled())
             log.trace("_get(" + key + ")");
         return l2_cache.getEntry(key);
     }
 
-    public V _remove(K key) {
+    private V _remove(K key) {
         if (log.isTraceEnabled())
             log.trace("_remove(" + key + ")");
         Value<V> retval = l2_cache.remove(key);
@@ -545,14 +545,15 @@ public class ReplCache<K, V> implements MembershipListener, Cache.ChangeListener
         return retval != null ? retval.getVal() : null;
     }
 
-    public void _removeMany(Set<K> keys) {
+    private void _removeMany(Set<K> keys) {
         if (log.isTraceEnabled())
             log.trace("_removeMany(): " + keys.size() + " entries");
         keys.forEach(this::_remove);
     }
 
     public void viewAccepted(final View new_view) {
-        final List<Address> old_nodes = this.view != null ? new ArrayList<>(this.view.getMembers()) : null;
+        final List<Address> old_nodes =
+            this.view != null ? new ArrayList<>(this.view.getMembers()) : null;
 
         this.view = new_view;
         if (log.isDebugEnabled())
@@ -565,7 +566,8 @@ public class ReplCache<K, V> implements MembershipListener, Cache.ChangeListener
             l.viewAccepted(new_view);
 
         if (old_nodes != null) {
-            timer.schedule(() -> rebalance(old_nodes, new ArrayList<>(new_view.getMembers())), 100, TimeUnit.MILLISECONDS);
+            timer.schedule(() -> rebalance(old_nodes,
+                new ArrayList<>(new_view.getMembers())), 100, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -585,8 +587,8 @@ public class ReplCache<K, V> implements MembershipListener, Cache.ChangeListener
     public String toString() {
         StringBuilder sb = new StringBuilder();
         if (l1_cache != null)
-            sb.append("L1 cache: " + l1_cache.getSize() + " entries");
-        sb.append("\nL2 cache: " + l2_cache.getSize() + " entries()");
+            sb.append("L1 cache: ").append(l1_cache.getSize()).append(" entries");
+        sb.append("\nL2 cache: ").append(l2_cache.getSize()).append(" entries()");
         return sb.toString();
     }
 
@@ -714,7 +716,8 @@ public class ReplCache<K, V> implements MembershipListener, Cache.ChangeListener
     private void mcastClear(Set<K> keys, boolean synchronous) {
         try {
             ResponseMode mode = synchronous ? ResponseMode.GET_ALL : ResponseMode.GET_NONE;
-            disp.callRemoteMethods(null, new MethodCall(REMOVE_MANY, keys), new RequestOptions(mode, call_timeout));
+            disp.callRemoteMethods(null, new MethodCall(REMOVE_MANY, keys),
+                new RequestOptions(mode, call_timeout));
         } catch (Throwable t) {
             if (log.isWarnEnabled())
                 log.warn("clear() failed", t);
@@ -737,7 +740,7 @@ public class ReplCache<K, V> implements MembershipListener, Cache.ChangeListener
         void changed();
     }
 
-    public static class ConsistentHashFunction<K> implements HashFunction<K> {
+    private static class ConsistentHashFunction<K> implements HashFunction<K> {
         private final SortedMap<Short, Address> nodes = new TreeMap<>();
         private final static int HASH_SPACE = 2048; // must be > max number of nodes in a cluster and a power of 2
         private final static int FACTOR = 3737; // to better spread the node out across the space
@@ -787,12 +790,11 @@ public class ReplCache<K, V> implements MembershipListener, Cache.ChangeListener
             if (log.isTraceEnabled()) {
                 StringBuilder sb = new StringBuilder("node mappings:\n");
                 for (Map.Entry<Short, Address> entry : nodes.entrySet()) {
-                    sb.append(entry.getKey() + ": " + entry.getValue()).append("\n");
+                    sb.append(entry.getKey()).append(": ").append(entry.getValue()).append("\n");
                 }
                 log.trace(sb);
             }
         }
-
     }
 
     public static class Value<V> implements Serializable {
@@ -839,6 +841,7 @@ public class ReplCache<K, V> implements MembershipListener, Cache.ChangeListener
             }
         }
 
+        @SuppressWarnings("unchecked")
         public Object objectFromStream(DataInput in) throws Exception {
             byte type = in.readByte();
             if (type == NULL)

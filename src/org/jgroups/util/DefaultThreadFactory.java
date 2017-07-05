@@ -15,13 +15,13 @@ package org.jgroups.util;
 
 // TODO: 17/5/25 by zmyer
 public class DefaultThreadFactory implements ThreadFactory {
-    protected final String baseName;
-    protected final boolean createDaemons;
-    protected final boolean use_numbering;
+    final String baseName;
+    private final boolean createDaemons;
+    private final boolean use_numbering;
     protected short counter; // if numbering is enabled
-    protected boolean includeClusterName;
+    private boolean includeClusterName;
     protected String clusterName;
-    protected boolean includeLocalAddress;
+    private boolean includeLocalAddress;
     protected String address;
 
     public DefaultThreadFactory(String baseName, boolean createDaemons) {
@@ -83,12 +83,12 @@ public class DefaultThreadFactory implements ThreadFactory {
      * transport and name the thread shared=clusterName. In the latter case, clusterName points to
      * the singleton_name of TP.
      *
-     * @param base_name
-     * @param thread
-     * @param addr
-     * @param cluster_name
+     * @param base_name base name
+     * @param thread thread
+     * @param addr address
+     * @param cluster_name cluster name
      */
-    public void renameThread(String base_name, Thread thread, String addr, String cluster_name) {
+    private void renameThread(String base_name, Thread thread, String addr, String cluster_name) {
         String thread_name = getThreadName(base_name, thread, addr, cluster_name);
         if (thread_name != null)
             thread.setName(thread_name);
@@ -98,7 +98,7 @@ public class DefaultThreadFactory implements ThreadFactory {
         renameThread(null, thread);
     }
 
-    protected String getThreadName(String base_name, final Thread thread, String addr,
+    private String getThreadName(String base_name, final Thread thread, String addr,
         String cluster_name) {
         if (thread == null)
             return null;
@@ -133,7 +133,7 @@ public class DefaultThreadFactory implements ThreadFactory {
     }
 
     // TODO: 17/5/25 by zmyer
-    protected String getNewThreadName(String base_name, String addr, String cluster_name) {
+    private String getNewThreadName(String base_name, String addr, String cluster_name) {
         StringBuilder sb = new StringBuilder(base_name != null ? base_name : "thread");
         if (use_numbering) {
             short id;

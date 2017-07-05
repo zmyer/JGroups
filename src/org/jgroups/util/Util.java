@@ -3455,7 +3455,7 @@ public class Util {
         String retval = null;
         try {
             retval = shortName(InetAddress.getLocalHost().getHostName());
-        } catch (Throwable e) {
+        } catch (Throwable ignored) {
         }
         if (retval == null) {
             try {
@@ -3494,6 +3494,7 @@ public class Util {
         }
     }
 
+    // TODO: 17/5/25 by zmyer
     public static ServerSocket createServerSocket(SocketFactory factory, String service_name,
         InetAddress bind_addr,
         int start_port, int end_port) throws Exception {
@@ -3502,9 +3503,9 @@ public class Util {
 
         while (true) {
             try {
-                if (srv_sock != null)
-                    ;
-                Util.close(srv_sock);
+                if (srv_sock != null) {
+                    Util.close(srv_sock);
+                }
                 srv_sock = factory.createServerSocket(service_name);
                 InetSocketAddress sock_addr = new InetSocketAddress(bind_addr, start_port);
                 srv_sock.bind(sock_addr);
@@ -4398,12 +4399,12 @@ public class Util {
      * are found, returns the same string, otherwise a copy of the string with variables
      * substituted
      *
-     * @param val
+     * @param val value
      * @return A string with vars replaced, or the same string if no vars found
      */
     public static String substituteVariable(String val) {
         if (val == null)
-            return val;
+            return null;
         String retval = val, prev;
 
         while (retval.contains("${")) { // handle multiple variables in val

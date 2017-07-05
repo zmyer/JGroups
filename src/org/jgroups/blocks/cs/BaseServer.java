@@ -42,33 +42,51 @@ import org.jgroups.util.Util;
 public abstract class BaseServer implements Closeable, ConnectionListener {
     protected Address local_addr; // typically the address of the server socket or channel
     //连接监听器集合
-    protected final List<ConnectionListener> conn_listeners = new CopyOnWriteArrayList<>();
-    protected final Map<Address, Connection> conns = new HashMap<>();
-    protected final Lock sock_creation_lock = new ReentrantLock(true); // syncs socket establishment
+    private final List<ConnectionListener> conn_listeners = new CopyOnWriteArrayList<>();
+    //连接映射表
+    final Map<Address, Connection> conns = new HashMap<>();
+    //套接字创建锁对象
+    private final Lock sock_creation_lock = new ReentrantLock(true); // syncs socket establishment
+    //线程池工厂对象
     protected final ThreadFactory factory;
+    //套接字工厂对象
     protected SocketFactory socket_factory = new DefaultSocketFactory();
-    protected long reaperInterval;
-    protected Reaper reaper;
+    //repear间隔时间
+    private long reaperInterval;
+    //检查链接存活对象
+    private Reaper reaper;
+    //数据接收对象
     protected Receiver receiver;
+    //运行标记
     protected final AtomicBoolean running = new AtomicBoolean(false);
     protected Log log = LogFactory.getLog(getClass());
-    protected InetAddress client_bind_addr;
-    protected int client_bind_port;
-    protected boolean defer_client_binding;
-    @ManagedAttribute(description = "Time (ms) after which an idle connection is closed. 0 disables connection reaping", writable = true)
-    protected long conn_expire_time;  // ns
+    //客户端绑定地址
+    InetAddress client_bind_addr;
+    //客户端绑定端口
+    int client_bind_port;
+    boolean defer_client_binding;
+    @ManagedAttribute(description = "Time (ms) after which an idle connection is closed. 0 disables connection reaping",
+        writable = true)
+    //连接超时时间
+        long conn_expire_time;  // ns
     @ManagedAttribute(description = "Size (bytes) of the receive channel/socket", writable = true)
+    //接收缓冲区大小
     protected int recv_buf_size = 120000;
     @ManagedAttribute(description = "Size (bytes) of the send channel/socket", writable = true)
+    //发送缓冲区大小
     protected int send_buf_size = 60000;
-
     @ManagedAttribute(description = "When A connects to B, B reuses the same TCP connection to send data to A")
-    protected boolean use_peer_connections;
+    //是否共享连接标记
+        boolean use_peer_connections;
+    //连接超时时间
     protected int sock_conn_timeout = 1000;      // max time in millis to wait for Socket.connect() to return
+    //非延时标记
     protected boolean tcp_nodelay = false;
-    protected int linger = -1;
-    protected TimeService time_service;
+    int linger = -1;
+    //定时服务对象
+    private TimeService time_service;
 
+    // TODO: 17/5/25 by zmyer
     protected BaseServer(ThreadFactory f, SocketFactory sf) {
         this.factory = f;
         if (sf != null)
@@ -80,15 +98,18 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
         return receiver;
     }
 
+    // TODO: 17/5/25 by zmyer
     public BaseServer receiver(Receiver r) {
         this.receiver = r;
         return this;
     }
 
+    // TODO: 17/5/25 by zmyer
     public long reaperInterval() {
         return reaperInterval;
     }
 
+    // TODO: 17/5/25 by zmyer
     public BaseServer reaperInterval(long interval) {
         this.reaperInterval = interval;
         return this;
@@ -103,131 +124,157 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
         return this;
     }
 
+    // TODO: 17/5/25 by zmyer
     public Address localAddress() {
         return local_addr;
     }
 
-    public InetAddress clientBindAddress() {
+    // TODO: 17/5/25 by zmyer
+    InetAddress clientBindAddress() {
         return client_bind_addr;
     }
 
+    // TODO: 17/5/25 by zmyer
     public BaseServer clientBindAddress(InetAddress addr) {
         this.client_bind_addr = addr;
         return this;
     }
 
-    public int clientBindPort() {
+    // TODO: 17/5/25 by zmyer
+    int clientBindPort() {
         return client_bind_port;
     }
 
+    // TODO: 17/5/25 by zmyer
     public BaseServer clientBindPort(int port) {
         this.client_bind_port = port;
         return this;
     }
 
-    public boolean deferClientBinding() {
+    // TODO: 17/5/25 by zmyer
+    boolean deferClientBinding() {
         return defer_client_binding;
     }
 
+    // TODO: 17/5/25 by zmyer
     public BaseServer deferClientBinding(boolean defer) {
         this.defer_client_binding = defer;
         return this;
     }
 
-    public SocketFactory socketFactory() {
+    // TODO: 17/5/25 by zmyer
+    SocketFactory socketFactory() {
         return socket_factory;
     }
 
+    // TODO: 17/5/25 by zmyer
     public BaseServer socketFactory(SocketFactory factory) {
         this.socket_factory = factory;
         return this;
     }
 
     // TODO: 17/5/25 by zmyer
-    public boolean usePeerConnections() {
+    boolean usePeerConnections() {
         return use_peer_connections;
     }
 
+    // TODO: 17/5/25 by zmyer
     public BaseServer usePeerConnections(boolean flag) {
         this.use_peer_connections = flag;
         return this;
     }
 
+    // TODO: 17/5/25 by zmyer
     public int socketConnectionTimeout() {
         return sock_conn_timeout;
     }
 
+    // TODO: 17/5/25 by zmyer
     public BaseServer socketConnectionTimeout(int timeout) {
         this.sock_conn_timeout = timeout;
         return this;
     }
 
-    public long connExpireTime() {
+    // TODO: 17/5/25 by zmyer
+    long connExpireTime() {
         return conn_expire_time;
     }
 
+    // TODO: 17/5/25 by zmyer
     public BaseServer connExpireTimeout(long t) {
         conn_expire_time = TimeUnit.NANOSECONDS.convert(t, TimeUnit.MILLISECONDS);
         return this;
     }
 
     // TODO: 17/5/25 by zmyer
-    public TimeService timeService() {
+    TimeService timeService() {
         return time_service;
     }
 
+    // TODO: 17/5/25 by zmyer
     public BaseServer timeService(TimeService ts) {
         this.time_service = ts;
         return this;
     }
 
-    public int receiveBufferSize() {
+    // TODO: 17/5/25 by zmyer
+    int receiveBufferSize() {
         return recv_buf_size;
     }
 
+    // TODO: 17/5/25 by zmyer
     public BaseServer receiveBufferSize(int recv_buf_size) {
         this.recv_buf_size = recv_buf_size;
         return this;
     }
 
-    public int sendBufferSize() {
+    // TODO: 17/5/25 by zmyer
+    int sendBufferSize() {
         return send_buf_size;
     }
 
+    // TODO: 17/5/25 by zmyer
     public BaseServer sendBufferSize(int send_buf_size) {
         this.send_buf_size = send_buf_size;
         return this;
     }
 
-    public int linger() {
+    // TODO: 17/5/25 by zmyer
+    int linger() {
         return linger;
     }
 
+    // TODO: 17/5/25 by zmyer
     public BaseServer linger(int linger) {
         this.linger = linger;
         return this;
     }
 
-    public boolean tcpNodelay() {
+    // TODO: 17/5/25 by zmyer
+    boolean tcpNodelay() {
         return tcp_nodelay;
     }
 
+    // TODO: 17/5/25 by zmyer
     public BaseServer tcpNodelay(boolean tcp_nodelay) {
         this.tcp_nodelay = tcp_nodelay;
         return this;
     }
 
+    // TODO: 17/5/25 by zmyer
     @ManagedAttribute(description = "True if the server is running, else false")
     public boolean running() {
         return running.get();
     }
 
     @ManagedAttribute(description = "Number of connections")
+    // TODO: 17/5/25 by zmyer
     public synchronized int getNumConnections() {
         return conns.size();
     }
 
     @ManagedAttribute(description = "Number of currently open connections")
+    // TODO: 17/5/25 by zmyer
     public synchronized int getNumOpenConnections() {
         int retval = 0;
         for (Connection conn : conns.values())
@@ -239,6 +286,7 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
     /**
      * Starts accepting connections. Typically, socket handler or selectors thread are started here.
      */
+    // TODO: 17/5/25 by zmyer
     public void start() throws Exception {
         if (reaperInterval > 0 && (reaper == null || !reaper.isAlive())) {
             reaper = new Reaper();
@@ -250,6 +298,7 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
      * Stops listening for connections and handling traffic. Typically, socket handler or selector
      * threads are stopped, and server sockets or channels are closed.
      */
+    // TODO: 17/5/25 by zmyer
     public void stop() {
         Util.close(reaper);
         reaper = null;
@@ -262,6 +311,7 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
         conn_listeners.clear();
     }
 
+    // TODO: 17/5/25 by zmyer
     public void close() throws IOException {
         stop();
     }
@@ -271,6 +321,7 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
      * data might be a reused buffer, so unless used to de-serialize an object from it, it should be
      * copied (e.g. if we store a ref to it beyone the scope of this receive() method)
      */
+    // TODO: 17/5/25 by zmyer
     public void receive(Address sender, byte[] data, int offset, int length) {
         if (this.receiver != null)
             this.receiver.receive(sender, data, offset, length);
@@ -279,11 +330,13 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
     /**
      * Called by a {@link Connection} implementation when a message has been received
      */
+    // TODO: 17/5/25 by zmyer
     public void receive(Address sender, ByteBuffer buf) {
         if (this.receiver != null)
             this.receiver.receive(sender, buf);
     }
 
+    // TODO: 17/5/25 by zmyer
     public void receive(Address sender, DataInput in, int len) throws Exception {
         if (this.receiver != null)
             this.receiver.receive(sender, in);
@@ -294,6 +347,7 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
         }
     }
 
+    // TODO: 17/5/25 by zmyer
     public void send(Address dest, byte[] data, int offset, int length) throws Exception {
         if (!validateArgs(dest, data))
             return;
@@ -368,7 +422,7 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
     }
 
     /** Creates a new connection to dest, or returns an existing one */
-    public Connection getConnection(Address dest) throws Exception {
+    private Connection getConnection(Address dest) throws Exception {
         Connection conn;
         synchronized (this) {
             if ((conn = conns.get(dest)) != null && conn.isOpen()) // keep FAST path on the most common case
@@ -425,7 +479,7 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
 
     // TODO: 17/5/25 by zmyer
     @GuardedBy("this")
-    public void replaceConnection(Address address, Connection conn) {
+    void replaceConnection(Address address, Connection conn) {
         //将新连接插入到列表映射表中
         Connection previous = conns.put(address, conn);
         //关闭旧连接
@@ -435,14 +489,14 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
     }
 
     // TODO: 17/5/25 by zmyer
-    public void closeConnection(Connection conn, Throwable ex) {
+    void closeConnection(Connection conn, Throwable ex) {
         Util.close(conn);
         notifyConnectionClosed(conn, ex.toString());
         removeConnectionIfPresent(conn != null ? conn.peerAddress() : null, conn);
     }
 
     // TODO: 17/5/25 by zmyer
-    public synchronized void addConnection(Address peer_addr, Connection conn) throws Exception {
+    synchronized void addConnection(Address peer_addr, Connection conn) throws Exception {
         //首先检查连接列表中是否存在该链接
         boolean conn_exists = hasConnection(peer_addr),
             replace = conn_exists && local_addr.compareTo(peer_addr) < 0; // bigger conn wins
@@ -453,23 +507,26 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
             //启动链接对象
             conn.start();
         } else {
-            log.trace("%s: rejected connection from %s %s", local_addr, peer_addr, explanation(conn_exists, replace));
+            log.trace("%s: rejected connection from %s %s", local_addr, peer_addr, explanation(true, false));
             //关闭连接
             Util.close(conn); // keep our existing conn, reject accept() and close client_sock
         }
     }
 
+    // TODO: 17/5/25 by zmyer
     public synchronized void addConnectionListener(ConnectionListener cml) {
         if (cml != null && !conn_listeners.contains(cml))
             conn_listeners.add(cml);
     }
 
+    // TODO: 17/5/25 by zmyer
     public synchronized void removeConnectionListener(ConnectionListener cml) {
         if (cml != null)
             conn_listeners.remove(cml);
     }
 
     @ManagedOperation(description = "Prints all connections")
+    // TODO: 17/5/25 by zmyer
     public String printConnections() {
         StringBuilder sb = new StringBuilder("\n");
         synchronized (this) {
@@ -481,7 +538,7 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
 
     /** Only removes the connection if conns.get(address) == conn */
     // TODO: 17/5/25 by zmyer
-    public void removeConnectionIfPresent(Address address, Connection conn) {
+    void removeConnectionIfPresent(Address address, Connection conn) {
         if (address == null || conn == null)
             return;
         Connection tmp = null;
@@ -508,7 +565,7 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
         if (current_mbrs == null)
             return;
 
-        Map<Address, Connection> copy = null;
+        Map<Address, Connection> copy;
         synchronized (this) {
             copy = new HashMap<>(conns);
             conns.keySet().retainAll(current_mbrs);
@@ -520,9 +577,10 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
     }
 
     // TODO: 17/5/25 by zmyer
-    public void notifyConnectionClosed(Connection conn, String cause) {
+    void notifyConnectionClosed(Connection conn, String cause) {
         for (ConnectionListener l : conn_listeners) {
             try {
+                //关闭连接
                 l.connectionClosed(conn, cause);
             } catch (Throwable t) {
                 log.warn("failed notifying listener %s of connection close: %s", l, t);
@@ -531,7 +589,7 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
     }
 
     // TODO: 17/5/25 by zmyer
-    public void notifyConnectionEstablished(Connection conn) {
+    private void notifyConnectionEstablished(Connection conn) {
         for (ConnectionListener l : conn_listeners) {
             try {
                 //依次遍历每个连接监听器
@@ -543,14 +601,16 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
     }
 
     public String toString() {
-        return new StringBuilder(getClass().getSimpleName()).append(": local_addr=").append(local_addr).append("\n")
-            .append("connections (" + conns.size() + "):\n").append(super.toString()).append('\n').toString();
+        return getClass().getSimpleName() + ": local_addr=" + local_addr + "\n" +
+            "connections (" + conns.size() + "):\n" + super.toString() + '\n';
     }
 
-    protected void sendToAll(byte[] data, int offset, int length) {
+    // TODO: 17/5/25 by zmyer
+    private void sendToAll(byte[] data, int offset, int length) {
         for (Map.Entry<Address, Connection> entry : conns.entrySet()) {
             Connection conn = entry.getValue();
             try {
+                //向每个连接发送数据
                 conn.send(data, offset, length);
             } catch (Throwable ex) {
                 Address dest = entry.getKey();
@@ -560,12 +620,15 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
         }
     }
 
-    protected void sendToAll(ByteBuffer data) {
+    // TODO: 17/5/25 by zmyer
+    private void sendToAll(ByteBuffer data) {
         for (Map.Entry<Address, Connection> entry : conns.entrySet()) {
             Connection conn = entry.getValue();
             try {
+                //向每个连接发送数据
                 conn.send(data.duplicate());
             } catch (Throwable ex) {
+                //如果有发送失败的链接,需要及时从连接映射表中删除
                 Address dest = entry.getKey();
                 removeConnectionIfPresent(dest, conn);
                 log.error("failed sending data to %s: %s", dest, ex);
@@ -573,14 +636,18 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
         }
     }
 
+    // TODO: 17/5/25 by zmyer
     protected static org.jgroups.Address localAddress(InetAddress bind_addr, int local_port,
         InetAddress external_addr, int external_port) {
         if (external_addr != null)
-            return new IpAddress(external_addr, external_port > 0 ? external_port : local_port);
-        return bind_addr != null ? new IpAddress(bind_addr, local_port) : new IpAddress(local_port);
+            return new IpAddress(external_addr, external_port > 0 ?
+                external_port : local_port);
+        return bind_addr != null ?
+            new IpAddress(bind_addr, local_port) : new IpAddress(local_port);
     }
 
-    protected <T> boolean validateArgs(Address dest, T buffer) {
+    // TODO: 17/5/25 by zmyer
+    private <T> boolean validateArgs(Address dest, T buffer) {
         if (buffer == null) {
             log.warn("%s: data is null; discarding message to %s", local_addr, dest);
             return false;
@@ -593,7 +660,8 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
         return true;
     }
 
-    protected static String explanation(boolean connection_existed, boolean replace) {
+    // TODO: 17/5/25 by zmyer
+    static String explanation(boolean connection_existed, boolean replace) {
         StringBuilder sb = new StringBuilder();
         if (connection_existed) {
             sb.append(" (connection existed");
@@ -606,9 +674,12 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
         return sb.toString();
     }
 
-    protected class Reaper implements Runnable, Closeable {
+    // TODO: 17/5/25 by zmyer
+    private class Reaper implements Runnable, Closeable {
+        //线程对象
         private Thread thread;
 
+        // TODO: 17/5/25 by zmyer
         public synchronized void start() {
             if (thread == null || !thread.isAlive()) {
                 thread = factory.newThread(new Reaper(), "Reaper");
@@ -616,6 +687,7 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
             }
         }
 
+        // TODO: 17/5/25 by zmyer
         public synchronized void stop() {
             if (thread != null && thread.isAlive()) {
                 thread.interrupt();
@@ -627,29 +699,35 @@ public abstract class BaseServer implements Closeable, ConnectionListener {
             thread = null;
         }
 
+        // TODO: 17/5/25 by zmyer
         public void close() throws IOException {
             stop();
         }
 
+        // TODO: 17/5/25 by zmyer
         public synchronized boolean isAlive() {
             return thread != null && thread.isDaemon();
         }
 
+        // TODO: 17/5/25 by zmyer
         public void run() {
             while (!Thread.currentThread().isInterrupted()) {
                 synchronized (BaseServer.this) {
+                    //依次遍历每个链接对象
                     for (Iterator<Entry<Address, Connection>> it = conns.entrySet().iterator(); it.hasNext(); ) {
                         Entry<Address, Connection> entry = it.next();
+                        //获取连接对象
                         Connection c = entry.getValue();
                         if (c.isExpired(System.nanoTime())) {
+                            //如果连接超时,则直接删除
                             Util.close(c);
                             it.remove();
                         }
                     }
                 }
+                //等待片刻
                 Util.sleep(reaperInterval);
             }
         }
     }
-
 }

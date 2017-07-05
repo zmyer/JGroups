@@ -10,9 +10,10 @@ import org.jgroups.protocols.COUNTER;
  * @author Bela Ban
  * @since 3.0.0
  */
+// TODO: 17/7/4 by zmyer
 public class CounterService {
     protected JChannel ch;
-    protected COUNTER counter_prot;
+    private COUNTER counter_prot;
 
     public CounterService(JChannel ch) {
         setChannel(ch);

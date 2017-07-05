@@ -21,6 +21,7 @@ import org.jgroups.util.Util;
  *
  * @author Bela Ban
  */
+// TODO: 17/7/4 by zmyer
 public class LazyRemovalCache<K, V> {
     private final ConcurrentMap<K, Entry<V>> map = Util.createConcurrentMap();
 
@@ -35,7 +36,7 @@ public class LazyRemovalCache<K, V> {
         String print(K key, V entry);
     }
 
-    public LazyRemovalCache() {
+    LazyRemovalCache() {
         this(200, 5000L);
     }
 
@@ -167,11 +168,12 @@ public class LazyRemovalCache<K, V> {
         if (force)
             map.keySet().retainAll(keys);
         else {
-            map.entrySet().stream().filter(entry -> !keys.contains(entry.getKey())).forEach(entry -> {
-                Entry<V> val = entry.getValue();
-                if (val != null)
-                    val.setRemovable(true);
-            });
+            map.entrySet().stream().filter(entry -> !keys.contains(entry.getKey()))
+                .forEach(entry -> {
+                    Entry<V> val = entry.getValue();
+                    if (val != null)
+                        val.setRemovable(true);
+                });
         }
 
         // now make sure that all elements in keys have removable=false
@@ -192,17 +194,16 @@ public class LazyRemovalCache<K, V> {
         return map.values().stream().map(entry -> entry.val).collect(Collectors.toSet());
     }
 
-    public Iterable<Entry<V>> valuesIterator() {
+    Iterable<Entry<V>> valuesIterator() {
         return () -> map.values().iterator();
     }
 
     /**
      * Adds all value which have not been marked as removable to the returned set
-     *
-     * @return
      */
     public Set<V> nonRemovedValues() {
-        return map.values().stream().filter(entry -> !entry.removable).map(entry -> entry.val).collect(Collectors.toSet());
+        return map.values().stream().filter(entry -> !entry.removable)
+            .map(entry -> entry.val).collect(Collectors.toSet());
     }
 
     public Map<K, V> contents() {
@@ -232,6 +233,7 @@ public class LazyRemovalCache<K, V> {
         return sb.toString();
     }
 
+    @SuppressWarnings("unchecked")
     public String printCache(Printable print_function) {
         StringBuilder sb = new StringBuilder();
         for (Map.Entry<K, Entry<V>> entry : map.entrySet()) {
@@ -272,24 +274,24 @@ public class LazyRemovalCache<K, V> {
     /**
      * Removes elements marked as removable
      */
-    public void removeMarkedElements() {
+    void removeMarkedElements() {
         removeMarkedElements(false);
     }
 
     public static class Entry<V> {
         protected final V val;
         protected long timestamp = System.nanoTime();
-        protected boolean removable = false;
+        boolean removable = false;
 
         public Entry(V val) {
             this.val = val;
         }
 
-        public boolean isRemovable() {
+        boolean isRemovable() {
             return removable;
         }
 
-        public void setRemovable(boolean flag) {
+        void setRemovable(boolean flag) {
             if (this.removable != flag) {
                 this.removable = flag;
                 timestamp = System.nanoTime();
@@ -305,8 +307,10 @@ public class LazyRemovalCache<K, V> {
         }
 
         public String toString(Function<V, String> print_val) {
-            StringBuilder sb = new StringBuilder(print_val != null ? print_val.apply(val) : val.toString()).append(" (");
-            long age = TimeUnit.MILLISECONDS.convert(System.nanoTime() - timestamp, TimeUnit.NANOSECONDS);
+            StringBuilder sb = new StringBuilder(print_val != null ?
+                print_val.apply(val) : val.toString()).append(" (");
+            long age = TimeUnit.MILLISECONDS.convert(System.nanoTime() - timestamp,
+                TimeUnit.NANOSECONDS);
             if (age < 1000)
                 sb.append(age).append(" ms");
             else
@@ -314,6 +318,5 @@ public class LazyRemovalCache<K, V> {
             sb.append(" old").append((removable ? ", removable" : "")).append(")");
             return sb.toString();
         }
-
     }
 }

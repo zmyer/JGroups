@@ -6,6 +6,7 @@ package org.jgroups;
  * @author Bela Ban
  * @since 2.0
  */
+// TODO: 17/7/4 by zmyer
 public class Event {
     public static final int CONNECT = 2;  // arg = cluster name (string)
     public static final int DISCONNECT = 4;  // arg = member address (Address)
@@ -62,7 +63,7 @@ public class Event {
     public static final int GET_VIEW_FROM_COORD = 108;
     public static final int GET_PING_DATA = 109; // arg = cluster_name
 
-    public static final int USER_DEFINED = 1000; // arg = <user def., e.g. evt type + data>
+    private static final int USER_DEFINED = 1000; // arg = <user def., e.g. evt type + data>
 
     public static final Event GET_DIGEST_EVT = new Event(Event.GET_DIGEST);
     public static final Event FIND_INITIAL_MBRS_EVT = new Event(Event.FIND_INITIAL_MBRS);
@@ -217,9 +218,7 @@ public class Event {
     }
 
     public String toString() {
-        StringBuilder ret = new StringBuilder(64);
-        ret.append(type2String(type)).append(", arg=").append(arg);
-        return ret.toString();
+        return type2String(type) + ", arg=" + arg;
     }
 
 }

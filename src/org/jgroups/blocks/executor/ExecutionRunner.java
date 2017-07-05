@@ -1,10 +1,5 @@
 package org.jgroups.blocks.executor;
 
-import org.jgroups.JChannel;
-import org.jgroups.logging.Log;
-import org.jgroups.logging.LogFactory;
-import org.jgroups.protocols.Executing;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -12,33 +7,37 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import org.jgroups.JChannel;
+import org.jgroups.logging.Log;
+import org.jgroups.logging.LogFactory;
+import org.jgroups.protocols.Executing;
 
 /**
  * This class is to be used to pick up execution requests and actually run
  * them.  A single instance can  be used across any number of threads.
- * 
+ *
  * @author wburns
  */
+// TODO: 17/7/4 by zmyer
 public class ExecutionRunner implements Runnable {
     protected JChannel ch;
-    protected Executing _execProt;
-    
+
     public ExecutionRunner(JChannel channel) {
         setChannel(channel);
     }
-    
+
     public void setChannel(JChannel ch) {
-        this.ch=ch;
-        _execProt=ch.getProtocolStack().findProtocol(Executing.class);
-        if(_execProt == null)
+        this.ch = ch;
+        Executing _execProt = ch.getProtocolStack().findProtocol(Executing.class);
+        if (_execProt == null)
             throw new IllegalStateException("Channel configuration must include a executing protocol " +
-                                              "(subclass of " + Executing.class.getName() + ")");
+                "(subclass of " + Executing.class.getName() + ")");
     }
-    
-    protected static class Holder<T> {
+
+    private static class Holder<T> {
         protected T value;
-        
-        public Holder(T value) {
+
+        Holder(T value) {
             this.value = value;
         }
     }
@@ -47,7 +46,7 @@ public class ExecutionRunner implements Runnable {
     @Override
     public void run() {
         final Lock shutdownLock = new ReentrantLock();
-        
+
         // The following 2 atomic boolean should only ever be updated while
         // protected by the above lock.  They don't have to be atomic boolean,
         // but it is a nice wrapper to share a reference between threads.
@@ -63,15 +62,16 @@ public class ExecutionRunner implements Runnable {
             // @see java.lang.Thread#run()
             @Override
             public void run() {
-                
+
                 Thread currentThread = Thread.currentThread();
-                Runnable runnable = null;
+                Runnable runnable;
                 // This task exits by being interrupted when the task isn't running
                 // or by updating shutdown to true when it can't be interrupted
                 while (!shutdown.get()) {
                     _runnables.put(currentThread, new Holder<>(null));
-                    runnable = (Runnable)ch.down(new ExecutorEvent(ExecutorEvent.CONSUMER_READY, null));
-                    
+                    runnable = (Runnable) ch.down(new ExecutorEvent(ExecutorEvent.CONSUMER_READY,
+                        null));
+
                     // This means we were interrupted while waiting
                     if (runnable == null)
                         break;
@@ -85,12 +85,11 @@ public class ExecutionRunner implements Runnable {
                         // we will only do it after we loop back around.
                         Thread.interrupted();
                         canInterrupt.set(false);
-                    }
-                    finally {
+                    } finally {
                         shutdownLock.unlock();
                     }
                     _runnables.put(currentThread, new Holder<>(runnable));
-                    
+
                     Throwable throwable = null;
                     try {
                         runnable.run();
@@ -100,55 +99,53 @@ public class ExecutionRunner implements Runnable {
                         _logger.error("Unexpected Runtime Error encountered in Runnable request", t);
                         throwable = t;
                     }
-                    ch.down(new ExecutorEvent(ExecutorEvent.TASK_COMPLETE, 
-                        throwable != null ? new Object[]{runnable, throwable} : runnable));
-                    
+                    ch.down(new ExecutorEvent(ExecutorEvent.TASK_COMPLETE,
+                        throwable != null ? new Object[] {runnable, throwable} : runnable));
+
                     // We have to let the outer thread know we can now be interrupted
                     shutdownLock.lock();
                     try {
                         canInterrupt.set(true);
-                    }
-                    finally {
+                    } finally {
                         shutdownLock.unlock();
                     }
                 }
-                
+
                 _runnables.remove(currentThread);
             }
         };
 
         executionThread.setName(Thread.currentThread().getName() + "- Task Runner");
         executionThread.start();
-        
+
         try {
             executionThread.join();
-        }
-        catch (InterruptedException e) {
+        } catch (InterruptedException e) {
             shutdownLock.lock();
             try {
                 if (canInterrupt.get()) {
                     executionThread.interrupt();
                 }
                 shutdown.set(true);
-            }
-            finally {
+            } finally {
                 shutdownLock.unlock();
             }
-            
+
             if (_logger.isTraceEnabled()) {
                 _logger.trace("Shutting down Execution Runner");
             }
         }
     }
-    
+
     /**
      * Returns a copy of the runners being used with the runner and what threads.
      * If a thread is not currently running a task it will return with a null
      * value.  This map is a copy and can be modified if necessary without
      * causing issues.
-     * @return map of all threads that are active with this runner.  If the
-     *         thread is currently running a job the runnable value will be
-     *         populated otherwise null would mean the thread is waiting
+     *
+     * @return map of all threads that are active with this runner.  If the thread is currently
+     * running a job the runnable value will be populated otherwise null would mean the thread is
+     * waiting
      */
     public Map<Thread, Runnable> getCurrentRunningTasks() {
         Map<Thread, Runnable> map = new HashMap<>();
@@ -157,9 +154,8 @@ public class ExecutionRunner implements Runnable {
         }
         return map;
     }
-    
-    private final Map<Thread, Holder<Runnable>> _runnables = 
-            new ConcurrentHashMap<>();
-    
-    protected static final Log _logger = LogFactory.getLog(ExecutionRunner.class);
+
+    private final Map<Thread, Holder<Runnable>> _runnables = new ConcurrentHashMap<>();
+
+    private static final Log _logger = LogFactory.getLog(ExecutionRunner.class);
 }

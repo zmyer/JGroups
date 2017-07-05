@@ -22,6 +22,7 @@ import org.jgroups.util.Util;
  * @author Bela Ban
  * @since 2.0
  */
+// TODO: 17/7/4 by zmyer
 public class Message implements Streamable, Constructable<Message> {
     protected Address dest_addr;
     protected Address src_addr;

@@ -9,6 +9,7 @@ import org.jgroups.Address;
  * @author Bela Ban
  * @since 3.6.5
  */
+// TODO: 17/7/4 by zmyer
 public interface Client {
     Address localAddress();
 

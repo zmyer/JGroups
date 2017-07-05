@@ -2,10 +2,9 @@ package org.jgroups.util;
 
 import java.util.concurrent.Future;
 
-
 /**
- * A sub-interface of a Future, that allows for listeners to be attached so that observers can be notified when the
- * future completes.
+ * A sub-interface of a Future, that allows for listeners to be attached so that observers can be
+ * notified when the future completes.
  * <p/>
  * See {@link FutureListener} for more details.
  * <p/>
@@ -13,6 +12,7 @@ import java.util.concurrent.Future;
  * @author Manik Surtani
  * @since 2.9
  */
+// TODO: 17/7/4 by zmyer
 public interface NotifyingFuture<T> extends Future<T> {
 
     /**

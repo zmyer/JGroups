@@ -1,5 +1,23 @@
 package org.jgroups.stack;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.InterfaceAddress;
+import java.net.MulticastSocket;
+import java.net.NetworkInterface;
+import java.net.SocketAddress;
+import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.StringTokenizer;
+import java.util.concurrent.CopyOnWriteArraySet;
 import org.jgroups.Address;
 import org.jgroups.Global;
 import org.jgroups.Version;
@@ -10,74 +28,74 @@ import org.jgroups.util.SocketFactory;
 import org.jgroups.util.ThreadFactory;
 import org.jgroups.util.Util;
 
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
-import java.io.IOException;
-import java.net.*;
-import java.security.MessageDigest;
-import java.util.*;
-import java.util.concurrent.CopyOnWriteArraySet;
-
 /**
  * @author Bela Ban
  * @since 3.0
  */
 
+// TODO: 17/7/5 by zmyer
 public class DiagnosticsHandler implements Runnable {
-    public static final String        THREAD_NAME="DiagHandler";
-    protected TP                      transport;
-    protected Thread                  thread;
-    protected MulticastSocket         diag_sock;
-    protected InetAddress             diagnostics_addr;
-    protected int                     diagnostics_port=7500;
-    protected int                     ttl=8;
-    protected List<NetworkInterface>  bind_interfaces;
-    protected final Set<ProbeHandler> handlers=new CopyOnWriteArraySet<>();
-    protected final Log               log;
-    protected final SocketFactory     socket_factory;
-    protected final ThreadFactory     thread_factory;
-    protected final String            passcode;
-
+    public static final String THREAD_NAME = "DiagHandler";
+    protected TP transport;
+    protected Thread thread;
+    private MulticastSocket diag_sock;
+    private InetAddress diagnostics_addr;
+    private int diagnostics_port = 7500;
+    protected int ttl = 8;
+    private List<NetworkInterface> bind_interfaces;
+    private final Set<ProbeHandler> handlers = new CopyOnWriteArraySet<>();
+    protected final Log log;
+    protected final SocketFactory socket_factory;
+    protected final ThreadFactory thread_factory;
+    private final String passcode;
 
     public DiagnosticsHandler(InetAddress diagnostics_addr, int diagnostics_port,
-             Log log, SocketFactory socket_factory, ThreadFactory thread_factory) {
-       this(diagnostics_addr,diagnostics_port,log,socket_factory,thread_factory,null);
+        Log log, SocketFactory socket_factory, ThreadFactory thread_factory) {
+        this(diagnostics_addr, diagnostics_port, log, socket_factory, thread_factory, null);
     }
-    
+
     public DiagnosticsHandler(InetAddress diagnostics_addr, int diagnostics_port,
-                              Log log, SocketFactory socket_factory, ThreadFactory thread_factory, String passcode) {
-        this.diagnostics_addr=diagnostics_addr;
-        this.diagnostics_port=diagnostics_port;
-        this.log=log;
-        this.socket_factory=socket_factory;
-        this.thread_factory=thread_factory;
+        Log log, SocketFactory socket_factory, ThreadFactory thread_factory, String passcode) {
+        this.diagnostics_addr = diagnostics_addr;
+        this.diagnostics_port = diagnostics_port;
+        this.log = log;
+        this.socket_factory = socket_factory;
+        this.thread_factory = thread_factory;
         this.passcode = passcode;
     }
 
     public DiagnosticsHandler(InetAddress diagnostics_addr, int diagnostics_port,
-                              List<NetworkInterface> bind_interfaces, int diagnostics_ttl,
-                              Log log, SocketFactory socket_factory, ThreadFactory thread_factory, String passcode) {
+        List<NetworkInterface> bind_interfaces, int diagnostics_ttl,
+        Log log, SocketFactory socket_factory, ThreadFactory thread_factory, String passcode) {
         this(diagnostics_addr, diagnostics_port, log, socket_factory, thread_factory, passcode);
-        this.bind_interfaces=bind_interfaces;
-        this.ttl=diagnostics_ttl;
+        this.bind_interfaces = bind_interfaces;
+        this.ttl = diagnostics_ttl;
     }
 
-    public TP                 transport()      {return transport;}
-    public DiagnosticsHandler transport(TP tp) {transport=tp; return this;}
+    public TP transport() {
+        return transport;
+    }
 
-    public Thread getThread(){
+    public DiagnosticsHandler transport(TP tp) {
+        transport = tp;
+        return this;
+    }
+
+    public Thread getThread() {
         return thread;
     }
 
-    public Set<ProbeHandler> getProbeHandlers() {return handlers;}
+    public Set<ProbeHandler> getProbeHandlers() {
+        return handlers;
+    }
 
     public void registerProbeHandler(ProbeHandler handler) {
-        if(handler != null)
+        if (handler != null)
             handlers.add(handler);
     }
 
     public void unregisterProbeHandler(ProbeHandler handler) {
-        if(handler != null)
+        if (handler != null)
             handlers.remove(handler);
     }
 
@@ -88,70 +106,69 @@ public class DiagnosticsHandler implements Runnable {
         //   diag_sock=Util.createMulticastSocket(getSocketFactory(),
         //                               Global.TP_DIAG_MCAST_SOCK, diagnostics_addr, diagnostics_port, log);
         //else
-        diag_sock=socket_factory.createMulticastSocket("jgroups.tp.diag.mcast_sock", diagnostics_port);
+        diag_sock = socket_factory.createMulticastSocket("jgroups.tp.diag.mcast_sock", diagnostics_port);
         diag_sock.setTimeToLive(ttl);
 
-        List<NetworkInterface> interfaces=bind_interfaces != null? bind_interfaces : Util.getAllAvailableInterfaces();
+        List<NetworkInterface> interfaces = bind_interfaces != null ? bind_interfaces : Util.getAllAvailableInterfaces();
         bindToInterfaces(interfaces, diag_sock);
 
-        if(thread == null || !thread.isAlive()) {
-            thread=thread_factory.newThread(this, THREAD_NAME);
+        if (thread == null || !thread.isAlive()) {
+            thread = thread_factory.newThread(this, THREAD_NAME);
             thread.setDaemon(true);
             thread.start();
         }
     }
 
     public void stop() {
-        Thread tmp=thread;
-        thread=null;
-        if(diag_sock != null)
+        Thread tmp = thread;
+        thread = null;
+        if (diag_sock != null)
             socket_factory.close(diag_sock);
 
-        if(tmp != null) {
+        if (tmp != null) {
             try {
                 tmp.join(Global.THREAD_SHUTDOWN_WAIT_TIME);
-            }
-            catch(InterruptedException e){
+            } catch (InterruptedException e) {
                 Thread.currentThread().interrupt(); // set interrupt flag
             }
         }
     }
 
-    public boolean isRunning() {return thread != null && thread.isAlive() && diag_sock != null && !diag_sock.isClosed();}
+    public boolean isRunning() {
+        return thread != null && thread.isAlive() && diag_sock != null && !diag_sock.isClosed();
+    }
 
     public void run() {
         byte[] buf;
         DatagramPacket packet;
-        while(Thread.currentThread().equals(thread)) {
-            buf=new byte[10000]; // requests are small (responses might be bigger)
-            packet=new DatagramPacket(buf, 0, buf.length);
+        while (Thread.currentThread().equals(thread)) {
+            buf = new byte[10000]; // requests are small (responses might be bigger)
+            packet = new DatagramPacket(buf, 0, buf.length);
             try {
                 diag_sock.receive(packet);
                 int payloadStartOffset = 0;
-                if(isAuthorizationRequired()){
-                   payloadStartOffset = authorizeProbeRequest(packet);
+                if (isAuthorizationRequired()) {
+                    payloadStartOffset = authorizeProbeRequest(packet);
                 }
                 handleDiagnosticProbe(packet.getSocketAddress(), diag_sock,
-                                      new String(packet.getData(), packet.getOffset() + payloadStartOffset, packet.getLength()));
-            }
-            catch(IOException socket_ex) {
-            }
-            catch(Throwable e) {
+                    new String(packet.getData(), packet.getOffset() + payloadStartOffset, packet.getLength()));
+            } catch (Throwable e) {
                 log.error(Util.getMessage("FailureHandlingDiagnosticsRequest"), e);
             }
         }
     }
 
-    protected void handleDiagnosticProbe(SocketAddress sender, DatagramSocket sock, String request) {
-        StringTokenizer tok=new StringTokenizer(request);
-        List<String> list=new ArrayList<>(10);
+    private void handleDiagnosticProbe(SocketAddress sender, DatagramSocket sock,
+        String request) {
+        StringTokenizer tok = new StringTokenizer(request);
+        List<String> list = new ArrayList<>(10);
 
-        while(tok.hasMoreTokens()) {
-            String req=tok.nextToken().trim();
-            if(!req.isEmpty()) {
-                 // if -cluster=<name>: discard requests that have a cluster name != our own cluster name
-                if(req.startsWith("cluster=")) {
-                    if(!sameCluster(req))
+        while (tok.hasMoreTokens()) {
+            String req = tok.nextToken().trim();
+            if (!req.isEmpty()) {
+                // if -cluster=<name>: discard requests that have a cluster name != our own cluster name
+                if (req.startsWith("cluster=")) {
+                    if (!sameCluster(req))
                         return;
                     continue;
                 }
@@ -159,135 +176,132 @@ public class DiagnosticsHandler implements Runnable {
             }
         }
 
-        if(list.isEmpty()) {
-            if(transport != null) {
-                Address local_addr=transport.localAddress();
-                String default_rsp=String.format("local_addr=%s\nphysical_addr=%s\nview=%s\ncluster=%s\nversion=%s",
-                                                 local_addr != null? local_addr : "n/a",
-                                                 transport.getLocalPhysicalAddress(),
-                                                 transport.view(),
-                                                 transport.getClusterName(),
-                                                 Version.description);
+        if (list.isEmpty()) {
+            if (transport != null) {
+                Address local_addr = transport.localAddress();
+                String default_rsp = String.format("local_addr=%s\nphysical_addr=%s\nview=%s\ncluster=%s\nversion=%s",
+                    local_addr != null ? local_addr : "n/a",
+                    transport.getLocalPhysicalAddress(),
+                    transport.view(),
+                    transport.getClusterName(),
+                    Version.description);
                 sendResponse(sock, sender, default_rsp.getBytes());
             }
             return;
         }
 
-        String[] tokens=new String[list.size()];
-        for(int i=0; i < list.size(); i++)
-            tokens[i]=list.get(i);
+        String[] tokens = new String[list.size()];
+        for (int i = 0; i < list.size(); i++)
+            tokens[i] = list.get(i);
 
-        for(ProbeHandler handler: handlers) {
-            Map<String, String> map=null;
+        for (ProbeHandler handler : handlers) {
+            Map<String, String> map;
             try {
-                map=handler.handleProbe(tokens);
-            }
-            catch(IllegalArgumentException ex) {
+                map = handler.handleProbe(tokens);
+            } catch (IllegalArgumentException ex) {
                 log.warn(ex.getMessage());
                 return;
             }
-            if(map == null || map.isEmpty())
+            if (map == null || map.isEmpty())
                 continue;
-            StringBuilder info=new StringBuilder(defaultHeaders());
-            for(Map.Entry<String,String> entry: map.entrySet())
+            StringBuilder info = new StringBuilder(defaultHeaders());
+            for (Map.Entry<String, String> entry : map.entrySet())
                 info.append(String.format("%s=%s\r\n", entry.getKey(), entry.getValue()));
 
-            byte[] diag_rsp=info.toString().getBytes();
+            byte[] diag_rsp = info.toString().getBytes();
             log.debug("sending diag response to %s", sender);
             sendResponse(sock, sender, diag_rsp);
         }
     }
 
-    protected String defaultHeaders() {
-        if(transport == null) return "";
-        Address local_addr=transport.localAddress();
-        View view=transport.view();
-        int num_members=view != null? view.size() : 0;
+    private String defaultHeaders() {
+        if (transport == null)
+            return "";
+        Address local_addr = transport.localAddress();
+        View view = transport.view();
+        int num_members = view != null ? view.size() : 0;
         return String.format("local_addr=%s [ip=%s, version=%s, cluster=%s, %d mbr(s)]\n",
-                             local_addr != null? local_addr : "n/a", transport.getLocalPhysicalAddress(),
-                             Version.description, transport.getClusterName(), num_members);
+            local_addr != null ? local_addr : "n/a", transport.getLocalPhysicalAddress(),
+            Version.description, transport.getClusterName(), num_members);
     }
 
-
-    protected boolean sameCluster(String req) {
-        if(!req.startsWith("cluster="))
+    private boolean sameCluster(String req) {
+        if (!req.startsWith("cluster="))
             return true;
-        String cluster_name_pattern=req.substring("cluster=".length()).trim();
-        String cname=transport.getClusterName();
-        if(cluster_name_pattern != null && !Util.patternMatch(cluster_name_pattern,cname != null? cname : null)) {
+        String cluster_name_pattern = req.substring("cluster=".length()).trim();
+        String cname = transport.getClusterName();
+        if (!Util.patternMatch(cluster_name_pattern, cname != null ? cname : null)) {
             log.debug("Probe request dropped as cluster name %s does not match pattern %s", cname, cluster_name_pattern);
             return false;
         }
         return true;
     }
 
-
     /**
      * Performs authorization on given DatagramPacket.
      *
      * @param packet to authorize
-    * @return offset in DatagramPacket where request payload starts
-    * @throws Exception thrown if passcode received from client does not match set passcode
-    */
-   protected int authorizeProbeRequest(DatagramPacket packet) throws Exception {
-      int offset = 0;
-      ByteArrayInputStream bis = new ByteArrayInputStream(packet.getData());
-      DataInputStream in = new DataInputStream(bis);
-      long t1 = in.readLong();
-      double q1 = in.readDouble();
-      int length = in.readInt();
-      byte[] digest = new byte[length];
-      in.readFully(digest);
-      offset = 8 + 8 + 4 + digest.length;
+     * @return offset in DatagramPacket where request payload starts
+     * @throws Exception thrown if passcode received from client does not match set passcode
+     */
+    private int authorizeProbeRequest(DatagramPacket packet) throws Exception {
+        int offset = 0;
+        ByteArrayInputStream bis = new ByteArrayInputStream(packet.getData());
+        DataInputStream in = new DataInputStream(bis);
+        long t1 = in.readLong();
+        double q1 = in.readDouble();
+        int length = in.readInt();
+        byte[] digest = new byte[length];
+        in.readFully(digest);
+        offset = 8 + 8 + 4 + digest.length;
 
-      byte[] local = Util.createDigest(passcode, t1, q1);
-      if(!MessageDigest.isEqual(digest, local))
-         throw new Exception("Authorization failed! Make sure correct passcode is used");
-      else
-          log.debug("Request authorized");
-      return offset;
-   }
-
-   protected void sendResponse(DatagramSocket sock, SocketAddress sender, byte[] buf) {
-       try {
-           DatagramPacket p=new DatagramPacket(buf, 0, buf.length, sender);
-           sock.send(p);
-       }
-       catch(Throwable t) {
-           log.error(Util.getMessage("FailedSendingDiagRspTo") + sender, t);
-       }
+        byte[] local = Util.createDigest(passcode, t1, q1);
+        if (!MessageDigest.isEqual(digest, local))
+            throw new Exception("Authorization failed! Make sure correct passcode is used");
+        else
+            log.debug("Request authorized");
+        return offset;
     }
 
-    protected void bindToInterfaces(List<NetworkInterface> interfaces, MulticastSocket s) {
-        SocketAddress group_addr=new InetSocketAddress(diagnostics_addr, diagnostics_port);
-        for(Iterator<NetworkInterface> it=interfaces.iterator(); it.hasNext();) {
-            NetworkInterface i=it.next();
+    private void sendResponse(DatagramSocket sock, SocketAddress sender, byte[] buf) {
+        try {
+            DatagramPacket p = new DatagramPacket(buf, 0, buf.length, sender);
+            sock.send(p);
+        } catch (Throwable t) {
+            log.error(Util.getMessage("FailedSendingDiagRspTo") + sender, t);
+        }
+    }
+
+    private void bindToInterfaces(List<NetworkInterface> interfaces, MulticastSocket s) {
+        SocketAddress group_addr = new InetSocketAddress(diagnostics_addr, diagnostics_port);
+        for (NetworkInterface i : interfaces) {
             try {
                 if (i.isUp()) {
-                    List<InterfaceAddress> inet_addrs=i.getInterfaceAddresses();
-                    if(inet_addrs != null && !inet_addrs.isEmpty()) { // fix for VM crash - suggested by JJalenak@netopia.com
+                    List<InterfaceAddress> inet_addrs = i.getInterfaceAddresses();
+                    if (inet_addrs != null && !inet_addrs.isEmpty()) { // fix for VM crash - suggested by JJalenak@netopia.com
                         s.joinGroup(group_addr, i);
                         log.trace("joined %s on %s", group_addr, i.getName());
                     }
                 }
-            }
-            catch(Exception e) { // also catches NPE in getInterfaceAddresses() (https://issues.jboss.org/browse/JGRP-1845)
+            } catch (Exception e) { // also catches NPE in getInterfaceAddresses() (https://issues.jboss.org/browse/JGRP-1845)
                 log.warn("failed to join " + group_addr + " on " + i.getName() + ": " + e);
             }
         }
     }
-    
-    protected boolean isAuthorizationRequired(){
-       return passcode != null;
+
+    private boolean isAuthorizationRequired() {
+        return passcode != null;
     }
 
     public interface ProbeHandler {
         /**
-         * Handles a probe. For each key that is handled, the key and its result should be in the returned map.
-         * @param keys
-         * @return Map<String,String>. A map of keys and values. A null return value is permissible.
+         * Handles a probe. For each key that is handled, the key and its result should be in the
+         * returned map.
+         *
+         * @param keys keys
+         * @return Map<String String>. A map of keys and values. A null return value is permissible.
          */
-        Map<String,String> handleProbe(String... keys);
+        Map<String, String> handleProbe(String... keys);
 
         /** Returns a list of supported keys */
         String[] supportedKeys();

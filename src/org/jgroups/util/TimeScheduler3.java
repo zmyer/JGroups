@@ -27,6 +27,8 @@ import org.jgroups.logging.LogFactory;
  * @author Bela Ban
  * @since 3.3
  */
+
+// TODO: 17/5/25 by zmyer
 public class TimeScheduler3 implements TimeScheduler, Runnable {
     /** Thread pool used to execute the tasks */
     protected Executor pool;
@@ -178,7 +180,8 @@ public class TimeScheduler3 implements TimeScheduler, Runnable {
      * rescheduled after {@link org.jgroups.util.TimeScheduler.Task#nextInterval()} milliseconds.
      * The task is never done until nextInterval() returns a value <= 0 or the task is
      * cancelled.<p/> Note that the task is rescheduled relative to the last time is actually
-     * executed. This is similar to {@link #scheduleWithFixedDelay(Runnable, long, long, java.util.concurrent.TimeUnit)}.
+     * executed. This is similar to {@link #scheduleWithFixedDelay(Runnable, long, long,
+     * java.util.concurrent.TimeUnit)}.
      *
      * @param work the task to execute
      */
@@ -212,7 +215,7 @@ public class TimeScheduler3 implements TimeScheduler, Runnable {
             p.getQueue().clear();
             try {
                 p.awaitTermination(Global.THREADPOOL_SHUTDOWN_WAIT_TIME, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {
+            } catch (InterruptedException ignored) {
             }
         }
 
@@ -293,7 +296,8 @@ public class TimeScheduler3 implements TimeScheduler, Runnable {
 
     protected synchronized void startRunner() {
         stopRunner();
-        runner = timer_thread_factory != null ? timer_thread_factory.newThread(this, "Timer runner") : new Thread(this, "Timer runner");
+        runner = timer_thread_factory != null ?
+            timer_thread_factory.newThread(this, "Timer runner") : new Thread(this, "Timer runner");
         runner.start();
     }
 

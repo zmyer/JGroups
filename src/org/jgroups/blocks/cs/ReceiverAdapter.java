@@ -23,8 +23,8 @@ public class ReceiverAdapter implements Receiver {
      * The default implementation assumes that {@link ByteBuffer#flip()}  or {@link
      * ByteBuffer#rewind()} was called on buf before invoking this callback
      *
-     * @param sender
-     * @param buf
+     * @param sender message sender
+     * @param buf byte buffer
      */
     // TODO: 17/5/25 by zmyer
     public void receive(Address sender, ByteBuffer buf) {

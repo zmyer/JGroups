@@ -215,7 +215,6 @@ public class Buffers implements Iterable<ByteBuffer> {
                 ; // ignore, we'll queue 1 write
             }
         }
-
         return nullData();
     }
 

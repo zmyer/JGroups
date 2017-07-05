@@ -15,6 +15,7 @@ import org.jgroups.util.Util;
  * @author Pedro Ruivo
  * @since 3.1
  */
+// TODO: 17/7/5 by zmyer
 public class AnycastAddress implements Address, Constructable<AnycastAddress> {
     protected Collection<Address> destinations;
 
@@ -43,7 +44,7 @@ public class AnycastAddress implements Address, Constructable<AnycastAddress> {
         }
     }
 
-    protected void internalAdd(Address address) {
+    private void internalAdd(Address address) {
         if (!destinations.contains(address))
             destinations.add(address);
     }
@@ -104,8 +105,7 @@ public class AnycastAddress implements Address, Constructable<AnycastAddress> {
         if (this == o)
             return 0;
         if (!(o instanceof AnycastAddress))
-            throw new ClassCastException("comparison between different classes: the other object is " +
-                (o != null ? o.getClass() : o));
+            throw new ClassCastException("comparison between different classes: the other object is " + o.getClass());
         AnycastAddress other = (AnycastAddress) o;
 
         hc1 = this.hashCode();
@@ -126,6 +126,7 @@ public class AnycastAddress implements Address, Constructable<AnycastAddress> {
         Util.writeAddresses(destinations, out);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public void readFrom(DataInput in) throws Exception {
         destinations = (Collection<Address>) Util.readAddresses(in, ArrayList.class);

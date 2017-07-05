@@ -37,24 +37,24 @@ public class NioConnection extends Connection {
     protected SelectionKey key;
     protected final NioBaseServer server;
 
-    protected final Buffers send_buf;     // send messages via gathering writes
-    protected boolean write_interest_set; // set when a send() didn't manage to send all data
-    protected boolean copy_on_partial_write = true;
-    protected int partial_writes; // number of partial writes (write which did not write all bytes)
-    protected final Lock send_lock = new ReentrantLock(); // serialize send()
+    final Buffers send_buf;     // send messages via gathering writes
+    private boolean write_interest_set; // set when a send() didn't manage to send all data
+    private boolean copy_on_partial_write = true;
+    private int partial_writes; // number of partial writes (write which did not write all bytes)
+    private final Lock send_lock = new ReentrantLock(); // serialize send()
 
     // creates an array of 2: length buffer (for reading the length of the following data buffer) and data buffer
     // protected Buffers             recv_buf=new Buffers(2).add(ByteBuffer.allocate(Global.INT_SIZE), null);
-    protected Buffers recv_buf = new Buffers(4).add(ByteBuffer.allocate(cookie.length));
+    Buffers recv_buf = new Buffers(4).add(ByteBuffer.allocate(cookie.length));
     //数据读取对象
     protected Reader reader = new Reader(); // manages the thread which receives messages
-    protected long reader_idle_time = 20000; // number of ms a reader can be idle (no msgs) until it terminates
+    private long reader_idle_time = 20000; // number of ms a reader can be idle (no msgs) until it terminates
 
     /** Creates a connection stub and binds it, use {@link #connect(Address)} to connect */
     public NioConnection(Address peer_addr, NioBaseServer server) throws Exception {
         this.server = server;
         if (peer_addr == null)
-            throw new IllegalArgumentException("Invalid parameter peer_addr=" + peer_addr);
+            throw new IllegalArgumentException("Invalid parameter peer_addr=" + null);
         this.peer_addr = peer_addr;
         send_buf = new Buffers(server.maxSendBuffers() * 2); // space for actual bufs and length bufs!
         channel = SocketChannel.open();
@@ -85,13 +85,14 @@ public class NioConnection extends Connection {
         return channel != null && channel.isConnected();
     }
 
+    // TODO: 17/5/25 by zmyer
     @Override
     public boolean isExpired(long now) {
         return server.connExpireTime() > 0 && now - last_access >= server.connExpireTime();
     }
 
     // TODO: 17/5/25 by zmyer
-    protected void updateLastAccessed() {
+    private void updateLastAccessed() {
         if (server.connExpireTime() > 0)
             last_access = getTimestamp();
     }
@@ -102,7 +103,7 @@ public class NioConnection extends Connection {
         if (channel != null) {
             try {
                 local_addr = (InetSocketAddress) channel.getLocalAddress();
-            } catch (IOException e) {
+            } catch (IOException ignored) {
             }
         }
         return local_addr != null ? new IpAddress(local_addr) : null;
@@ -122,7 +123,7 @@ public class NioConnection extends Connection {
         return this;
     }
 
-    public NioConnection copyOnPartialWrite(boolean b) {
+    NioConnection copyOnPartialWrite(boolean b) {
         this.copy_on_partial_write = b;
         return this;
     }
@@ -131,7 +132,7 @@ public class NioConnection extends Connection {
         return copy_on_partial_write;
     }
 
-    public int numPartialWrites() {
+    int numPartialWrites() {
         return partial_writes;
     }
 
@@ -144,19 +145,19 @@ public class NioConnection extends Connection {
         return this;
     }
 
-    public boolean readerRunning() {
+    private boolean readerRunning() {
         return this.reader.isRunning();
     }
 
     // TODO: 17/5/25 by zmyer
-    public synchronized void registerSelectionKey(int interest_ops) {
+    private synchronized void registerSelectionKey(int interest_ops) {
         if (key == null)
             return;
         key.interestOps(key.interestOps() | interest_ops);
     }
 
     // TODO: 17/5/25 by zmyer
-    public synchronized void clearSelectionKey(int interest_ops) {
+    synchronized void clearSelectionKey(int interest_ops) {
         if (key == null)
             return;
         //从选择键值中清理指定的事件类型
@@ -194,6 +195,7 @@ public class NioConnection extends Connection {
         ; // nothing to be done here
     }
 
+    // TODO: 17/5/25 by zmyer
     @Override
     public void send(byte[] buf, int offset, int length) throws Exception {
         send(ByteBuffer.wrap(buf, offset, length));
@@ -204,9 +206,10 @@ public class NioConnection extends Connection {
      * doesn't complete, the message is dropped (needs to be retransmitted, e.g. by UNICAST3 or
      * NAKACK2).
      *
-     * @param buf
-     * @throws Exception
+     * @param buf byte buffer
+     * @throws Exception exception
      */
+    // TODO: 17/5/25 by zmyer
     @Override
     public void send(ByteBuffer buf) throws Exception {
         send(buf, true);
@@ -239,6 +242,7 @@ public class NioConnection extends Connection {
         reader.receive();
     }
 
+    // TODO: 17/5/25 by zmyer
     protected void send(ByteBuffer buf, boolean send_length) throws Exception {
         send_lock.lock();
         try {
@@ -262,12 +266,13 @@ public class NioConnection extends Connection {
     }
 
     // TODO: 17/5/25 by zmyer
-    protected boolean _receive(boolean update) throws Exception {
+    private boolean _receive(boolean update) throws Exception {
         ByteBuffer msg;
         //获取接收者
         Receiver receiver = server.receiver();
 
-        if (peer_addr == null && server.usePeerConnections() && (peer_addr = readPeerAddress()) != null) {
+        if (peer_addr == null && server.usePeerConnections()
+            && (peer_addr = readPeerAddress()) != null) {
             recv_buf = new Buffers(2).add(ByteBuffer.allocate(Global.INT_SIZE), null);
             //将对端的ip地址插入到连接列表中
             server.addConnection(peer_addr, this);
@@ -293,7 +298,7 @@ public class NioConnection extends Connection {
             if (send_buf.remaining() > 0) { // try to flush send buffer if it still has pending data to send
                 try {
                     send();
-                } catch (Throwable e) {
+                } catch (Throwable ignored) {
                 }
             }
             Util.close(channel, reader);
@@ -306,11 +311,11 @@ public class NioConnection extends Connection {
         InetSocketAddress local = null, remote = null;
         try {
             local = channel != null ? (InetSocketAddress) channel.getLocalAddress() : null;
-        } catch (Throwable t) {
+        } catch (Throwable ignored) {
         }
         try {
             remote = channel != null ? (InetSocketAddress) channel.getRemoteAddress() : null;
-        } catch (Throwable t) {
+        } catch (Throwable ignored) {
         }
         String loc = local == null ? "n/a" : local.getHostString() + ":" + local.getPort(),
             rem = remote == null ? "n/a" : remote.getHostString() + ":" + remote.getPort();
@@ -333,11 +338,12 @@ public class NioConnection extends Connection {
 
     // TODO: 17/5/25 by zmyer
     protected long getTimestamp() {
-        return server.timeService() != null ? server.timeService().timestamp() : System.nanoTime();
+        return server.timeService() != null ?
+            server.timeService().timestamp() : System.nanoTime();
     }
 
     // TODO: 17/5/25 by zmyer
-    protected void writeInterest(boolean register) {
+    private void writeInterest(boolean register) {
         if (register) {
             if (!write_interest_set) {
                 write_interest_set = true;
@@ -351,7 +357,7 @@ public class NioConnection extends Connection {
         }
     }
 
-    protected void setSocketParameters(Socket client_sock) throws SocketException {
+    private void setSocketParameters(Socket client_sock) throws SocketException {
         try {
             client_sock.setSendBufferSize(server.sendBufferSize());
         } catch (IllegalArgumentException ex) {
@@ -371,7 +377,7 @@ public class NioConnection extends Connection {
             client_sock.setSoLinger(false, -1);
     }
 
-    protected void sendLocalAddress(Address local_addr) throws Exception {
+    void sendLocalAddress(Address local_addr) throws Exception {
         try {
             int addr_size = local_addr.serializedSize();
             int expected_size = cookie.length + Global.SHORT_SIZE * 2 + addr_size;
@@ -390,7 +396,7 @@ public class NioConnection extends Connection {
     }
 
     // TODO: 17/5/25 by zmyer
-    protected Address readPeerAddress() throws Exception {
+    private Address readPeerAddress() throws Exception {
         while (recv_buf.read(channel)) {
             //开始读取通道内容
             int current_position = recv_buf.position() - 1;
@@ -439,7 +445,8 @@ public class NioConnection extends Connection {
         return retval;
     }
 
-    protected static ByteBuffer makeLengthBuffer(ByteBuffer buf) {
+    // TODO: 17/5/25 by zmyer
+    private static ByteBuffer makeLengthBuffer(ByteBuffer buf) {
         return (ByteBuffer) ByteBuffer.allocate(Global.INT_SIZE).putInt(buf.remaining()).clear();
     }
 
@@ -449,15 +456,15 @@ public class NioConnection extends Connection {
     }
 
     // TODO: 17/5/25 by zmyer
-    protected class Reader implements Runnable, Closeable {
+    private class Reader implements Runnable, Closeable {
         //重入锁对象
         protected final Lock lock = new ReentrantLock(); // to synchronize receive() and state transitions
         //状态对象
         protected State state = State.done;
         //数据是否可用
-        protected volatile boolean data_available = true;
+        volatile boolean data_available = true;
         //数据可用条件变量
-        protected final CondVar data_available_cond = new CondVar();
+        final CondVar data_available_cond = new CondVar();
         //执行线程
         protected volatile Thread thread;
         //是否运行
@@ -468,7 +475,8 @@ public class NioConnection extends Connection {
             //设置启动标记
             running = true;
             //创建执行线程
-            thread = server.factory.newThread(this, String.format("NioConnection.Reader [%s]", peer_addr));
+            thread = server.factory.newThread(this,
+                String.format("NioConnection.Reader [%s]", peer_addr));
             //设置守护模式
             thread.setDaemon(true);
             //启动线程
@@ -537,7 +545,7 @@ public class NioConnection extends Connection {
         }
 
         // TODO: 17/5/25 by zmyer
-        protected void _run() {
+        void _run() {
             //数据是否准备就绪
             final Condition is_data_available = () -> data_available;
             while (running) {
@@ -588,7 +596,7 @@ public class NioConnection extends Connection {
         protected void clear(int op) {
             try {
                 clearSelectionKey(op);
-            } catch (Throwable t) {
+            } catch (Throwable ignored) {
             }
         }
 
@@ -601,7 +609,5 @@ public class NioConnection extends Connection {
                 lock.unlock();
             }
         }
-
     }
-
 }

@@ -1,16 +1,20 @@
 
 package org.jgroups.conf;
 
-import org.jgroups.Global;
-import org.jgroups.util.Util;
-import org.w3c.dom.Element;
-
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.security.AccessControlException;
 import java.util.List;
 import java.util.Map;
+import org.jgroups.Global;
+import org.jgroups.util.Util;
+import org.w3c.dom.Element;
 
 /**
  * The ConfigurationFactory is a factory that returns a protocol stack configurator.
@@ -24,33 +28,36 @@ import java.util.Map;
  * @author Filip Hanik (<a href="mailto:filip@filip.net">filip@filip.net)
  * @author Bela Ban
  */
+// TODO: 17/7/5 by zmyer
 public class ConfiguratorFactory {
-    public static final String JAXP_MISSING_ERROR_MSG="the required XML parsing classes are not available; " +
-      "make sure that JAXP compatible libraries are in the classpath.";
-
+    private static final String JAXP_MISSING_ERROR_MSG = "the required XML parsing classes are not available; " +
+        "make sure that JAXP compatible libraries are in the classpath.";
 
     protected ConfiguratorFactory() {
     }
 
     /**
-     * Returns a protocol stack configurator based on the XML configuration provided by the specified File.
-     * 
+     * Returns a protocol stack configurator based on the XML configuration provided by the
+     * specified File.
+     *
      * @param file a File with a JGroups XML configuration.
      * @return a {@code ProtocolStackConfigurator} containing the stack configuration.
      * @throws Exception if problems occur during the configuration of the protocol stack.
      */
     public static ProtocolStackConfigurator getStackConfigurator(File file) throws Exception {
         checkJAXPAvailability();
-        InputStream input=getConfigStream(file);
+        InputStream input = getConfigStream(file);
         return XmlConfigurator.getInstance(input);
     }
 
-    public static ProtocolStackConfigurator getStackConfigurator(InputStream input) throws Exception {
+    public static ProtocolStackConfigurator getStackConfigurator(
+        InputStream input) throws Exception {
         return XmlConfigurator.getInstance(input);
     }
 
     /**
-     * Returns a protocol stack configurator based on the XML configuration provided at the specified URL.
+     * Returns a protocol stack configurator based on the XML configuration provided at the
+     * specified URL.
      *
      * @param url a URL pointing to a JGroups XML configuration.
      * @return a {@code ProtocolStackConfigurator} containing the stack configuration.
@@ -63,7 +70,8 @@ public class ConfiguratorFactory {
     }
 
     /**
-     * Returns a protocol stack configurator based on the XML configuration provided by the specified XML element.
+     * Returns a protocol stack configurator based on the XML configuration provided by the
+     * specified XML element.
      *
      * @param element a XML element containing a JGroups XML configuration.
      * @return a {@code ProtocolStackConfigurator} containing the stack configuration.
@@ -76,164 +84,155 @@ public class ConfiguratorFactory {
 
     /**
      * Returns a protocol stack configurator based on the provided properties string.
-     * @param properties a string representing a system resource containing a JGroups XML configuration, a URL pointing
-     *                   to a JGroups XML configuration or a string representing a file name that contains a JGroups
-     *                   XML configuration.
+     *
+     * @param properties a string representing a system resource containing a JGroups XML
+     * configuration, a URL pointing to a JGroups XML configuration or a string representing a file
+     * name that contains a JGroups XML configuration.
      */
-    public static ProtocolStackConfigurator getStackConfigurator(String properties) throws Exception {
-        if(properties == null)
-            properties=Global.DEFAULT_PROTOCOL_STACK;
+    public static ProtocolStackConfigurator getStackConfigurator(
+        String properties) throws Exception {
+        if (properties == null)
+            properties = Global.DEFAULT_PROTOCOL_STACK;
 
         // Attempt to treat the properties string as a pointer to an XML configuration.
-        XmlConfigurator configurator = null;
+        XmlConfigurator configurator;
 
         checkForNullConfiguration(properties);
-        configurator=getXmlConfigurator(properties);
+        configurator = getXmlConfigurator(properties);
 
-        if(configurator != null) // did the properties string point to a JGroups XML configuration ?
+        if (configurator != null) // did the properties string point to a JGroups XML configuration ?
             return configurator;
         throw new IllegalStateException(String.format("configuration %s not found or invalid", properties));
     }
 
-
-
-    public static InputStream getConfigStream(File file) throws Exception {
+    private static InputStream getConfigStream(File file) throws Exception {
         checkForNullConfiguration(file);
         return new FileInputStream(file);
     }
-
-
 
     public static InputStream getConfigStream(URL url) throws Exception {
         checkJAXPAvailability();
         return url.openStream();
     }
 
-
-
     /**
      * Returns a JGroups XML configuration InputStream based on the provided properties string.
      *
-     * @param properties a string representing a system resource containing a JGroups XML configuration, a string
-     *                   representing a URL pointing to a JGroups ML configuration, or a string representing
-     *                   a file name that contains a JGroups XML configuration.
-     * @throws IOException  if the provided properties string appears to be a valid URL but is unreachable.
+     * @param properties a string representing a system resource containing a JGroups XML
+     * configuration, a string representing a URL pointing to a JGroups ML configuration, or a
+     * string representing a file name that contains a JGroups XML configuration.
+     * @throws IOException if the provided properties string appears to be a valid URL but is
+     * unreachable.
      */
     public static InputStream getConfigStream(String properties) throws IOException {
         InputStream configStream = null;
 
         // Check to see if the properties string is the name of a file.
         try {
-            configStream=new FileInputStream(properties);
-        }
-        catch(FileNotFoundException | AccessControlException fnfe) {
+            configStream = new FileInputStream(properties);
+        } catch (FileNotFoundException | AccessControlException fnfe) {
             // the properties string is likely not a file
         }
 
         // Check to see if the properties string is a URL.
-        if(configStream == null) {
+        if (configStream == null) {
             try {
-                configStream=new URL(properties).openStream();
-            }
-            catch (MalformedURLException mre) {
+                configStream = new URL(properties).openStream();
+            } catch (MalformedURLException mre) {
                 // the properties string is not a URL
             }
         }
 
         // Check to see if the properties string is the name of a resource, e.g. udp.xml.
-        if(configStream == null && properties.endsWith("xml"))
-            configStream=Util.getResourceAsStream(properties, ConfiguratorFactory.class);
+        if (configStream == null && properties.endsWith("xml"))
+            configStream = Util.getResourceAsStream(properties, ConfiguratorFactory.class);
         return configStream;
     }
 
-
-    public static InputStream getConfigStream(Object properties) throws IOException {
-        InputStream input=null;
+    private static InputStream getConfigStream(Object properties) throws IOException {
+        InputStream input = null;
 
         // added by bela: for null String props we use the default properties
-        if(properties == null)
-            properties=Global.DEFAULT_PROTOCOL_STACK;
+        if (properties == null)
+            properties = Global.DEFAULT_PROTOCOL_STACK;
 
-        if(properties instanceof URL) {
+        if (properties instanceof URL) {
             try {
-                input=((URL)properties).openStream();
-            }
-            catch(Throwable t) {
+                input = ((URL) properties).openStream();
+            } catch (Throwable ignored) {
             }
         }
 
         // if it is a string, then it could be a plain string or a url
-        if(input == null && properties instanceof String)
-            input=getConfigStream((String)properties);
+        if (input == null && properties instanceof String)
+            input = getConfigStream((String) properties);
 
         // try a regular file
-        if(input == null && properties instanceof File) {
+        if (input == null && properties instanceof File) {
             try {
-                input=new FileInputStream((File)properties);
-            }
-            catch(Throwable t) {
+                input = new FileInputStream((File) properties);
+            } catch (Throwable ignored) {
             }
         }
 
-        if(input != null)
+        if (input != null)
             return input;
 
-        if(properties instanceof Element) {
+        if (properties instanceof Element) {
             return getConfigStream(properties);
         }
 
-        return new ByteArrayInputStream(((String)properties).getBytes());
+        return new ByteArrayInputStream(((String) properties).getBytes());
     }
-
-
-
 
     /**
      * Returns an XmlConfigurator based on the provided properties string (if possible).
      *
-     * @param properties a string representing a system resource containing a JGroups XML configuration, a string
-     *                   representing a URL pointing to a JGroups ML configuration, or a string representing a file
-     *                   name that contains a JGroups XML configuration.
-     * @return an XmlConfigurator instance based on the provided properties string; {@code null} if the provided
-     *         properties string does not point to an XML configuration.
-     * @throws IOException  if the provided properties string appears to be a valid URL but is unreachable, or if the
-     *                      JGroups XML configuration pointed to by the URL can not be parsed.
+     * @param properties a string representing a system resource containing a JGroups XML
+     * configuration, a string representing a URL pointing to a JGroups ML configuration, or a
+     * string representing a file name that contains a JGroups XML configuration.
+     * @return an XmlConfigurator instance based on the provided properties string; {@code null} if
+     * the provided properties string does not point to an XML configuration.
+     * @throws IOException if the provided properties string appears to be a valid URL but is
+     * unreachable, or if the JGroups XML configuration pointed to by the URL can not be parsed.
      */
-    static XmlConfigurator getXmlConfigurator(String properties) throws IOException {
-        XmlConfigurator returnValue=null;
-        InputStream configStream=getConfigStream(properties);
-        if(configStream == null && properties.endsWith("xml"))
+    private static XmlConfigurator getXmlConfigurator(String properties) throws IOException {
+        XmlConfigurator returnValue = null;
+        InputStream configStream = getConfigStream(properties);
+        if (configStream == null && properties.endsWith("xml"))
             throw new FileNotFoundException(String.format(Util.getMessage("FileNotFound"), properties));
 
         if (configStream != null) {
             checkJAXPAvailability();
-            returnValue=XmlConfigurator.getInstance(configStream);
+            returnValue = XmlConfigurator.getInstance(configStream);
         }
 
         return returnValue;
     }
 
-
     /**
-     * Check to see if the specified configuration properties are <code>null</null> which is not allowed.
+     * Check to see if the specified configuration properties are <code>null</null> which is not
+     * allowed.
+     *
      * @param properties the specified protocol stack configuration.
      * @throws NullPointerException if the specified configuration properties are {@code null}.
      */
-    static void checkForNullConfiguration(Object properties) {
-        if(properties == null)
+    private static void checkForNullConfiguration(Object properties) {
+        if (properties == null)
             throw new NullPointerException("the specifed protocol stack configuration was null");
     }
 
     /**
      * Checks the availability of the JAXP classes on the classpath.
-     * @throws NoClassDefFoundError if the required JAXP classes are not availabile on the classpath.
+     *
+     * @throws NoClassDefFoundError if the required JAXP classes are not availabile on the
+     * classpath.
      */
-    static void checkJAXPAvailability() {
+    private static void checkJAXPAvailability() {
         try {
             XmlConfigurator.class.getName();
-        }
-        catch (NoClassDefFoundError error) {
-            Error tmp=new NoClassDefFoundError(JAXP_MISSING_ERROR_MSG);
+        } catch (NoClassDefFoundError error) {
+            Error tmp = new NoClassDefFoundError(JAXP_MISSING_ERROR_MSG);
             tmp.initCause(error);
             throw tmp;
         }
@@ -242,22 +241,22 @@ public class ConfiguratorFactory {
     /**
      * Replace variables of the form ${var:default} with the getProperty(var,
      * default)
-     * 
-     * @param configurator
+     *
+     * @param configurator configuartor
      */
     public static void substituteVariables(ProtocolStackConfigurator configurator) {
-        List<ProtocolConfiguration> protocols=configurator.getProtocolStack();
+        List<ProtocolConfiguration> protocols = configurator.getProtocolStack();
         protocols.stream().filter(data -> data != null).forEach(data -> {
-            Map<String,String> parms=data.getProperties();
-            for(Map.Entry<String,String> entry : parms.entrySet()) {
-                String val=entry.getValue();
-                String replacement=Util.substituteVariable(val);
-                if(!replacement.equals(val)) {
+            Map<String, String> parms = data.getProperties();
+            for (Map.Entry<String, String> entry : parms.entrySet()) {
+                String val = entry.getValue();
+                String replacement = Util.substituteVariable(val);
+                if (!replacement.equals(val)) {
                     entry.setValue(replacement);
                 }
             }
         });
-    }          
+    }
 }
 
 

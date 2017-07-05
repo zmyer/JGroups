@@ -10,10 +10,13 @@ import org.jgroups.util.ThreadFactory;
  * @author Bela Ban
  * @since 3.6.5
  */
-public abstract class TcpBaseServer extends BaseServer {
-    protected int peer_addr_read_timeout = 2000; // max time in milliseconds to block on reading peer address
 
-    protected TcpBaseServer(ThreadFactory f, SocketFactory sf) {
+// TODO: 17/5/25 by zmyer
+public abstract class TcpBaseServer extends BaseServer {
+    // max time in milliseconds to block on reading peer address
+    private int peer_addr_read_timeout = 2000;
+
+    TcpBaseServer(ThreadFactory f, SocketFactory sf) {
         super(f, sf);
     }
 
@@ -22,7 +25,7 @@ public abstract class TcpBaseServer extends BaseServer {
         return new TcpConnection(dest, this);
     }
 
-    public int peerAddressReadTimeout() {
+    int peerAddressReadTimeout() {
         return peer_addr_read_timeout;
     }
 

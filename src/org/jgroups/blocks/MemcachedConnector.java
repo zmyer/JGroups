@@ -29,16 +29,17 @@ import org.jgroups.util.Util;
 
 /**
  * Class which listens on a server socket for memcached clients, reads the requests, forwards them
- * to an instance of PartitionedHashMap and sends the response. A memcached client should be able to
- * work without changes once the memcached protocol (http://code.sixapart.com/svn/memcached/trunk/server/doc/protocol.txt)
+ * to an instance of PartitionedHashMap and sends the response.
+ * A memcached client should be able to work without changes once the memcached protocol
+ * (http://code.sixapart.com/svn/memcached/trunk/server/doc/protocol.txt)
  * has been implemented completely.<br/>
  *
  * @author Bela Ban
  */
 public class MemcachedConnector implements Runnable {
-    @ManagedAttribute(writable = false)
+    @ManagedAttribute()
     private int port = 11211;
-    @ManagedAttribute(writable = false)
+    @ManagedAttribute()
     private InetAddress bind_addr = null;
     private PartitionedHashMap<String, byte[]> cache = null;
     private Thread thread = null;
@@ -135,10 +136,12 @@ public class MemcachedConnector implements Runnable {
     }
 
     @ManagedOperation
-    public void start() throws IOException, MalformedObjectNameException, MBeanRegistrationException {
+    public void start() throws IOException,
+        MalformedObjectNameException, MBeanRegistrationException {
         srv_sock = new ServerSocket(port, 50, bind_addr);
         if (thread_pool == null) {
-            thread_pool = new ThreadPoolExecutor(core_threads, max_threads, idle_time, TimeUnit.MILLISECONDS,
+            thread_pool = new ThreadPoolExecutor(core_threads,
+                max_threads, idle_time, TimeUnit.MILLISECONDS,
                 new SynchronousQueue<>(), new ThreadPoolExecutor.CallerRunsPolicy());
             // thread_pool=new DirectExecutor();
         }
@@ -163,23 +166,17 @@ public class MemcachedConnector implements Runnable {
             Socket client_sock = null;
             try {
                 client_sock = srv_sock.accept();
-                // System.out.println("ACCEPT: " + client_sock.getRemoteSocketAddress());
                 final RequestHandler handler = new RequestHandler(client_sock);
-                /*new Thread() {
-                    public void run() {
-                        handler.run();
-                    }
-                }.start();
-                */
                 thread_pool.execute(handler);
             } catch (ClosedSelectorException closed) {
                 Util.close(client_sock);
                 break;
-            } catch (Throwable e) {
+            } catch (Throwable ignored) {
             }
         }
     }
 
+    // TODO: 17/7/4 by zmyer
     private class RequestHandler implements Runnable {
         private final Socket client_sock;
         private final InputStream input;
@@ -201,14 +198,10 @@ public class MemcachedConnector implements Runnable {
                     if (line == null)
                         break;
 
-                    // System.out.println("line = " + line);
-
                     Request req = parseRequest(line);
                     if (req == null) {
                         break;
                     }
-
-                    // System.out.println("req = " + req);
 
                     switch (req.type) {
                         case SET:
@@ -229,7 +222,8 @@ public class MemcachedConnector implements Runnable {
                                     val = cache.get(key);
                                     if (val != null) {
                                         int length = val.length;
-                                        output.write(("VALUE " + key + " 0 " + length + "\r\n").getBytes());
+                                        output.write(("VALUE " + key + " 0 "
+                                            + length + "\r\n").getBytes());
                                         output.write(val, 0, length);
                                         output.write(RN);
                                     }
@@ -249,7 +243,8 @@ public class MemcachedConnector implements Runnable {
                             Map<String, Object> stats = getStats();
                             StringBuilder sb = new StringBuilder();
                             for (Map.Entry<String, Object> entry : stats.entrySet()) {
-                                sb.append("STAT ").append(entry.getKey()).append(" ").append(entry.getValue()).append("\r\n");
+                                sb.append("STAT ").append(entry.getKey()).append(" ")
+                                    .append(entry.getValue()).append("\r\n");
                             }
 
                             sb.append("END\r\n");
@@ -261,11 +256,11 @@ public class MemcachedConnector implements Runnable {
                     try {
                         output.write(("CLIENT_ERROR failed to parse request: " + corrupted_ex + ":\r\n").getBytes());
                         output.flush();
-                    } catch (IOException e) {
+                    } catch (IOException ignored) {
                     }
                 } catch (EOFException end_of_file_ex) {
                     break;
-                } catch (Throwable e) {
+                } catch (Throwable ignored) {
                 }
             }
             Util.close(client_sock);
@@ -374,10 +369,12 @@ public class MemcachedConnector implements Runnable {
 
     }
 
+    // TODO: 17/7/4 by zmyer
     public static class Request {
-        public enum Type {SET, ADD, REPLACE, PREPEND, APPEND, CAS, INCR, DECR, GET, GETS, DELETE, STAT, STATS}
-
-        ;
+        public enum Type {
+            SET, ADD, REPLACE, PREPEND, APPEND, CAS,
+            INCR, DECR, GET, GETS, DELETE, STAT, STATS
+        }
 
         Type type;
         String key;
@@ -390,12 +387,12 @@ public class MemcachedConnector implements Runnable {
 
         public String toString() {
             StringBuilder sb = new StringBuilder();
-            sb.append(type + ": ");
+            sb.append(type).append(": ");
             if (key != null)
-                sb.append("key=" + key);
+                sb.append("key=").append(key);
             else if (keys != null && !keys.isEmpty())
-                sb.append("keys=" + keys);
-            sb.append(", caching_time=" + caching_time + ", number_of_bytes=" + number_of_bytes);
+                sb.append("keys=").append(keys);
+            sb.append(", caching_time=").append(caching_time).append(", number_of_bytes=").append(number_of_bytes);
             return sb.toString();
         }
     }

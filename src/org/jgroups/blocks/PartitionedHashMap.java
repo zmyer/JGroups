@@ -1,5 +1,16 @@
 package org.jgroups.blocks;
 
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import org.jgroups.Address;
 import org.jgroups.JChannel;
 import org.jgroups.MembershipListener;
@@ -12,99 +23,97 @@ import org.jgroups.logging.Log;
 import org.jgroups.logging.LogFactory;
 import org.jgroups.util.Util;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.lang.reflect.Method;
-import java.util.*;
-
-/** Hashmap which distributes its keys and values across the cluster. A PUT/GET/REMOVE computes the cluster node to which
- * or from which to get/set the key/value from a hash of the key and then forwards the request to the remote cluster node.
- * We also maintain a local cache (L1 cache) which is a bounded cache that caches retrieved keys/values. <br/>
- * Todos:<br/>
- * <ol>
- * <li>Use MarshalledValue to keep track of byte[] buffers, and be able to compute the exact size of the cache. This is
- *     good for maintaining a bounded cache (rather than using the number of entries)
- * <li>Provide a better consistent hashing algorithm than ConsistentHashFunction as default
- * <li>GUI (showing at least the topology and L1 and L2 caches)
- * <li>Notifications (puts, removes, gets etc)
- * <li>Invalidation of L1 caches (if used) on removal/put of item
- * <li>Benchmarks, comparison to memcached
- * <li>Documentation, comparison to memcached
- * </ol>
+/**
+ * Hashmap which distributes its keys and values across the cluster. A PUT/GET/REMOVE computes the
+ * cluster node to which or from which to get/set the key/value from a hash of the key and then
+ * forwards the request to the remote cluster node. We also maintain a local cache (L1 cache) which
+ * is a bounded cache that caches retrieved keys/values. <br/> Todos:<br/> <ol> <li>Use
+ * MarshalledValue to keep track of byte[] buffers, and be able to compute the exact size of the
+ * cache. This is good for maintaining a bounded cache (rather than using the number of entries)
+ * <li>Provide a better consistent hashing algorithm than ConsistentHashFunction as default <li>GUI
+ * (showing at least the topology and L1 and L2 caches) <li>Notifications (puts, removes, gets etc)
+ * <li>Invalidation of L1 caches (if used) on removal/put of item <li>Benchmarks, comparison to
+ * memcached <li>Documentation, comparison to memcached </ol>
+ *
  * @author Bela Ban
  */
+// TODO: 17/7/4 by zmyer
 @Experimental @Unsupported
-public class PartitionedHashMap<K,V> implements MembershipListener {
+public class PartitionedHashMap<K, V> implements MembershipListener {
 
     /** The cache in which all partitioned entries are located */
-    private Cache<K,V> l2_cache=new Cache<>();
+    private Cache<K, V> l2_cache = new Cache<>();
 
-    /** The local bounded cache, to speed up access to frequently accessed entries. Can be disabled or enabled */
-    private Cache<K,V> l1_cache=null;
+    /**
+     * The local bounded cache, to speed up access to frequently accessed entries. Can be disabled
+     * or enabled
+     */
+    private Cache<K, V> l1_cache = null;
 
-    private static final Log log=LogFactory.getLog(PartitionedHashMap.class);
-    private JChannel ch=null;
-    private Address local_addr=null;
-    private View    view;
-    private RpcDispatcher disp=null;
-    @ManagedAttribute(writable=true)
-    private String props="udp.xml";
-    @ManagedAttribute(writable=true)
-    private String cluster_name="PartitionedHashMap-Cluster";
-    @ManagedAttribute(writable=true)
-    private long call_timeout=1000L;
-    @ManagedAttribute(writable=true)
-    private long caching_time=30000L; // in milliseconds. -1 means don't cache, 0 means cache forever (or until changed)
-    private HashFunction<K> hash_function=null;
-    private final Set<MembershipListener> membership_listeners=new HashSet<>();
+    private static final Log log = LogFactory.getLog(PartitionedHashMap.class);
+    private JChannel ch = null;
+    private Address local_addr = null;
+    private View view;
+    private RpcDispatcher disp = null;
+    @ManagedAttribute(writable = true)
+    private String props = "udp.xml";
+    @ManagedAttribute(writable = true)
+    private String cluster_name = "PartitionedHashMap-Cluster";
+    @ManagedAttribute(writable = true)
+    private long call_timeout = 1000L;
+    @ManagedAttribute(writable = true)
+    private long caching_time = 30000L; // in milliseconds. -1 means don't cache, 0 means cache forever (or until changed)
+    private HashFunction<K> hash_function = null;
+    private final Set<MembershipListener> membership_listeners = new HashSet<>();
 
-    /** On a view change, if a member P1 detects that for any given key K, P1 is not the owner of K, then
-     * it will compute the new owner P2 and transfer ownership for all Ks for which P2 is the new owner. P1
-     * will then also evict those keys from its L2 cache */
-    @ManagedAttribute(writable=true)
-    private boolean migrate_data=false;
+    /**
+     * On a view change, if a member P1 detects that for any given key K, P1 is not the owner of K,
+     * then it will compute the new owner P2 and transfer ownership for all Ks for which P2 is the
+     * new owner. P1 will then also evict those keys from its L2 cache
+     */
+    @ManagedAttribute(writable = true)
+    private boolean migrate_data = false;
 
-    private static final short PUT     = 1;
-    private static final short GET     = 2;
-    private static final short REMOVE  = 3;
+    private static final short PUT = 1;
+    private static final short GET = 2;
+    private static final short REMOVE = 3;
 
-    protected static final Map<Short,Method> methods=Util.createConcurrentMap(8);
+    protected static final Map<Short, Method> methods = Util.createConcurrentMap(8);
 
-     static {
+    static {
         try {
             methods.put(PUT, PartitionedHashMap.class.getMethod("_put",
-                                                                Object.class,
-                                                                Object.class,
-                                                                long.class));
+                Object.class,
+                Object.class,
+                long.class));
             methods.put(GET, PartitionedHashMap.class.getMethod("_get",
-                                                               Object.class));
+                Object.class));
             methods.put(REMOVE, PartitionedHashMap.class.getMethod("_remove", Object.class));
-        }
-        catch(NoSuchMethodException e) {
+        } catch (NoSuchMethodException e) {
             throw new RuntimeException(e);
         }
     }
 
-
-    public interface HashFunction<K> {
+    interface HashFunction<K> {
         /**
-         * Defines a hash function to pick the right node from the list of cluster nodes. Ideally, this function uses
-         * consistent hashing, so that the same key maps to the same node despite cluster view changes. If a view change
-         * causes all keys to hash to different nodes, then PartitionedHashMap will redirect requests to different nodes
-         * and this causes unnecessary overhead.
+         * Defines a hash function to pick the right node from the list of cluster nodes. Ideally,
+         * this function uses consistent hashing, so that the same key maps to the same node despite
+         * cluster view changes. If a view change causes all keys to hash to different nodes, then
+         * PartitionedHashMap will redirect requests to different nodes and this causes unnecessary
+         * overhead.
+         *
          * @param key The object to be hashed
-         * @param membership The membership. This value can be ignored for example if the hash function keeps
-         * track of the membership itself, e.g. by registering as a membership
-         * listener ({@link PartitionedHashMap#addMembershipListener(org.jgroups.MembershipListener)} ) 
-         * @return
+         * @param membership The membership. This value can be ignored for example if the hash
+         * function keeps track of the membership itself, e.g. by registering as a membership
+         * listener ({@link PartitionedHashMap#addMembershipListener(org.jgroups.MembershipListener)}
+         * )
          */
         Address hash(K key, List<Address> membership);
     }
 
-
     public PartitionedHashMap(String props, String cluster_name) {
-        this.props=props;
-        this.cluster_name=cluster_name;
+        this.props = props;
+        this.cluster_name = cluster_name;
     }
 
     public String getProps() {
@@ -112,7 +121,7 @@ public class PartitionedHashMap<K,V> implements MembershipListener {
     }
 
     public void setProps(String props) {
-        this.props=props;
+        this.props = props;
     }
 
     public Address getLocalAddress() {
@@ -121,12 +130,12 @@ public class PartitionedHashMap<K,V> implements MembershipListener {
 
     @ManagedAttribute
     public String getLocalAddressAsString() {
-        return local_addr != null? local_addr.toString() : "null";
+        return local_addr != null ? local_addr.toString() : "null";
     }
 
     @ManagedAttribute
     public String getView() {
-        return view != null? view.toString() : "null";
+        return view != null ? view.toString() : "null";
     }
 
     @ManagedAttribute
@@ -139,7 +148,7 @@ public class PartitionedHashMap<K,V> implements MembershipListener {
     }
 
     public void setClusterName(String cluster_name) {
-        this.cluster_name=cluster_name;
+        this.cluster_name = cluster_name;
     }
 
     public long getCallTimeout() {
@@ -147,7 +156,7 @@ public class PartitionedHashMap<K,V> implements MembershipListener {
     }
 
     public void setCallTimeout(long call_timeout) {
-        this.call_timeout=call_timeout;
+        this.call_timeout = call_timeout;
     }
 
     public long getCachingTime() {
@@ -155,7 +164,7 @@ public class PartitionedHashMap<K,V> implements MembershipListener {
     }
 
     public void setCachingTime(long caching_time) {
-        this.caching_time=caching_time;
+        this.caching_time = caching_time;
     }
 
     public boolean isMigrateData() {
@@ -163,7 +172,7 @@ public class PartitionedHashMap<K,V> implements MembershipListener {
     }
 
     public void setMigrateData(boolean migrate_data) {
-        this.migrate_data=migrate_data;
+        this.migrate_data = migrate_data;
     }
 
     public HashFunction getHashFunction() {
@@ -171,10 +180,10 @@ public class PartitionedHashMap<K,V> implements MembershipListener {
     }
 
     public void setHashFunction(HashFunction<K> hash_function) {
-        this.hash_function=hash_function;
+        this.hash_function = hash_function;
     }
 
-    public void addMembershipListener(MembershipListener l) {
+    private void addMembershipListener(MembershipListener l) {
         membership_listeners.add(l);
     }
 
@@ -182,54 +191,54 @@ public class PartitionedHashMap<K,V> implements MembershipListener {
         membership_listeners.remove(l);
     }
 
-    public Cache<K,V> getL1Cache() {
+    public Cache<K, V> getL1Cache() {
         return l1_cache;
     }
 
-    public void setL1Cache(Cache<K,V> cache) {
-        if(l1_cache != null)
+    public void setL1Cache(Cache<K, V> cache) {
+        if (l1_cache != null)
             l1_cache.stop();
-        l1_cache=cache;
+        l1_cache = cache;
     }
 
-    public Cache<K,V> getL2Cache() {
+    public Cache<K, V> getL2Cache() {
         return l2_cache;
     }
 
-    public void setL2Cache(Cache<K,V> cache) {
-        if(l2_cache != null)
+    public void setL2Cache(Cache<K, V> cache) {
+        if (l2_cache != null)
             l2_cache.stop();
-        l2_cache=cache;
+        l2_cache = cache;
     }
-
 
     @ManagedOperation
     public void start() throws Exception {
-        hash_function=new ConsistentHashFunction<>();
-        addMembershipListener((MembershipListener)hash_function);
-        ch=new JChannel(props);
-        Marshaller m=new CustomMarshaller();
-        disp=new RpcDispatcher(ch, this).setMarshaller(m).setMethodLookup(methods::get).setMembershipListener(this);
+        hash_function = new ConsistentHashFunction<>();
+        addMembershipListener((MembershipListener) hash_function);
+        ch = new JChannel(props);
+        Marshaller m = new CustomMarshaller();
+        disp = new RpcDispatcher(ch, this).setMarshaller(m)
+            .setMethodLookup(methods::get).setMembershipListener(this);
         ch.connect(cluster_name);
-        local_addr=ch.getAddress();
-        view=ch.getView();
+        local_addr = ch.getAddress();
+        view = ch.getView();
     }
 
     @ManagedOperation
     public void stop() {
-        if(l1_cache != null)
+        if (l1_cache != null)
             l1_cache.stop();
-        if(migrate_data) {
-            List<Address> members_without_me=new ArrayList<>(view.getMembers());
+        if (migrate_data) {
+            List<Address> members_without_me = new ArrayList<>(view.getMembers());
             members_without_me.remove(local_addr);
 
-            for(Map.Entry<K,Cache.Value<V>> entry: l2_cache.entrySet()) {
-                K key=entry.getKey();
-                Address node=hash_function.hash(key, members_without_me);
-                if(!node.equals(local_addr)) {
-                    Cache.Value<V> val=entry.getValue();
+            for (Map.Entry<K, Cache.Value<V>> entry : l2_cache.entrySet()) {
+                K key = entry.getKey();
+                Address node = hash_function.hash(key, members_without_me);
+                if (!node.equals(local_addr)) {
+                    Cache.Value<V> val = entry.getValue();
                     sendPut(node, key, val.getValue(), val.getTimeout(), true);
-                    if(log.isTraceEnabled())
+                    if (log.isTraceEnabled())
                         log.trace("migrated " + key + " from " + local_addr + " to " + node);
                 }
             }
@@ -246,30 +255,30 @@ public class PartitionedHashMap<K,V> implements MembershipListener {
 
     /**
      * Adds a key/value to the cache, replacing a previous item if there was one
+     *
      * @param key The key
      * @param val The value
-     * @param caching_time Time to live. -1 means never cache, 0 means cache forever. All other (positive) values
-     * are the number of milliseconds to cache the item
+     * @param caching_time Time to live. -1 means never cache, 0 means cache forever. All other
+     * (positive) values are the number of milliseconds to cache the item
      */
     @ManagedOperation
     public void put(K key, V val, long caching_time) {
-        Address dest_node=getNode(key);
-        if(dest_node.equals(local_addr)) {
+        Address dest_node = getNode(key);
+        if (dest_node.equals(local_addr)) {
             l2_cache.put(key, val, caching_time);
-        }
-        else {
+        } else {
             sendPut(dest_node, key, val, caching_time, false);
         }
-        if(l1_cache != null && caching_time >= 0)
+        if (l1_cache != null && caching_time >= 0)
             l1_cache.put(key, val, caching_time);
     }
 
     @ManagedOperation
     public V get(K key) {
-        if(l1_cache != null) {
-            V val=l1_cache.get(key);
-            if(val != null) {
-                if(log.isTraceEnabled())
+        if (l1_cache != null) {
+            V val = l1_cache.get(key);
+            if (val != null) {
+                if (log.isTraceEnabled())
                     log.trace("returned value " + val + " for " + key + " from L1 cache");
                 return val;
             }
@@ -277,25 +286,23 @@ public class PartitionedHashMap<K,V> implements MembershipListener {
 
         Cache.Value<V> val;
         try {
-            Address dest_node=getNode(key);
+            Address dest_node = getNode(key);
             // if we are the destination, don't invoke an RPC but return the item from our L2 cache directly !
-            if(dest_node.equals(local_addr)) {
-                val=l2_cache.getEntry(key);
+            if (dest_node.equals(local_addr)) {
+                val = l2_cache.getEntry(key);
+            } else {
+                val = disp.callRemoteMethod(dest_node, new MethodCall(GET, key),
+                    new RequestOptions(ResponseMode.GET_FIRST, call_timeout));
             }
-            else {
-                val=disp.callRemoteMethod(dest_node, new MethodCall(GET, key),
-                                          new RequestOptions(ResponseMode.GET_FIRST, call_timeout));
-            }
-            if(val != null) {
-                V retval=val.getValue();
-                if(l1_cache != null && val.getTimeout() >= 0)
+            if (val != null) {
+                V retval = val.getValue();
+                if (l1_cache != null && val.getTimeout() >= 0)
                     l1_cache.put(key, retval, val.getTimeout());
                 return retval;
             }
             return null;
-        }
-        catch(Throwable t) {
-            if(log.isWarnEnabled())
+        } catch (Throwable t) {
+            if (log.isWarnEnabled())
                 log.warn("_get() failed", t);
             return null;
         }
@@ -303,55 +310,48 @@ public class PartitionedHashMap<K,V> implements MembershipListener {
 
     @ManagedOperation
     public void remove(K key) {
-        Address dest_node=getNode(key);
+        Address dest_node = getNode(key);
 
         try {
-            if(dest_node.equals(local_addr)) {
+            if (dest_node.equals(local_addr)) {
                 l2_cache.remove(key);
-            }
-            else {
+            } else {
                 disp.callRemoteMethod(dest_node, new MethodCall(REMOVE, key), new RequestOptions(ResponseMode.GET_NONE, call_timeout));
             }
-            if(l1_cache != null)
+            if (l1_cache != null)
                 l1_cache.remove(key);
-        }
-        catch(Throwable t) {
-            if(log.isWarnEnabled())
+        } catch (Throwable t) {
+            if (log.isWarnEnabled())
                 log.warn("_remove() failed", t);
         }
     }
-    
 
-    public V _put(K key, V val, long caching_time) {
-        if(log.isTraceEnabled())
+    private V _put(K key, V val, long caching_time) {
+        if (log.isTraceEnabled())
             log.trace("_put(" + key + ", " + val + ", " + caching_time + ")");
         return l2_cache.put(key, val, caching_time);
     }
 
-    public Cache.Value<V> _get(K key) {
-        if(log.isTraceEnabled())
+    private Cache.Value<V> _get(K key) {
+        if (log.isTraceEnabled())
             log.trace("_get(" + key + ")");
         return l2_cache.getEntry(key);
     }
 
-    public V _remove(K key) {
-        if(log.isTraceEnabled())
+    private V _remove(K key) {
+        if (log.isTraceEnabled())
             log.trace("_remove(" + key + ")");
         return l2_cache.remove(key);
     }
 
-
-
-
-
     public void viewAccepted(View new_view) {
         System.out.println("view = " + new_view);
-        this.view=new_view;
-        for(MembershipListener l: membership_listeners) {
+        this.view = new_view;
+        for (MembershipListener l : membership_listeners) {
             l.viewAccepted(new_view);
         }
 
-        if(migrate_data) {
+        if (migrate_data) {
             migrateData();
         }
     }
@@ -366,18 +366,17 @@ public class PartitionedHashMap<K,V> implements MembershipListener {
     }
 
     public String toString() {
-        StringBuilder sb=new StringBuilder();
-        if(l1_cache != null)
-            sb.append("L1 cache: " + l1_cache.getSize() + " entries");
-        sb.append("\nL2 cache: " + l2_cache.getSize() + "entries()");
+        StringBuilder sb = new StringBuilder();
+        if (l1_cache != null)
+            sb.append("L1 cache: ").append(l1_cache.getSize()).append(" entries");
+        sb.append("\nL2 cache: ").append(l2_cache.getSize()).append("entries()");
         return sb.toString();
     }
 
-
     @ManagedOperation
     public String dump() {
-        StringBuilder sb=new StringBuilder();
-        if(l1_cache != null) {
+        StringBuilder sb = new StringBuilder();
+        if (l1_cache != null) {
             sb.append("L1 cache:\n").append(l1_cache.dump());
         }
         sb.append("\nL2 cache:\n").append(l2_cache.dump());
@@ -385,16 +384,15 @@ public class PartitionedHashMap<K,V> implements MembershipListener {
         return sb.toString();
     }
 
-
     private void migrateData() {
-        for(Map.Entry<K,Cache.Value<V>> entry: l2_cache.entrySet()) {
-            K key=entry.getKey();
-            Address node=getNode(key);
-            if(!node.equals(local_addr)) {
-                Cache.Value<V> val=entry.getValue();
+        for (Map.Entry<K, Cache.Value<V>> entry : l2_cache.entrySet()) {
+            K key = entry.getKey();
+            Address node = getNode(key);
+            if (!node.equals(local_addr)) {
+                Cache.Value<V> val = entry.getValue();
                 put(key, val.getValue(), val.getTimeout());
                 l2_cache.remove(key);
-                if(log.isTraceEnabled())
+                if (log.isTraceEnabled())
                     log.trace("migrated " + key + " from " + local_addr + " to " + node);
             }
         }
@@ -402,12 +400,11 @@ public class PartitionedHashMap<K,V> implements MembershipListener {
 
     private void sendPut(Address dest, K key, V val, long caching_time, boolean synchronous) {
         try {
-            ResponseMode mode=synchronous? ResponseMode.GET_ALL : ResponseMode.GET_NONE;
+            ResponseMode mode = synchronous ? ResponseMode.GET_ALL : ResponseMode.GET_NONE;
             disp.callRemoteMethod(dest, new MethodCall(PUT, key, val, caching_time),
-                                  new RequestOptions(mode, call_timeout));
-        }
-        catch(Throwable t) {
-            if(log.isWarnEnabled())
+                new RequestOptions(mode, call_timeout));
+        } catch (Throwable t) {
+            if (log.isWarnEnabled())
                 log.warn("_put() failed", t);
         }
     }
@@ -416,18 +413,18 @@ public class PartitionedHashMap<K,V> implements MembershipListener {
         return hash_function.hash(key, null);
     }
 
-
-    public static class ConsistentHashFunction<K> implements MembershipListener, HashFunction<K> {
-        private final SortedMap<Short,Address> nodes=new TreeMap<>();
-        private final static int HASH_SPACE=2048; // must be > max number of nodes in a cluster, and a power of 2
+    private static class ConsistentHashFunction<K> implements MembershipListener, HashFunction<K> {
+        private final SortedMap<Short, Address> nodes = new TreeMap<>();
+        private final static int HASH_SPACE = 2048; // must be > max number of nodes in a cluster, and a power of 2
 
         public Address hash(K key, List<Address> members) {
-            int index=Math.abs(key.hashCode() & (HASH_SPACE - 1));
-            if(members != null && !members.isEmpty()) {
-                SortedMap<Short,Address> tmp=new TreeMap<>(nodes);
-                for(Iterator<Map.Entry<Short,Address>> it=tmp.entrySet().iterator(); it.hasNext();) {
-                    Map.Entry<Short, Address> entry=it.next();
-                    if(!members.contains(entry.getValue())) {
+            int index = Math.abs(key.hashCode() & (HASH_SPACE - 1));
+            if (members != null && !members.isEmpty()) {
+                SortedMap<Short, Address> tmp = new TreeMap<>(nodes);
+                for (Iterator<Map.Entry<Short, Address>> it =
+                    tmp.entrySet().iterator(); it.hasNext(); ) {
+                    Map.Entry<Short, Address> entry = it.next();
+                    if (!members.contains(entry.getValue())) {
                         it.remove();
                     }
                 }
@@ -438,21 +435,21 @@ public class PartitionedHashMap<K,V> implements MembershipListener {
 
         public void viewAccepted(View new_view) {
             nodes.clear();
-            for(Address node: new_view.getMembers()) {
-                int hash=Math.abs(node.hashCode() & (HASH_SPACE - 1));
-                for(int i=hash; i < hash + HASH_SPACE; i++) {
-                    short new_index=(short)(i & (HASH_SPACE - 1));
-                    if(!nodes.containsKey(new_index)) {
+            for (Address node : new_view.getMembers()) {
+                int hash = Math.abs(node.hashCode() & (HASH_SPACE - 1));
+                for (int i = hash; i < hash + HASH_SPACE; i++) {
+                    short new_index = (short) (i & (HASH_SPACE - 1));
+                    if (!nodes.containsKey(new_index)) {
                         nodes.put(new_index, node);
                         break;
                     }
                 }
             }
 
-            if(log.isTraceEnabled()) {
-                StringBuilder sb=new StringBuilder("node mappings:\n");
-                for(Map.Entry<Short,Address> entry: nodes.entrySet()) {
-                    sb.append(entry.getKey() + ": " + entry.getValue()).append("\n");
+            if (log.isTraceEnabled()) {
+                StringBuilder sb = new StringBuilder("node mappings:\n");
+                for (Map.Entry<Short, Address> entry : nodes.entrySet()) {
+                    sb.append(entry.getKey()).append(": ").append(entry.getValue()).append("\n");
                 }
                 log.trace(sb);
             }
@@ -467,52 +464,47 @@ public class PartitionedHashMap<K,V> implements MembershipListener {
         public void unblock() {
         }
 
-        private static Address findFirst(Map<Short,Address> map, int index) {
+        private static Address findFirst(Map<Short, Address> map, int index) {
             Address retval;
-            for(int i=index; i < index + HASH_SPACE; i++) {
-                short new_index=(short)(i & (HASH_SPACE - 1));
-                retval=map.get(new_index);
-                if(retval != null)
+            for (int i = index; i < index + HASH_SPACE; i++) {
+                short new_index = (short) (i & (HASH_SPACE - 1));
+                retval = map.get(new_index);
+                if (retval != null)
                     return retval;
             }
             return null;
         }
     }
 
-
-
-
-
     private static class CustomMarshaller implements Marshaller {
-        static final byte NULL        = 1;
-        static final byte OBJ         = 2;
-        static final byte VALUE       = 3;
-
+        static final byte NULL = 1;
+        static final byte OBJ = 2;
+        static final byte VALUE = 3;
 
         public void objectToStream(Object obj, DataOutput out) throws Exception {
-            if(obj == null) {
+            if (obj == null) {
                 out.write(NULL);
                 return;
             }
-            if(obj instanceof Cache.Value) {
-                Cache.Value value=(Cache.Value)obj;
+            if (obj instanceof Cache.Value) {
+                Cache.Value value = (Cache.Value) obj;
                 out.writeByte(VALUE);
                 out.writeLong(value.getTimeout());
                 Util.objectToStream(value.getValue(), out);
-            }
-            else {
+            } else {
                 out.writeByte(OBJ);
                 Util.objectToStream(obj, out);
             }
         }
 
+        @SuppressWarnings("unchecked")
         public Object objectFromStream(DataInput in) throws Exception {
-            byte type=in.readByte();
-            if(type == NULL)
+            byte type = in.readByte();
+            if (type == NULL)
                 return null;
-            if(type == VALUE) {
-                long expiration_time=in.readLong();
-                Object obj=Util.objectFromStream(in);
+            if (type == VALUE) {
+                long expiration_time = in.readLong();
+                Object obj = Util.objectFromStream(in);
                 return new Cache.Value(obj, expiration_time);
             }
             return Util.objectFromStream(in);

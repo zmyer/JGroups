@@ -41,14 +41,14 @@ import org.jgroups.util.Util;
  *
  * @author Bela Ban
  */
+// TODO: 17/7/4 by zmyer
 public class ProtocolStack extends Protocol {
     public enum Position {ABOVE, BELOW}
 
-    ;
     protected static final String max_list_print_size = "max-list-print-size";
 
-    protected Protocol top_prot;
-    protected Protocol bottom_prot;
+    private Protocol top_prot;
+    private Protocol bottom_prot;
     protected JChannel channel;
     protected volatile boolean stopped = true;
 
@@ -62,54 +62,56 @@ public class ProtocolStack extends Protocol {
         return this;
     }
 
-    protected final DiagnosticsHandler.ProbeHandler props_handler = new DiagnosticsHandler.ProbeHandler() {
+    private final DiagnosticsHandler.ProbeHandler props_handler =
+        new DiagnosticsHandler.ProbeHandler() {
 
-        public Map<String, String> handleProbe(String... keys) {
-            for (String key : keys) {
-                if (Objects.equals(key, "props")) {
-                    String tmp = printProtocolSpec(true);
-                    HashMap<String, String> map = new HashMap<>(1);
-                    map.put("props", tmp);
-                    return map;
-                }
-                if (key.startsWith(max_list_print_size)) {
-                    int index = key.indexOf('=');
-                    if (index >= 0) {
-                        Util.MAX_LIST_PRINT_SIZE = Integer.valueOf(key.substring(index + 1));
+            public Map<String, String> handleProbe(String... keys) {
+                for (String key : keys) {
+                    if (Objects.equals(key, "props")) {
+                        String tmp = printProtocolSpec(true);
+                        HashMap<String, String> map = new HashMap<>(1);
+                        map.put("props", tmp);
+                        return map;
                     }
-                    HashMap<String, String> map = new HashMap<>(1);
-                    map.put(max_list_print_size, String.valueOf(Util.MAX_LIST_PRINT_SIZE));
-                    return map;
-                }
-                if (key.equals("pp") || key.startsWith("print-protocols")) {
-                    List<Protocol> prots = getProtocols();
-                    Collections.reverse(prots);
-                    StringBuilder sb = new StringBuilder();
-                    for (Protocol prot : prots)
-                        sb.append(prot.getName()).append("\n");
-                    HashMap<String, String> map = new HashMap<>(1);
-                    map.put("protocols", sb.toString());
-                    return map;
-                }
-                if (key.startsWith("rp") || key.startsWith("remove-protocol")) {
-                    int len = key.startsWith("rp") ? "rp".length() : "remove-protocol".length();
-                    key = key.substring(len);
-                    int index = key.indexOf('=');
-                    if (index != -1) {
-                        String rest = key.substring(index + 1);
-                        if (rest != null && !rest.isEmpty()) {
-                            List<String> prots = Util.parseCommaDelimitedStrings(rest);
-                            if (!prots.isEmpty()) {
-                                for (String p : prots) {
-                                    List<Protocol> protocols = findProtocols(p);
-                                    if (protocols != null && !protocols.isEmpty()) {
-                                        for (Protocol prot_to_remove : protocols) {
-                                            try {
-                                                Protocol removed = removeProtocol(prot_to_remove);
-                                                if (removed != null)
-                                                    log.debug("removed protocol %s from stack", prot_to_remove.getName());
-                                            } catch (Exception e) {
-                                                log.error(Util.getMessage("FailedRemovingProtocol") + rest, e);
+                    if (key.startsWith(max_list_print_size)) {
+                        int index = key.indexOf('=');
+                        if (index >= 0) {
+                            Util.MAX_LIST_PRINT_SIZE = Integer.valueOf(key.substring(index + 1));
+                        }
+                        HashMap<String, String> map = new HashMap<>(1);
+                        map.put(max_list_print_size, String.valueOf(Util.MAX_LIST_PRINT_SIZE));
+                        return map;
+                    }
+                    if (key.equals("pp") || key.startsWith("print-protocols")) {
+                        List<Protocol> prots = getProtocols();
+                        Collections.reverse(prots);
+                        StringBuilder sb = new StringBuilder();
+                        for (Protocol prot : prots)
+                            sb.append(prot.getName()).append("\n");
+                        HashMap<String, String> map = new HashMap<>(1);
+                        map.put("protocols", sb.toString());
+                        return map;
+                    }
+                    if (key.startsWith("rp") || key.startsWith("remove-protocol")) {
+                        int len = key.startsWith("rp") ? "rp".length() : "remove-protocol".length();
+                        key = key.substring(len);
+                        int index = key.indexOf('=');
+                        if (index != -1) {
+                            String rest = key.substring(index + 1);
+                            if (!rest.isEmpty()) {
+                                List<String> prots = Util.parseCommaDelimitedStrings(rest);
+                                if (!prots.isEmpty()) {
+                                    for (String p : prots) {
+                                        List<Protocol> protocols = findProtocols(p);
+                                        if (protocols != null && !protocols.isEmpty()) {
+                                            for (Protocol prot_to_remove : protocols) {
+                                                try {
+                                                    Protocol removed = removeProtocol(prot_to_remove);
+                                                    if (removed != null)
+                                                        log.debug("removed protocol %s from stack", prot_to_remove.getName());
+                                                } catch (Exception e) {
+                                                    log.error(Util.getMessage("FailedRemovingProtocol") + rest, e);
+                                                }
                                             }
                                         }
                                     }
@@ -117,74 +119,74 @@ public class ProtocolStack extends Protocol {
                             }
                         }
                     }
+                    if (key.startsWith("insert-protocol")) {
+                        key = key.substring("insert-protocol".length() + 1);
+                        int index = key.indexOf('=');
+                        if (index == -1)
+                            break;
+
+                        // 1. name of the protocol to be inserted
+                        String prot_name = key.substring(0, index).trim();
+                        if (findProtocol(prot_name) != null) {
+                            log.error("Protocol %s cannot be inserted as it is already present", prot_name);
+                            break;
+                        }
+                        Protocol prot;
+                        try {
+                            prot = createProtocol(prot_name);
+                        } catch (Exception e) {
+                            log.error(Util.getMessage("FailedCreatingAnInstanceOf") + prot_name, e);
+                            break;
+                        }
+
+                        key = key.substring(index + 1);
+
+                        index = key.indexOf('=');
+                        if (index == -1) {
+                            log.error("= missing in insert-protocol command");
+                            break;
+                        }
+
+                        // 2. "above" or "below"
+                        String tmp = key.substring(0, index);
+                        if (!tmp.equalsIgnoreCase("above") && !tmp.equalsIgnoreCase("below")) {
+                            log.error("Missing \"above\" or \"below\" in insert-protocol command");
+                            break;
+                        }
+
+                        key = key.substring(index + 1);
+                        String neighbor_prot = key.trim();
+                        Protocol neighbor = findProtocol(neighbor_prot);
+                        if (neighbor == null) {
+                            log.error(Util.getMessage("NeighborProtocol") + neighbor_prot + " not found in stack");
+                            break;
+                        }
+                        Position position = tmp.equalsIgnoreCase("above") ?
+                            Position.ABOVE : Position.BELOW;
+                        try {
+                            insertProtocol(prot, position, neighbor.getClass());
+                        } catch (Exception e) {
+                            log.error(Util.getMessage("FailedInsertingProtocol") + prot_name + " " + tmp + " " + neighbor_prot, e);
+                        }
+
+                        try {
+                            callAfterCreationHook(prot, afterCreationHook());
+                            prot.init();
+                            prot.start();
+                        } catch (Exception e) {
+                            log.error(Util.getMessage("FailedCreatingAnInstanceOf") + prot_name, e);
+                        }
+                    }
                 }
-                if (key.startsWith("insert-protocol")) {
-                    key = key.substring("insert-protocol".length() + 1);
-                    int index = key.indexOf('=');
-                    if (index == -1)
-                        break;
-
-                    // 1. name of the protocol to be inserted
-                    String prot_name = key.substring(0, index).trim();
-                    if (findProtocol(prot_name) != null) {
-                        log.error("Protocol %s cannot be inserted as it is already present", prot_name);
-                        break;
-                    }
-                    Protocol prot = null;
-                    try {
-                        prot = createProtocol(prot_name);
-                    } catch (Exception e) {
-                        log.error(Util.getMessage("FailedCreatingAnInstanceOf") + prot_name, e);
-                        break;
-                    }
-
-                    key = key.substring(index + 1);
-
-                    index = key.indexOf('=');
-                    if (index == -1) {
-                        log.error("= missing in insert-protocol command");
-                        break;
-                    }
-
-                    // 2. "above" or "below"
-                    String tmp = key.substring(0, index);
-                    if (!tmp.equalsIgnoreCase("above") && !tmp.equalsIgnoreCase("below")) {
-                        log.error("Missing \"above\" or \"below\" in insert-protocol command");
-                        break;
-                    }
-
-                    key = key.substring(index + 1);
-                    String neighbor_prot = key.trim();
-                    Protocol neighbor = findProtocol(neighbor_prot);
-                    if (neighbor == null) {
-                        log.error(Util.getMessage("NeighborProtocol") + neighbor_prot + " not found in stack");
-                        break;
-                    }
-                    Position position = tmp.equalsIgnoreCase("above") ? Position.ABOVE : Position.BELOW;
-                    try {
-                        insertProtocol(prot, position, neighbor.getClass());
-                    } catch (Exception e) {
-                        log.error(Util.getMessage("FailedInsertingProtocol") + prot_name + " " + tmp + " " + neighbor_prot, e);
-                    }
-
-                    try {
-                        callAfterCreationHook(prot, afterCreationHook());
-                        prot.init();
-                        prot.start();
-                    } catch (Exception e) {
-                        log.error(Util.getMessage("FailedCreatingAnInstanceOf") + prot_name, e);
-                    }
-                }
+                return null;
             }
-            return null;
-        }
 
-        public String[] supportedKeys() {
-            return new String[] {
-                "props", max_list_print_size + "[=number]", "print-protocols", "\nremove-protocol=<name>",
-                "\ninsert-protocol=<name>=above | below=<name>"};
-        }
-    };
+            public String[] supportedKeys() {
+                return new String[] {
+                    "props", max_list_print_size + "[=number]", "print-protocols", "\nremove-protocol=<name>",
+                    "\ninsert-protocol=<name>=above | below=<name>"};
+            }
+        };
 
     public ProtocolStack(JChannel channel) throws Exception {
         this.channel = channel;
@@ -219,7 +221,7 @@ public class ProtocolStack extends Protocol {
         return v;
     }
 
-    public List<Protocol> copyProtocols(
+    List<Protocol> copyProtocols(
         ProtocolStack targetStack) throws IllegalAccessException, InstantiationException {
         List<Protocol> list = getProtocols();
         List<Protocol> retval = new ArrayList<>(list.size());
@@ -230,7 +232,6 @@ public class ProtocolStack extends Protocol {
 
             for (Class<?> clazz = prot.getClass(); clazz != null; clazz = clazz.getSuperclass()) {
 
-                // copy all fields marked with @Property
                 Field[] fields = clazz.getDeclaredFields();
                 for (Field field : fields) {
                     if (field.isAnnotationPresent(Property.class)) {
@@ -246,8 +247,7 @@ public class ProtocolStack extends Protocol {
                     if (method.isAnnotationPresent(Property.class) && Configurator.isSetPropertyMethod(method)) {
                         Property annotation = method.getAnnotation(Property.class);
                         List<String> possible_names = new LinkedList<>();
-                        if (annotation.name() != null)
-                            possible_names.add(annotation.name());
+                        possible_names.add(annotation.name());
                         possible_names.add(Util.methodNameToAttributeName(methodName));
                         Field field = Util.findField(prot, possible_names);
                         if (field != null) {
@@ -366,8 +366,7 @@ public class ProtocolStack extends Protocol {
                 if (tmpProps != null) {
                     len = prot_name.length();
                     String s;
-                    for (Iterator<Entry<String, String>> it = tmpProps.entrySet().iterator(); it.hasNext(); ) {
-                        Entry<String, String> entry = it.next();
+                    for (Entry<String, String> entry : tmpProps.entrySet()) {
                         s = entry.getKey() + "=\"" + entry.getValue() + "\" ";
                         if (len + s.length() > max_len) {
                             sb.append("\n       ");
@@ -390,7 +389,7 @@ public class ProtocolStack extends Protocol {
         return printProtocolSpecAsPlainString(false);
     }
 
-    protected static void dumpStats(Object obj, Map<String, Object> map, Log log) {
+    private static void dumpStats(Object obj, Map<String, Object> map, Log log) {
         ResourceDMBean.dumpStats(obj, map, log); // dumps attrs and operations into tmp
         if (obj instanceof AdditionalJmxObjects) {
             Object[] objs = ((AdditionalJmxObjects) obj).getJmxObjects();
@@ -440,7 +439,7 @@ public class ProtocolStack extends Protocol {
                         PropertyConverter conv = null;
                         try {
                             conv = (PropertyConverter) conv_class.newInstance();
-                        } catch (Exception e) {
+                        } catch (Exception ignored) {
                         }
                         String tmp = conv != null ? conv.toString(value) : value.toString();
                         retval.put(field.getName(), tmp);
@@ -455,8 +454,7 @@ public class ProtocolStack extends Protocol {
                 if (method.isAnnotationPresent(Property.class) && Configurator.isSetPropertyMethod(method)) {
                     annotation = method.getAnnotation(Property.class);
                     List<String> possible_names = new LinkedList<>();
-                    if (annotation.name() != null)
-                        possible_names.add(annotation.name());
+                    possible_names.add(annotation.name());
                     possible_names.add(Util.methodNameToAttributeName(methodName));
                     Field field = Util.findField(prot, possible_names);
                     if (field != null) {
@@ -466,7 +464,7 @@ public class ProtocolStack extends Protocol {
                             PropertyConverter conv = null;
                             try {
                                 conv = (PropertyConverter) conv_class.newInstance();
-                            } catch (Exception e) {
+                            } catch (Exception ignored) {
                             }
                             String tmp = conv != null ? conv.toString(value) : value.toString();
                             retval.put(field.getName(), tmp);
@@ -501,8 +499,8 @@ public class ProtocolStack extends Protocol {
     /**
      * Adds a protocol at the tail of the protocol list
      *
-     * @param prot
-     * @return
+     * @param prot protocol
+     * @return protocol stack
      * @since 2.11
      */
     public ProtocolStack addProtocol(Protocol prot) {
@@ -524,8 +522,8 @@ public class ProtocolStack extends Protocol {
     /**
      * Adds a list of protocols
      *
-     * @param prots
-     * @return
+     * @param prots protocol list
+     * @return protocol stack
      * @since 2.11
      */
     public ProtocolStack addProtocols(Protocol... prots) {
@@ -539,8 +537,8 @@ public class ProtocolStack extends Protocol {
     /**
      * Adds a list of protocols
      *
-     * @param prots
-     * @return
+     * @param prots protocol list
+     * @return protocol stack
      * @since 2.1
      */
     public ProtocolStack addProtocols(List<Protocol> prots) {
@@ -622,7 +620,9 @@ public class ProtocolStack extends Protocol {
             throw new IllegalArgumentException("neighbor_prots is null");
         Protocol neighbor = findProtocol(neighbor_prots);
         if (neighbor == null)
-            throw new IllegalArgumentException("protocol \"" + Arrays.toString(neighbor_prots) + "\" not found in " + stack.printProtocolSpec(false));
+            throw new IllegalArgumentException("protocol \""
+                + Arrays.toString(neighbor_prots)
+                + "\" not found in " + stack.printProtocolSpec(false));
         insertProtocolInStack(prot, neighbor, position);
     }
 
@@ -649,8 +649,8 @@ public class ProtocolStack extends Protocol {
      *
      * @param prot_name The name of the protocol. Since all protocol names in a stack have to be
      * unique (otherwise the stack won't be created), the name refers to just 1 protocol.
-     * @throws Exception Thrown if the protocol cannot be stopped correctly.
      */
+    @SuppressWarnings("unchecked")
     public <T extends Protocol> T removeProtocol(String prot_name) {
         if (prot_name == null)
             return null;
@@ -673,6 +673,7 @@ public class ProtocolStack extends Protocol {
         return null;
     }
 
+    @SuppressWarnings("unchecked")
     public <T extends Protocol> T removeProtocol(Class<? extends Protocol> prot) {
         if (prot == null)
             return null;
@@ -704,6 +705,7 @@ public class ProtocolStack extends Protocol {
     }
 
     /** Returns a given protocol or null if not found */
+    @SuppressWarnings("unchecked")
     public <T extends Protocol> T findProtocol(String name) {
         T tmp = (T) top_prot;
         String prot_name;
@@ -716,7 +718,8 @@ public class ProtocolStack extends Protocol {
         return null;
     }
 
-    public <T extends Protocol> List<T> findProtocols(String regexp) {
+    @SuppressWarnings("unchecked")
+    private <T extends Protocol> List<T> findProtocols(String regexp) {
         List<T> retval = null;
         Pattern pattern = Pattern.compile(regexp);
 
@@ -731,6 +734,7 @@ public class ProtocolStack extends Protocol {
         return retval;
     }
 
+    @SuppressWarnings("unchecked")
     public <T extends Protocol> T getBottomProtocol() {
         T curr_prot = (T) this;
         while (curr_prot != null && curr_prot.getDownProtocol() != null)
@@ -742,6 +746,7 @@ public class ProtocolStack extends Protocol {
         return top_prot;
     }
 
+    @SuppressWarnings("unchecked")
     public <T extends Protocol> T findProtocol(Class<? extends Protocol> clazz) {
         Protocol tmp = top_prot;
         while (tmp != null) {
@@ -772,11 +777,12 @@ public class ProtocolStack extends Protocol {
     /**
      * Replaces one protocol instance with another. Should be done before the stack is connected
      *
-     * @param existing_prot
-     * @param new_prot
+     * @param existing_prot existing protocol
+     * @param new_prot new protocol
      */
     public void replaceProtocol(Protocol existing_prot, Protocol new_prot) throws Exception {
-        Protocol up_neighbor = existing_prot.getUpProtocol(), down_neighbor = existing_prot.getDownProtocol();
+        Protocol up_neighbor = existing_prot.getUpProtocol();
+        Protocol down_neighbor = existing_prot.getDownProtocol();
 
         new_prot.setUpProtocol(existing_prot.getUpProtocol());
         new_prot.setDownProtocol(existing_prot.getDownProtocol());
@@ -795,19 +801,19 @@ public class ProtocolStack extends Protocol {
         new_prot.init();
     }
 
-    protected Protocol createProtocol(String classname) throws Exception {
+    private Protocol createProtocol(String classname) throws Exception {
         String defaultProtocolName = ProtocolConfiguration.protocol_prefix + '.' + classname;
         Class<?> clazz = null;
 
         try {
             clazz = Util.loadClass(defaultProtocolName, getClass());
-        } catch (ClassNotFoundException e) {
+        } catch (ClassNotFoundException ignored) {
         }
 
         if (clazz == null) {
             try {
                 clazz = Util.loadClass(classname, getClass());
-            } catch (ClassNotFoundException e) {
+            } catch (ClassNotFoundException ignored) {
             }
             if (clazz == null) {
                 throw new Exception("unable to load class for protocol " + classname + " (either as an absolute - "
@@ -833,7 +839,7 @@ public class ProtocolStack extends Protocol {
         initProtocolStack();
     }
 
-    public void initProtocolStack() throws Exception {
+    private void initProtocolStack() throws Exception {
         List<Protocol> protocols = getProtocols();
         Collections.reverse(protocols);
         for (Protocol prot : protocols) {
@@ -909,7 +915,8 @@ public class ProtocolStack extends Protocol {
         return null;
     }
 
-    protected static void callAfterCreationHook(Protocol prot, String classname) throws Exception {
+    @SuppressWarnings("unchecked")
+    private static void callAfterCreationHook(Protocol prot, String classname) throws Exception {
         if (classname == null || prot == null)
             return;
         Class<ProtocolHook> clazz = Util.loadClass(classname, prot.getClass());

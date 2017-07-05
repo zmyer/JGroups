@@ -22,16 +22,17 @@ import org.jgroups.util.Util;
  * @author Bela Ban
  * @since 3.4
  */
+// TODO: 17/7/4 by zmyer
 public class ForkProtocolStack extends ProtocolStack {
     protected Address local_addr;
-    protected final String fork_stack_id;
-    protected final ConcurrentMap<String, JChannel> fork_channels = new ConcurrentHashMap<>();
-    protected final UnknownForkHandler unknownForkHandler;
+    private final String fork_stack_id;
+    private final ConcurrentMap<String, JChannel> fork_channels = new ConcurrentHashMap<>();
+    private final UnknownForkHandler unknownForkHandler;
     protected final List<Protocol> protocols;
 
     // init() increments and destroy() decrements
     // 1 -> 0: destroy the stack and remove it from FORK. Calls destroy() in all fork stack protocols before
-    protected int inits;
+    private int inits;
 
     // connect() increments and disconnect decrements.
     // 0 -> 1: connect the stack (calls start() in all protocols of the fork stack)

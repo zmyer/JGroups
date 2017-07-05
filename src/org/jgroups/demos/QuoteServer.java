@@ -1,8 +1,13 @@
 
 package org.jgroups.demos;
 
-
-import org.jgroups.JChannel;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 import org.jgroups.JChannel;
 import org.jgroups.ReceiverAdapter;
 import org.jgroups.View;
@@ -11,33 +16,27 @@ import org.jgroups.logging.Log;
 import org.jgroups.logging.LogFactory;
 import org.jgroups.util.Util;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.util.*;
-
-
 /**
  * Example of a replicated quote server. The server maintains state which consists of a list
  * of quotes and their corresponding values. When it is started, it tries to reach other
  * quote servers to get its initial state. If it does not receive any response after 5
  * seconds, it assumes it is the first server and starts processing requests.<p>
  * Any updates are multicast across the cluster
+ *
  * @author Bela Ban
  */
 
 public class QuoteServer extends ReceiverAdapter {
-    final Map<String,Float> stocks=new HashMap<>();
+    final Map<String, Float> stocks = new HashMap<>();
     JChannel channel;
-    RpcDispatcher          disp;
-    static final String    channel_name="Quotes";
-    protected Log           log=LogFactory.getLog(getClass());
+    RpcDispatcher disp;
+    static final String channel_name = "Quotes";
+    protected Log log = LogFactory.getLog(getClass());
 
-    static final String props=null; // default stack from JChannel
+    static final String props = null; // default stack from JChannel
 
-    private void integrate(HashMap<String,Float> state) {
-        if(state != null)
+    private void integrate(HashMap<String, Float> state) {
+        if (state != null)
             state.keySet().forEach(key -> stocks.put(key, state.get(key)));
     }
 
@@ -45,20 +44,17 @@ public class QuoteServer extends ReceiverAdapter {
         System.out.println("Accepted view (" + new_view.size() + new_view.getMembers() + ')');
     }
 
-
-
     public void start() {
         try {
-            channel=new JChannel(props);
-            disp=(RpcDispatcher)new RpcDispatcher(channel, this)
-              .setMembershipListener(this).setStateListener(this);
+            channel = new JChannel(props);
+            disp = (RpcDispatcher) new RpcDispatcher(channel, this)
+                .setMembershipListener(this).setStateListener(this);
             channel.connect(channel_name);
             System.out.println("\nQuote Server started at " + new Date());
             System.out.println("Joined channel '" + channel_name + "' (" + channel.getView().size() + " members)");
             channel.getState(null, 0);
             System.out.println("Ready to serve requests");
-        }
-        catch(Exception e) {
+        } catch (Exception e) {
             log.error("QuoteServer.start() : " + e);
             System.exit(-1);
         }
@@ -68,8 +64,8 @@ public class QuoteServer extends ReceiverAdapter {
 
     public float getQuote(String stock_name) throws Exception {
         System.out.print("Getting quote for " + stock_name + ": ");
-        Float retval=stocks.get(stock_name);
-        if(retval == null) {
+        Float retval = stocks.get(stock_name);
+        if (retval == null) {
             System.out.println("not found");
             throw new Exception("Stock " + stock_name + " not found");
         }
@@ -82,7 +78,7 @@ public class QuoteServer extends ReceiverAdapter {
         stocks.put(stock_name, value);
     }
 
-    public Map<String,Float> getAllStocks() {
+    public Map<String, Float> getAllStocks() {
         System.out.print("getAllStocks: ");
         printAllStocks();
         return stocks;
@@ -97,19 +93,17 @@ public class QuoteServer extends ReceiverAdapter {
     }
 
     public void setState(InputStream istream) throws Exception {
-        integrate((HashMap<String, Float>)Util.objectFromStream(new DataInputStream(istream)));
+        integrate((HashMap<String, Float>) Util.objectFromStream(new DataInputStream(istream)));
     }
-
 
     public static void main(String args[]) {
         try {
-            QuoteServer server=new QuoteServer();
+            QuoteServer server = new QuoteServer();
             server.start();
-            while(true) {
+            while (true) {
                 Util.sleep(10000);
             }
-        }
-        catch(Throwable t) {
+        } catch (Throwable t) {
             t.printStackTrace();
         }
     }

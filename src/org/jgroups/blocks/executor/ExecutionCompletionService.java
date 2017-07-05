@@ -24,12 +24,13 @@ import org.jgroups.util.NotifyingFuture;
  * may only be used with serializable request objects, this class must be used
  * instead.
  */
+// TODO: 17/7/4 by zmyer
 public class ExecutionCompletionService<V> implements CompletionService<V> {
     protected final ExecutionService executor;
-    protected final BlockingQueue<NotifyingFuture<V>> completionQueue;
+    private final BlockingQueue<NotifyingFuture<V>> completionQueue;
     protected final QueueingListener listener;
 
-    protected class QueueingListener implements FutureListener<V> {
+    private class QueueingListener implements FutureListener<V> {
         @Override
         public void futureDone(Future<V> future) {
             // This is a safe cast since this listener should only used
@@ -105,8 +106,6 @@ public class ExecutionCompletionService<V> implements CompletionService<V> {
      * internally this class sets the listener to provide ability to add to the queue.
      */
     public Future<V> submit(Callable<V> task) {
-        if (task == null)
-            throw new NullPointerException();
         NotifyingFuture<V> f = executor.submit(task);
         f.setListener(listener);
         return f;
@@ -119,8 +118,6 @@ public class ExecutionCompletionService<V> implements CompletionService<V> {
      * internally this class sets the listener to provide ability to add to the queue.
      */
     public Future<V> submit(Runnable task, V result) {
-        if (task == null)
-            throw new NullPointerException();
         NotifyingFuture<V> f = executor.submit(task, result);
         f.setListener(listener);
         return f;

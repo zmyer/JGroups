@@ -19,26 +19,35 @@ import org.jgroups.util.Util;
  * @author Vladimir Blagojevic
  * @author Bela Ban
  */
+
+// TODO: 17/5/25 by zmyer
 public class TcpServer extends TcpBaseServer {
+    //服务器套接字
     protected ServerSocket srv_sock;
+    //连接接收线程
     protected Thread acceptor;
+    //输入流缓冲区大小
+    private int buffered_inputstream_size;
+    //输出流缓冲区大小
+    private int buffered_outputstream_size;
 
-    protected int buffered_inputstream_size;
-    protected int buffered_outputstream_size;
-
-    public int getBufferedInputStreamSize() {
+    // TODO: 17/5/25 by zmyer
+    int getBufferedInputStreamSize() {
         return buffered_inputstream_size;
     }
 
+    // TODO: 17/5/25 by zmyer
     public TcpServer setBufferedInputStreamSize(int s) {
         this.buffered_inputstream_size = s;
         return this;
     }
 
-    public int getBufferedOutputStreamSize() {
+    // TODO: 17/5/25 by zmyer
+    int getBufferedOutputStreamSize() {
         return buffered_outputstream_size;
     }
 
+    // TODO: 17/5/25 by zmyer
     public TcpServer setBufferedOutputStreamSize(int s) {
         this.buffered_outputstream_size = s;
         return this;
@@ -52,8 +61,10 @@ public class TcpServer extends TcpBaseServer {
      * @param port The local port to bind to. If 0, the port will be picked by the OS.
      * @throws Exception Thrown if the creation failed
      */
+    // TODO: 17/5/25 by zmyer
     public TcpServer(InetAddress bind_addr, int port) throws Exception {
-        this(new DefaultThreadFactory("tcp", false), new DefaultSocketFactory(), bind_addr, port, port + 50, null, 0);
+        this(new DefaultThreadFactory("tcp", false), new DefaultSocketFactory(),
+            bind_addr, port, port + 50, null, 0);
     }
 
     /**
@@ -62,8 +73,10 @@ public class TcpServer extends TcpBaseServer {
      * @param bind_addr The local bind address and port. If null, a bind address and port will be
      * picked by the OS.
      */
+    // TODO: 17/5/25 by zmyer
     public TcpServer(IpAddress bind_addr) throws Exception {
-        this(bind_addr != null ? bind_addr.getIpAddress() : null, bind_addr != null ? bind_addr.getPort() : 0);
+        this(bind_addr != null ? bind_addr.getIpAddress() : null,
+            bind_addr != null ? bind_addr.getPort() : 0);
     }
 
     /**
@@ -81,6 +94,7 @@ public class TcpServer extends TcpBaseServer {
      * @param external_port The external port on the NA. If 0, srv_port is used.
      * @throws Exception Thrown if the creation failed
      */
+    // TODO: 17/5/25 by zmyer
     public TcpServer(ThreadFactory thread_factory, SocketFactory socket_factory,
         InetAddress bind_addr, int srv_port, int end_port,
         InetAddress external_addr, int external_port) throws Exception {
@@ -88,16 +102,21 @@ public class TcpServer extends TcpBaseServer {
         // this.srv_sock=this.socket_factory.createServerSocket("jgroups.tcp.server");
         // this.srv_sock.setReuseAddress(reuse_addr);
         // Util.bind(this.srv_sock, bind_addr, srv_port, end_port);
-        this.srv_sock = Util.createServerSocket(this.socket_factory, "jgroups.tcp.server", bind_addr, srv_port, end_port);
-        acceptor = factory.newThread(new Acceptor(), "TcpServer.Acceptor[" + srv_sock.getLocalPort() + "]");
-        local_addr = localAddress(bind_addr, srv_sock.getLocalPort(), external_addr, external_port);
+        this.srv_sock = Util.createServerSocket(this.socket_factory,
+            "jgroups.tcp.server", bind_addr, srv_port, end_port);
+        acceptor = factory.newThread(new Acceptor(),
+            "TcpServer.Acceptor[" + srv_sock.getLocalPort() + "]");
+        local_addr = localAddress(bind_addr, srv_sock.getLocalPort(),
+            external_addr, external_port);
         addConnectionListener(this);
     }
 
+    // TODO: 17/5/25 by zmyer
     protected TcpServer(ThreadFactory thread_factory, SocketFactory socket_factory) {
         super(thread_factory, socket_factory);
     }
 
+    // TODO: 17/5/25 by zmyer
     @Override
     public void start() throws Exception {
         if (running.compareAndSet(false, true)) {
@@ -106,6 +125,7 @@ public class TcpServer extends TcpBaseServer {
         }
     }
 
+    // TODO: 17/5/25 by zmyer
     @Override
     public void stop() {
         if (running.compareAndSet(true, false)) {
@@ -115,12 +135,14 @@ public class TcpServer extends TcpBaseServer {
         }
     }
 
+    // TODO: 17/5/25 by zmyer
     protected class Acceptor implements Runnable {
         /**
          * Acceptor thread. Continuously accept new connections. Create a new thread for each new
          * connection and put it in conns. When the thread should stop, it is interrupted by the
          * thread creator.
          */
+        // TODO: 17/5/25 by zmyer
         public void run() {
             while (!srv_sock.isClosed() && !Thread.currentThread().isInterrupted()) {
                 Socket client_sock = null;
@@ -128,7 +150,8 @@ public class TcpServer extends TcpBaseServer {
                     client_sock = srv_sock.accept();
                     handleAccept(client_sock);
                 } catch (Exception ex) {
-                    if (ex instanceof SocketException && srv_sock.isClosed() || Thread.currentThread().isInterrupted())
+                    if (ex instanceof SocketException && srv_sock.isClosed()
+                        || Thread.currentThread().isInterrupted())
                         break;
                     log.warn(Util.getMessage("AcceptError"), ex);
                     Util.close(client_sock);
@@ -136,21 +159,23 @@ public class TcpServer extends TcpBaseServer {
             }
         }
 
-        protected void handleAccept(final Socket client_sock) throws Exception {
+        // TODO: 17/5/25 by zmyer
+        void handleAccept(final Socket client_sock) throws Exception {
             TcpConnection conn = null;
             try {
                 conn = new TcpConnection(client_sock, TcpServer.this);
                 Address peer_addr = conn.peerAddress();
                 synchronized (this) {
                     boolean conn_exists = hasConnection(peer_addr),
-                        replace = conn_exists && use_peer_connections && local_addr.compareTo(peer_addr) < 0; // bigger conn wins
+                        replace = conn_exists && use_peer_connections
+                            && local_addr.compareTo(peer_addr) < 0; // bigger conn wins
 
                     if (!conn_exists || replace) {
                         replaceConnection(peer_addr, conn); // closes old conn
                         conn.start();
                         log.trace("%s: accepted connection from %s", local_addr, peer_addr);
                     } else {
-                        log.trace("%s: rejected connection from %s %s", local_addr, peer_addr, explanation(conn_exists, replace));
+                        log.trace("%s: rejected connection from %s %s", local_addr, peer_addr, explanation(true, false));
                         Util.close(conn); // keep our existing conn, reject accept() and close client_sock
                     }
                 }
@@ -160,6 +185,4 @@ public class TcpServer extends TcpBaseServer {
             }
         }
     }
-
 }
-

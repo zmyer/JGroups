@@ -31,33 +31,33 @@ import org.jgroups.util.Util;
  * @author Bela Ban
  * @since 3.6.5
  */
-
 // TODO: 17/5/25 by zmyer
-public class TcpConnection extends Connection {
+class TcpConnection extends Connection {
     protected final Socket sock; // socket to/from peer (result of srv_sock.accept() or new Socket())
-    protected final ReentrantLock send_lock = new ReentrantLock(); // serialize send()
+    private final ReentrantLock send_lock = new ReentrantLock(); // serialize send()
     protected DataOutputStream out;
     protected DataInputStream in;
     protected volatile Receiver receiver;
     protected final TcpBaseServer server;
-    protected final AtomicInteger writers = new AtomicInteger(0); // to determine the last writer to flush
+    private final AtomicInteger writers = new AtomicInteger(0); // to determine the last writer to flush
 
     /** Creates a connection stub and binds it, use {@link #connect(Address)} to connect */
-    public TcpConnection(Address peer_addr, TcpBaseServer server) throws Exception {
+    TcpConnection(Address peer_addr, TcpBaseServer server) throws Exception {
         this.server = server;
         if (peer_addr == null)
-            throw new IllegalArgumentException("Invalid parameter peer_addr=" + peer_addr);
+            throw new IllegalArgumentException("Invalid parameter peer_addr=" + null);
         this.peer_addr = peer_addr;
         this.sock = server.socketFactory().createSocket("jgroups.tcp.sock");
         setSocketParameters(sock);
         last_access = getTimestamp(); // last time a message was sent or received (ns)
     }
 
-    public TcpConnection(Socket s, TcpServer server) throws Exception {
+    // TODO: 17/5/25 by zmyer
+    TcpConnection(Socket s, TcpServer server) throws Exception {
         this.sock = s;
         this.server = server;
         if (s == null)
-            throw new IllegalArgumentException("Invalid parameter s=" + s);
+            throw new IllegalArgumentException("Invalid parameter s=" + null);
         setSocketParameters(s);
         this.out = new DataOutputStream(createBufferedOutputStream(s.getOutputStream()));
         this.in = new DataInputStream(createBufferedInputStream(s.getInputStream()));
@@ -79,7 +79,7 @@ public class TcpConnection extends Connection {
         return server.timeService() != null ? server.timeService().timestamp() : System.nanoTime();
     }
 
-    protected String getSockAddress() {
+    private String getSockAddress() {
         StringBuilder sb = new StringBuilder();
         if (sock != null) {
             sb.append(sock.getLocalAddress().getHostAddress()).append(':').append(sock.getLocalPort());
@@ -88,7 +88,7 @@ public class TcpConnection extends Connection {
         return sb.toString();
     }
 
-    protected void updateLastAccessed() {
+    private void updateLastAccessed() {
         if (server.connExpireTime() > 0)
             last_access = getTimestamp();
     }
@@ -98,11 +98,14 @@ public class TcpConnection extends Connection {
     }
 
     protected void connect(Address dest, boolean send_local_addr) throws Exception {
-        SocketAddress destAddr = new InetSocketAddress(((IpAddress) dest).getIpAddress(), ((IpAddress) dest).getPort());
+        SocketAddress destAddr = new InetSocketAddress(((IpAddress) dest).getIpAddress(),
+            ((IpAddress) dest).getPort());
         try {
             if (!server.defer_client_binding)
-                this.sock.bind(new InetSocketAddress(server.client_bind_addr, server.client_bind_port));
-            if (this.sock.getLocalSocketAddress() != null && this.sock.getLocalSocketAddress().equals(destAddr))
+                this.sock.bind(
+                    new InetSocketAddress(server.client_bind_addr, server.client_bind_port));
+            if (this.sock.getLocalSocketAddress() != null
+                && this.sock.getLocalSocketAddress().equals(destAddr))
                 throw new IllegalStateException("socket's bind and connect address are the same: " + destAddr);
             Util.connect(this.sock, destAddr, server.sock_conn_timeout);
             this.out = new DataOutputStream(createBufferedOutputStream(sock.getOutputStream()));
@@ -115,6 +118,7 @@ public class TcpConnection extends Connection {
         }
     }
 
+    // TODO: 17/5/25 by zmyer
     public void start() {
         if (receiver != null)
             receiver.stop();
@@ -123,8 +127,8 @@ public class TcpConnection extends Connection {
 
     /**
      * @param data Guaranteed to be non null
-     * @param offset
-     * @param length
+     * @param offset byte bufffer offset
+     * @param length byte buffer length
      */
     public void send(byte[] data, int offset, int length) throws Exception {
         if (out == null)
@@ -157,7 +161,7 @@ public class TcpConnection extends Connection {
         }
     }
 
-    protected void doSend(byte[] data, int offset, int length) throws Exception {
+    private void doSend(byte[] data, int offset, int length) throws Exception {
         out.writeInt(length); // write the length of the data buffer first
         out.write(data, offset, length);
     }
@@ -165,21 +169,21 @@ public class TcpConnection extends Connection {
     protected void flush() {
         try {
             out.flush();
-        } catch (Throwable t) {
+        } catch (Throwable ignored) {
         }
     }
 
-    protected BufferedOutputStream createBufferedOutputStream(OutputStream out) {
+    private BufferedOutputStream createBufferedOutputStream(OutputStream out) {
         int size = (server instanceof TcpServer) ? ((TcpServer) server).getBufferedOutputStreamSize() : 0;
         return size == 0 ? new BufferedOutputStream(out) : new BufferedOutputStream(out, size);
     }
 
-    protected BufferedInputStream createBufferedInputStream(InputStream in) {
+    private BufferedInputStream createBufferedInputStream(InputStream in) {
         int size = (server instanceof TcpServer) ? ((TcpServer) server).getBufferedInputStreamSize() : 0;
         return size == 0 ? new BufferedInputStream(in) : new BufferedInputStream(in, size);
     }
 
-    protected void setSocketParameters(Socket client_sock) throws SocketException {
+    private void setSocketParameters(Socket client_sock) throws SocketException {
         try {
             client_sock.setSendBufferSize(server.send_buf_size);
         } catch (IllegalArgumentException ex) {
@@ -204,7 +208,7 @@ public class TcpConnection extends Connection {
      * doesn't match the receiver's cookie, the receiver will reject the
      * connection and close it.
      */
-    protected void sendLocalAddress(Address local_addr) throws Exception {
+    void sendLocalAddress(Address local_addr) throws Exception {
         try {
             // write the cookie
             out.write(cookie, 0, cookie.length);
@@ -225,7 +229,8 @@ public class TcpConnection extends Connection {
      * Reads the peer's address. First a cookie has to be sent which has to
      * match my own cookie, otherwise the connection will be refused
      */
-    protected Address readPeerAddress(Socket client_sock) throws Exception {
+    // TODO: 17/5/25 by zmyer
+    private Address readPeerAddress(Socket client_sock) throws Exception {
         int timeout = client_sock.getSoTimeout();
         client_sock.setSoTimeout(server.peerAddressReadTimeout());
 
@@ -254,8 +259,9 @@ public class TcpConnection extends Connection {
         }
     }
 
+    // TODO: 17/5/25 by zmyer
     protected class Receiver implements Runnable {
-        protected final Thread recv;
+        final Thread recv;
         protected volatile boolean receiving = true;
         protected byte[] buffer; // no need to be volatile, only accessed by this thread
 
@@ -263,29 +269,34 @@ public class TcpConnection extends Connection {
             recv = f.newThread(this, "Connection.Receiver [" + getSockAddress() + "]");
         }
 
+        // TODO: 17/5/25 by zmyer
         public Receiver start() {
             receiving = true;
             recv.start();
             return this;
         }
 
+        // TODO: 17/5/25 by zmyer
         public Receiver stop() {
             receiving = false;
             return this;
         }
 
+        // TODO: 17/5/25 by zmyer
         public boolean isRunning() {
             return receiving;
         }
 
-        public boolean canRun() {
+        // TODO: 17/5/25 by zmyer
+        boolean canRun() {
             return isRunning() && isConnected();
         }
 
-        public int bufferSize() {
+        int bufferSize() {
             return buffer != null ? buffer.length : 0;
         }
 
+        // TODO: 17/5/25 by zmyer
         public void run() {
             Throwable t = null;
             while (canRun()) {
@@ -299,7 +310,7 @@ public class TcpConnection extends Connection {
                 } catch (IOException io_ex) {
                     t = io_ex;
                     break;
-                } catch (Throwable e) {
+                } catch (Throwable ignored) {
                 }
             }
             server.notifyConnectionClosed(TcpConnection.this, String.format("%s: %s", getClass().getSimpleName(),
@@ -330,10 +341,12 @@ public class TcpConnection extends Connection {
         return "closed";
     }
 
+    // TODO: 17/5/25 by zmyer
     public boolean isExpired(long now) {
         return server.conn_expire_time > 0 && now - last_access >= server.conn_expire_time;
     }
 
+    // TODO: 17/5/25 by zmyer
     public boolean isConnected() {
         return sock != null && sock.isConnected();
     }

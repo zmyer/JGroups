@@ -1,5 +1,32 @@
 package org.jgroups.blocks.executor;
 
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+import java.io.NotSerializableException;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletionService;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.RunnableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.AbstractQueuedSynchronizer;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import org.jgroups.JChannel;
 import org.jgroups.protocols.Executing;
 import org.jgroups.util.FutureListener;
@@ -7,46 +34,37 @@ import org.jgroups.util.NotifyingFuture;
 import org.jgroups.util.Streamable;
 import org.jgroups.util.Util;
 
-import java.io.*;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.AbstractQueuedSynchronizer;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-
 /**
  * This is a JGroups implementation of an ExecutorService, where the consumers
- * are running on any number of nodes.  The nodes should run 
+ * are running on any number of nodes.  The nodes should run
  * {@link ExecutionRunner} to start picking up requests.
  * <p>
  * Every future object returned will be a {@link NotifyingFuture} which
  * allows for not having to query the future and have a callback instead.  This
  * can then be used as a workflow to submit other tasks sequentially or also to
- * query the future for the value at that time. 
+ * query the future for the value at that time.
  * <p>
- * Every callable or runnable submitted must be either {@link Serializable} or 
+ * Every callable or runnable submitted must be either {@link Serializable} or
  * {@link Streamable}.  Also the value returned from
- * a callable must {@link Serializable} or 
+ * a callable must {@link Serializable} or
  * {@link Streamable}.  Unfortunately if the value returned is not serializable
- * then a {@link NotSerializableException} will be thrown as the cause. 
+ * then a {@link NotSerializableException} will be thrown as the cause.
+ *
  * @author wburns
  * @since 2.12.0
  */
+// TODO: 17/7/4 by zmyer
 public class ExecutionService extends AbstractExecutorService {
     protected JChannel ch;
-    protected Executing _execProt;
-    
-    protected Lock _unfinishedLock = new ReentrantLock();
-    protected Condition _unfinishedCondition = _unfinishedLock.newCondition();
-    
-    protected Set<Future<?>> _unfinishedFutures = new HashSet<>();
-    
-    protected AtomicBoolean _shutdown = new AtomicBoolean(false);
+    private Executing _execProt;
+
+    private Lock _unfinishedLock = new ReentrantLock();
+    private Condition _unfinishedCondition = _unfinishedLock.newCondition();
+    Set<Future<?>> _unfinishedFutures = new HashSet<>();
+    private AtomicBoolean _shutdown = new AtomicBoolean(false);
 
     public ExecutionService() {
-        
+
     }
 
     public ExecutionService(JChannel ch) {
@@ -54,37 +72,37 @@ public class ExecutionService extends AbstractExecutorService {
     }
 
     public void setChannel(JChannel ch) {
-        this.ch=ch;
-        _execProt=ch.getProtocolStack().findProtocol(Executing.class);
-        if(_execProt == null)
+        this.ch = ch;
+        _execProt = ch.getProtocolStack().findProtocol(Executing.class);
+        if (_execProt == null)
             throw new IllegalStateException("Channel configuration must include a executing protocol " +
-                                              "(subclass of " + Executing.class.getName() + ")");
+                "(subclass of " + Executing.class.getName() + ")");
     }
-    
+
     // @see java.util.concurrent.AbstractExecutorService#submit(java.lang.Runnable, java.lang.Object)
     @Override
     public <T> NotifyingFuture<T> submit(Runnable task, T result) {
         // This cast is okay cause we control creation of the task
-        return (NotifyingFuture<T>)super.submit(task, result);
+        return (NotifyingFuture<T>) super.submit(task, result);
     }
 
     // @see java.util.concurrent.AbstractExecutorService#submit(java.util.concurrent.Callable)
     @Override
     public <T> NotifyingFuture<T> submit(Callable<T> task) {
         // This cast is okay cause we control creation of the task
-        return (NotifyingFuture<T>)super.submit(task);
+        return (NotifyingFuture<T>) super.submit(task);
     }
 
     /**
      * This is basically a copy of the FutureTask in java.util.concurrent but
      * added serializable to it.  Also added in the NotifyingFuture
      * so that the channel can update the future when the value is calculated.
-     * 
+     *
      * @param <V>
      * @author wburns
      */
-    public static class DistributedFuture<V> implements RunnableFuture<V>, 
-            ExecutorNotification, NotifyingFuture<V> {
+    public static class DistributedFuture<V> implements RunnableFuture<V>,
+        ExecutorNotification, NotifyingFuture<V> {
         // @see java.lang.Object#toString()
         @Override
         public String toString() {
@@ -93,30 +111,28 @@ public class ExecutionService extends AbstractExecutorService {
 
         /** Synchronization control for FutureTask */
         protected final Sync<V> sync;
-        
+
         /** The following values are only used on the client side */
         private final JChannel channel;
         private final Set<Future<?>> _unfinishedFutures;
         private final Lock _unfinishedLock;
         private final Condition _unfinishedCondition;
         private volatile FutureListener<V> _listener;
-        
+
         /**
          * Creates a <tt>FutureTask</tt> that will upon running, execute the
          * given <tt>Callable</tt>.
          *
          * @param channel The channel that messages are sent down
-         * @param unfinishedLock The lock which protects the futuresToFinish
-         *        set object.
+         * @param unfinishedLock The lock which protects the futuresToFinish set object.
          * @param condition The condition to signal when this future finishes
-         * @param futuresToFinish The set to remove this future from when
-         *        it is finished. 
+         * @param futuresToFinish The set to remove this future from when it is finished.
          * @param callable The callable to actually run on the server side
          */
-        public DistributedFuture(JChannel channel, Lock unfinishedLock,
-                          Condition condition,
-                          Set<Future<?>> futuresToFinish, 
-                          Callable<V> callable) {
+        DistributedFuture(JChannel channel, Lock unfinishedLock,
+            Condition condition,
+            Set<Future<?>> futuresToFinish,
+            Callable<V> callable) {
             if (callable == null)
                 throw new NullPointerException();
             sync = new Sync<>(this, callable);
@@ -133,21 +149,18 @@ public class ExecutionService extends AbstractExecutorService {
          * given result on successful completion.
          *
          * @param channel The channel that messages are sent down
-         * @param unfinishedLock The lock which protects the futuresToFinish
-         *        set object.
+         * @param unfinishedLock The lock which protects the futuresToFinish set object.
          * @param condition The condition to signal when this future finishes
-         * @param futuresToFinish The set to remove this future from when
-         *        it is finished.
+         * @param futuresToFinish The set to remove this future from when it is finished.
          * @param runnable the runnable task
-         * @param result the result to return on successful completion. If
-         * you don't need a particular result, consider using
-         * constructions of the form:
-         * <tt>Future&lt;?&gt; f = new FutureTask&lt;Object&gt;(runnable, null)</tt>
+         * @param result the result to return on successful completion. If you don't need a
+         * particular result, consider using constructions of the form: <tt>Future&lt;?&gt; f = new
+         * FutureTask&lt;Object&gt;(runnable, null)</tt>
          * @throws NullPointerException if runnable is null
          */
-        public DistributedFuture(JChannel channel, Lock unfinishedLock,
-                          Condition condition, Set<Future<?>> futuresToFinish, 
-                          Runnable runnable, V result) {
+        DistributedFuture(JChannel channel, Lock unfinishedLock,
+            Condition condition, Set<Future<?>> futuresToFinish,
+            Runnable runnable, V result) {
             sync = new Sync<>(this, new RunnableAdapter<>(runnable, result));
             this.channel = channel;
             // We keep the real copy to update the outside
@@ -155,11 +168,11 @@ public class ExecutionService extends AbstractExecutorService {
             _unfinishedLock = unfinishedLock;
             _unfinishedCondition = condition;
         }
-        
+
         public Callable<V> getCallable() {
             return sync.callable;
         }
-        
+
         public boolean isCancelled() {
             return sync.innerIsCancelled();
         }
@@ -174,22 +187,16 @@ public class ExecutionService extends AbstractExecutorService {
             }
             // This will only happen on calling side since it is transient
             if (channel != null) {
-                return (Boolean)channel.down(new ExecutorEvent(
+                return (Boolean) channel.down(new ExecutorEvent(
                     ExecutorEvent.TASK_CANCEL, new Object[] {this, mayInterruptIfRunning}));
             }
             return sync.innerCancel(mayInterruptIfRunning);
         }
 
-        /**
-         * @throws CancellationException {@inheritDoc}
-         */
         public V get() throws InterruptedException, ExecutionException {
             return sync.innerGet();
         }
 
-        /**
-         * @throws CancellationException {@inheritDoc}
-         */
         public V get(long timeout, TimeUnit unit)
             throws InterruptedException, ExecutionException, TimeoutException {
             return sync.innerGet(unit.toNanos(timeout));
@@ -209,8 +216,7 @@ public class ExecutionService extends AbstractExecutorService {
             try {
                 _unfinishedFutures.remove(this);
                 _unfinishedCondition.signalAll();
-            }
-            finally {
+            } finally {
                 _unfinishedLock.unlock();
             }
             // We assign the listener to a local variable so we don't have to 
@@ -236,6 +242,7 @@ public class ExecutionService extends AbstractExecutorService {
          * this future has already been set or has been cancelled.
          * This method is invoked internally by the <tt>run</tt> method
          * upon successful completion of the computation.
+         *
          * @param v the value
          */
         protected void set(V v) {
@@ -248,6 +255,7 @@ public class ExecutionService extends AbstractExecutorService {
          * already been set or has been cancelled.
          * This method is invoked internally by the <tt>run</tt> method
          * upon failure of the computation.
+         *
          * @param t the cause of failure
          */
         protected void setException(Throwable t) {
@@ -259,6 +267,7 @@ public class ExecutionService extends AbstractExecutorService {
         // 6270645: Javadoc comments should be inherited from most derived
         //          superinterface or superclass
         // is fixed.
+
         /**
          * Sets this Future to the result of its computation
          * unless it has been cancelled.
@@ -279,11 +288,11 @@ public class ExecutionService extends AbstractExecutorService {
             private static final long serialVersionUID = -7828117401763700385L;
 
             /** State value representing that task is running */
-            protected static final int RUNNING   = 1;
+            static final int RUNNING = 1;
             /** State value representing that task ran */
-            protected static final int RAN       = 2;
+            static final int RAN = 2;
             /** State value representing that task was cancelled */
-            protected static final int CANCELLED = 4;
+            static final int CANCELLED = 4;
 
             /** The containing future */
             protected final DistributedFuture<V> future;
@@ -305,7 +314,7 @@ public class ExecutionService extends AbstractExecutorService {
                 this.future = future;
                 this.callable = callable;
             }
-            
+
             private static boolean ranOrCancelled(int state) {
                 return (state & (RAN | CANCELLED)) != 0;
             }
@@ -314,7 +323,7 @@ public class ExecutionService extends AbstractExecutorService {
              * Implements AQS base acquire to succeed if ran or cancelled
              */
             protected int tryAcquireShared(int ignore) {
-                return innerIsDone()? 1 : -1;
+                return innerIsDone() ? 1 : -1;
             }
 
             /**
@@ -343,7 +352,8 @@ public class ExecutionService extends AbstractExecutorService {
                 return result;
             }
 
-            V innerGet(long nanosTimeout) throws InterruptedException, ExecutionException, TimeoutException {
+            V innerGet(
+                long nanosTimeout) throws InterruptedException, ExecutionException, TimeoutException {
                 if (!tryAcquireSharedNanos(0, nanosTimeout))
                     throw new TimeoutException();
                 if (getState() == CANCELLED)
@@ -354,7 +364,7 @@ public class ExecutionService extends AbstractExecutorService {
             }
 
             void innerSet(V v) {
-                for (;;) {
+                for (; ; ) {
                     int s = getState();
                     if (s == RAN)
                         return;
@@ -375,7 +385,7 @@ public class ExecutionService extends AbstractExecutorService {
             }
 
             void innerSetException(Throwable t) {
-                for (;;) {
+                for (; ; ) {
                     int s = getState();
                     if (s == RAN)
                         return;
@@ -397,7 +407,7 @@ public class ExecutionService extends AbstractExecutorService {
             }
 
             boolean innerCancel(boolean mayInterruptIfRunning) {
-                for (;;) {
+                for (; ; ) {
                     int s = getState();
                     if (ranOrCancelled(s))
                         return false;
@@ -444,30 +454,27 @@ public class ExecutionService extends AbstractExecutorService {
             }
         }
 
-        // @see org.jgroups.blocks.executor.ExecutorNotification#resultReturned(java.lang.Object)
         @SuppressWarnings("unchecked")
         @Override
         public void resultReturned(Object obj) {
-            set((V)obj);
+            set((V) obj);
         }
-        
-        // @see org.jgroups.blocks.executor.ExecutorNotification#throwableEncountered(java.lang.Throwable)
+
         @Override
         public void throwableEncountered(Throwable t) {
             setException(t);
         }
-        
+
         @Override
         public void interrupted(Runnable runnable) {
             _unfinishedLock.lock();
             try {
                 _unfinishedFutures.remove(this);
                 _unfinishedCondition.signalAll();
-            }
-            finally {
+            } finally {
                 _unfinishedLock.unlock();
             }
-            
+
             // We assign the listener to a local variable so we don't have to 
             // worry about it becoming null inside the if
             FutureListener<V> listener = _listener;
@@ -477,26 +484,24 @@ public class ExecutionService extends AbstractExecutorService {
             }
         }
     }
-    
-    // @see java.util.concurrent.ExecutorService#shutdown()
+
     @Override
     public void shutdown() {
         _realShutdown(false);
     }
-    
+
     @SuppressWarnings("unchecked")
     private List<Runnable> _realShutdown(boolean interrupt) {
         _shutdown.set(true);
         _unfinishedLock.lock();
         Set<Future<?>> futures;
         try {
-             futures = new HashSet<>(_unfinishedFutures);
-        }
-        finally {
+            futures = new HashSet<>(_unfinishedFutures);
+        } finally {
             _unfinishedLock.unlock();
         }
-        return (List<Runnable>)ch.down(new ExecutorEvent(
-            ExecutorEvent.ALL_TASK_CANCEL, new Object[]{futures, interrupt}));
+        return (List<Runnable>) ch.down(new ExecutorEvent(
+            ExecutorEvent.ALL_TASK_CANCEL, new Object[] {futures, interrupt}));
     }
 
     // @see java.util.concurrent.ExecutorService#shutdownNow()
@@ -518,8 +523,7 @@ public class ExecutionService extends AbstractExecutorService {
             _unfinishedLock.lock();
             try {
                 return _unfinishedFutures.isEmpty();
-            }
-            finally {
+            } finally {
                 _unfinishedLock.unlock();
             }
         }
@@ -529,25 +533,22 @@ public class ExecutionService extends AbstractExecutorService {
     // @see java.util.concurrent.ExecutorService#awaitTermination(long, java.util.concurrent.TimeUnit)
     @Override
     public boolean awaitTermination(long timeout, TimeUnit unit)
-            throws InterruptedException {
+        throws InterruptedException {
         long nanoTimeWait = unit.toNanos(timeout);
         _unfinishedLock.lock();
         try {
             while (!_unfinishedFutures.isEmpty()) {
-                if ((nanoTimeWait = _unfinishedCondition.awaitNanos(
-                    nanoTimeWait)) <= 0) {
+                if ((nanoTimeWait = _unfinishedCondition.awaitNanos(nanoTimeWait)) <= 0) {
                     return false;
                 }
             }
-        }
-        finally {
+        } finally {
             _unfinishedLock.unlock();
         }
 
         return true;
     }
-    
-    // @see java.util.concurrent.AbstractExecutorService#invokeAny(java.util.Collection)
+
     @Override
     public <T> T invokeAny(Collection<? extends Callable<T>> tasks)
         throws InterruptedException, ExecutionException {
@@ -558,30 +559,29 @@ public class ExecutionService extends AbstractExecutorService {
             return null;
         }
     }
-    
-    // @see java.util.concurrent.AbstractExecutorService#invokeAny(java.util.Collection, long, java.util.concurrent.TimeUnit)
+
     @Override
     public <T> T invokeAny(Collection<? extends Callable<T>> tasks,
-            long timeout, TimeUnit unit)
+        long timeout, TimeUnit unit)
         throws InterruptedException, ExecutionException, TimeoutException {
         return doInvokeAny(tasks, true, unit.toNanos(timeout));
     }
-    
+
     /**
      * the main mechanics of invokeAny.
-     * This was essentially copied from {@link AbstractExecutorService} 
+     * This was essentially copied from {@link AbstractExecutorService}
      * doInvokeAny except that we replaced the {@link ExecutorCompletionService}
      * with an {@link ExecutionCompletionService}.
      */
     private <T> T doInvokeAny(Collection<? extends Callable<T>> tasks,
-                            boolean timed, long nanos)
+        boolean timed, long nanos)
         throws InterruptedException, ExecutionException, TimeoutException {
         if (tasks == null)
             throw new NullPointerException();
         int ntasks = tasks.size();
         if (ntasks == 0)
             throw new IllegalArgumentException();
-        List<Future<T>> futures= new ArrayList<>(ntasks);
+        List<Future<T>> futures = new ArrayList<>(ntasks);
         CompletionService<T> ecs =
             new ExecutionCompletionService<>(this);
 
@@ -595,7 +595,7 @@ public class ExecutionService extends AbstractExecutorService {
             // Record exceptions so that if we fail to obtain any
             // result, we can throw the last exception we got.
             ExecutionException ee = null;
-            long lastTime = (timed)? System.nanoTime() : 0;
+            long lastTime = (timed) ? System.nanoTime() : 0;
             Iterator<? extends Callable<T>> it = tasks.iterator();
 
             // Start one task for sure; the rest incrementally
@@ -603,15 +603,14 @@ public class ExecutionService extends AbstractExecutorService {
             --ntasks;
             int active = 1;
 
-            for (;;) {
+            for (; ; ) {
                 Future<T> f = ecs.poll();
                 if (f == null) {
                     if (ntasks > 0) {
                         --ntasks;
                         futures.add(ecs.submit(it.next()));
                         ++active;
-                    }
-                    else if (active == 0)
+                    } else if (active == 0)
                         break;
                     else if (timed) {
                         f = ecs.poll(nanos, TimeUnit.NANOSECONDS);
@@ -620,16 +619,13 @@ public class ExecutionService extends AbstractExecutorService {
                         long now = System.nanoTime();
                         nanos -= now - lastTime;
                         lastTime = now;
-                    }
-                    else
+                    } else
                         f = ecs.take();
                 }
                 if (f != null) {
                     --active;
                     try {
                         return f.get();
-                    } catch (InterruptedException ie) {
-                        throw ie;
                     } catch (ExecutionException eex) {
                         ee = eex;
                     } catch (RuntimeException rex) {
@@ -650,7 +646,6 @@ public class ExecutionService extends AbstractExecutorService {
         }
     }
 
-    // @see java.util.concurrent.Executor#execute(java.lang.Runnable)
     @Override
     public void execute(Runnable command) {
         if (!_shutdown.get()) {
@@ -659,41 +654,36 @@ public class ExecutionService extends AbstractExecutorService {
             // If it is wrapped by our future, then we have to make sure to 
             // check the actual callable/runnable given to us for serialization
             if (command instanceof DistributedFuture) {
-                distFuture = (DistributedFuture<?>)command;
+                distFuture = (DistributedFuture<?>) command;
                 serializeCheck = distFuture.getCallable();
                 if (serializeCheck instanceof RunnableAdapter) {
-                    serializeCheck = ((RunnableAdapter<?>)serializeCheck).task;
+                    serializeCheck = ((RunnableAdapter<?>) serializeCheck).task;
                 }
+            } else {
+                serializeCheck = command;
             }
-            else {
-                 serializeCheck = command;
-            }
-            
-            if (serializeCheck instanceof Serializable ||
-                    serializeCheck instanceof Streamable) {
+
+            if (serializeCheck instanceof Serializable || serializeCheck instanceof Streamable) {
                 if (distFuture != null) {
                     _execProt.addExecutorListener(distFuture, distFuture);
                     _unfinishedLock.lock();
                     try {
                         _unfinishedFutures.add(distFuture);
-                    }
-                    finally {
+                    } finally {
                         _unfinishedLock.unlock();
                     }
                 }
                 ch.down(new ExecutorEvent(ExecutorEvent.TASK_SUBMIT, command));
-            }
-            else {
+            } else {
                 throw new IllegalArgumentException(
                     "Command was not Serializable or Streamable - "
-                            + serializeCheck);
+                        + serializeCheck);
             }
-        }
-        else {
+        } else {
             throw new RejectedExecutionException();
         }
     }
-    
+
     /**
      * This is copied from {@link java.util.concurrent.Executors} class which
      * contains RunnableAdapter.  However that adapter isn't serializable, and
@@ -702,62 +692,54 @@ public class ExecutionService extends AbstractExecutorService {
     protected static final class RunnableAdapter<T> implements Callable<T>, Streamable {
         protected Runnable task;
         protected T result;
-        
-        public RunnableAdapter() {
-            
-        }
-        protected RunnableAdapter(Runnable  task, T result) {
+
+        RunnableAdapter(Runnable task, T result) {
             this.task = task;
             this.result = result;
         }
+
         public T call() {
             task.run();
             return result;
         }
+
         @Override
         public void writeTo(DataOutput out) throws Exception {
             try {
                 Util.writeObject(task, out);
-            }
-            catch (IOException e) {
+            } catch (IOException e) {
                 throw e;
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 throw new IOException("Exception encountered while writing execution runnable", e);
             }
-            
+
             try {
                 Util.writeObject(result, out);
-            }
-            catch (IOException e) {
+            } catch (IOException e) {
                 throw e;
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 throw new IOException("Exception encountered while writing execution result", e);
             }
         }
+
         @SuppressWarnings("unchecked")
         @Override
         public void readFrom(DataInput in) throws Exception {
             // We can't use Util.readObject since it's size is limited to 2^15-1
             // The runner could be larger than that possibly
             try {
-                task = (Runnable)Util.readObject(in);
-            }
-            catch (IOException e) {
+                task = (Runnable) Util.readObject(in);
+            } catch (IOException e) {
                 throw e;
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 throw new IOException("Exception encountered while reading execution runnable", e);
             }
-            
+
             try {
-                result = (T)Util.readObject(in);
-            }
-            catch (IOException e) {
+                result = (T) Util.readObject(in);
+            } catch (IOException e) {
                 throw e;
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 throw new IOException("Exception encountered while reading execution result", e);
             }
         }
@@ -767,13 +749,13 @@ public class ExecutionService extends AbstractExecutorService {
     @Override
     protected <T> RunnableFuture<T> newTaskFor(Runnable runnable, T value) {
         return new DistributedFuture<>(ch, _unfinishedLock,
-                                       _unfinishedCondition, _unfinishedFutures, runnable, value);
+            _unfinishedCondition, _unfinishedFutures, runnable, value);
     }
 
     // @see java.util.concurrent.AbstractExecutorService#newTaskFor(java.util.concurrent.Callable)
     @Override
     protected <T> RunnableFuture<T> newTaskFor(Callable<T> callable) {
         return new DistributedFuture<>(ch, _unfinishedLock,
-                                       _unfinishedCondition, _unfinishedFutures, callable);
+            _unfinishedCondition, _unfinishedFutures, callable);
     }
 }

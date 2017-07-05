@@ -7,5 +7,6 @@ package org.jgroups;
  * @see JChannel#setReceiver(Receiver)
  * @since 2.0
  */
+// TODO: 17/7/4 by zmyer
 public interface Receiver extends MessageListener, MembershipListener {
 }

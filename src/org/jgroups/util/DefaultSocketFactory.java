@@ -78,9 +78,10 @@ public class DefaultSocketFactory implements SocketFactory {
         return createServerSocketChannel(service_name).bind(new InetSocketAddress(port), backlog);
     }
 
-    public ServerSocketChannel createServerSocketChannel(String service_name, int port, int backlog,
-        InetAddress bindAddr) throws IOException {
-        return createServerSocketChannel(service_name).bind(new InetSocketAddress(bindAddr, port), backlog);
+    public ServerSocketChannel createServerSocketChannel(String service_name, int port,
+        int backlog, InetAddress bindAddr) throws IOException {
+        return createServerSocketChannel(service_name).bind(new InetSocketAddress(bindAddr, port),
+            backlog);
     }
 
     public DatagramSocket createDatagramSocket(String service_name) throws SocketException {

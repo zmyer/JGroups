@@ -64,6 +64,7 @@ import org.w3c.dom.Element;
  * @author Bela Ban
  * @since 2.0
  */
+// TODO: 17/7/4 by zmyer
 @MBean(description = "JGroups channel")
 public class JChannel implements Closeable {
 
@@ -82,20 +83,20 @@ public class JChannel implements Closeable {
     protected volatile State state = State.OPEN;
     protected ProtocolStack prot_stack;
     protected UpHandler up_handler;   // when set, all events are passed to the UpHandler
-    protected Set<ChannelListener> channel_listeners;
+    private Set<ChannelListener> channel_listeners;
     protected final Log log = LogFactory.getLog(getClass());
-    protected List<AddressGenerator> address_generators;
-    protected final Promise<StateTransferResult> state_promise = new Promise<>();
-    protected boolean state_transfer_supported; // true if state transfer prot is in the stack
+    private List<AddressGenerator> address_generators;
+    private final Promise<StateTransferResult> state_promise = new Promise<>();
+    private boolean state_transfer_supported; // true if state transfer prot is in the stack
     protected volatile boolean flush_supported; // true if FLUSH is present in the stack
-    protected final DiagnosticsHandler.ProbeHandler probe_handler = new JChannelProbeHandler(this);
-    protected long sent_msgs, received_msgs, sent_bytes, received_bytes;
+    private final DiagnosticsHandler.ProbeHandler probe_handler = new JChannelProbeHandler(this);
+    private long sent_msgs, received_msgs, sent_bytes, received_bytes;
 
     @ManagedAttribute(description = "Collect channel statistics", writable = true)
     protected boolean stats = true;
 
     @ManagedAttribute(description = "Whether or not to discard messages sent by this channel", writable = true)
-    protected boolean discard_own_messages;
+    private boolean discard_own_messages;
 
     /**
      * Creates a JChannel without a protocol stack; used for programmatic creation of channel and
@@ -339,7 +340,7 @@ public class JChannel implements Closeable {
         return this;
     }
 
-    public boolean flushSupported() {
+    protected boolean flushSupported() {
         return flush_supported;
     }
 
@@ -433,13 +434,13 @@ public class JChannel implements Closeable {
         return this;
     }
 
-    public synchronized JChannel removeChannelListener(ChannelListener listener) {
+    synchronized JChannel removeChannelListener(ChannelListener listener) {
         if (channel_listeners != null && listener != null)
             channel_listeners.remove(listener);
         return this;
     }
 
-    public synchronized JChannel clearChannelListeners() {
+    synchronized JChannel clearChannelListeners() {
         if (channel_listeners != null)
             channel_listeners.clear();
         return this;
@@ -450,7 +451,7 @@ public class JChannel implements Closeable {
      * generator. This should <em>not</em> be done while a channel is connected, but before
      * connecting.
      *
-     * @param address_generator
+     * @param address_generator address generator
      * @since 2.12
      */
     public JChannel addAddressGenerator(AddressGenerator address_generator) {
@@ -463,7 +464,9 @@ public class JChannel implements Closeable {
     }
 
     public boolean removeAddressGenerator(AddressGenerator address_generator) {
-        return address_generator != null && address_generators != null && address_generators.remove(address_generator);
+        return address_generator != null
+            && address_generators != null
+            && address_generators.remove(address_generator);
     }
 
     /**
@@ -492,7 +495,7 @@ public class JChannel implements Closeable {
 
     /** Returns a map of statistics of the various protocols and of the channel itself */
     @ManagedOperation
-    public Map<String, Object> dumpStats() {
+    Map<String, Object> dumpStats() {
         Map<String, Object> retval = prot_stack.dumpStats();
         if (retval != null) {
             Map<String, Long> tmp = dumpChannelStats();
@@ -502,7 +505,7 @@ public class JChannel implements Closeable {
         return retval;
     }
 
-    public Map<String, Object> dumpStats(String protocol_name, List<String> attrs) {
+    Map<String, Object> dumpStats(String protocol_name, List<String> attrs) {
         return prot_stack.dumpStats(protocol_name, attrs);
     }
 
@@ -511,7 +514,7 @@ public class JChannel implements Closeable {
         return prot_stack.dumpStats(protocol_name, null);
     }
 
-    protected Map<String, Long> dumpChannelStats() {
+    private Map<String, Long> dumpChannelStats() {
         Map<String, Long> retval = new HashMap<>();
         retval.put("sent_msgs", sent_msgs);
         retval.put("sent_bytes", sent_bytes);
@@ -541,7 +544,8 @@ public class JChannel implements Closeable {
         boolean useFlushIfPresent) throws Exception {
         if (!_preConnect(cluster_name))
             return this;
-        Event connect_event = new Event(useFlushIfPresent ? Event.CONNECT_USE_FLUSH : Event.CONNECT, cluster_name);
+        Event connect_event = new Event(useFlushIfPresent ?
+            Event.CONNECT_USE_FLUSH : Event.CONNECT, cluster_name);
         _connect(connect_event);
         state = State.CONNECTED;
         notifyChannelConnected(this);
@@ -591,7 +595,9 @@ public class JChannel implements Closeable {
 
         boolean canFetchState = false;
         try {
-            Event connect_event = new Event(useFlushIfPresent ? Event.CONNECT_WITH_STATE_TRANSFER_USE_FLUSH : Event.CONNECT_WITH_STATE_TRANSFER, cluster_name);
+            Event connect_event =
+                new Event(useFlushIfPresent ? Event.CONNECT_WITH_STATE_TRANSFER_USE_FLUSH
+                    : Event.CONNECT_WITH_STATE_TRANSFER, cluster_name);
             _connect(connect_event);
             state = State.CONNECTED;
             notifyChannelConnected(this);
@@ -600,16 +606,17 @@ public class JChannel implements Closeable {
                 getState(target, timeout, false); // fetch state from target
         } finally {
             // stopFlush if we fetched the state or failed to connect...
-            if ((flushSupported() && useFlushIfPresent) && (canFetchState || state != State.CONNECTED))
+            if ((flushSupported() && useFlushIfPresent)
+                && (canFetchState || state != State.CONNECTED))
                 stopFlush();
         }
         return this;
     }
 
     /**
-     * Leaves the cluster (disconnects the channel if it is connected). If the channel is closed or
-     * disconnected, this operation is ignored. The channel can then be used to join the same or a
-     * different cluster again.
+     * Leaves the cluster (disconnects the channel if it is connected).
+     * If the channel is closed or disconnected, this operation is ignored.
+     * The channel can then be used to join the same or a different cluster again.
      *
      * @see #connect(String)
      */
@@ -965,7 +972,10 @@ public class JChannel implements Closeable {
         }
 
         // discard local messages (sent by myself to me)
-        if (discard_own_messages && local_addr != null && msg.getSrc() != null && local_addr.equals(msg.getSrc()))
+        if (discard_own_messages
+            && local_addr != null
+            && msg.getSrc() != null
+            && local_addr.equals(msg.getSrc()))
             return null;
 
         // If UpHandler is installed, pass all events to it and return (UpHandler is e.g. a building block)
@@ -985,7 +995,10 @@ public class JChannel implements Closeable {
         }
 
         // discard local messages (sent by myself to me)
-        if (discard_own_messages && local_addr != null && batch.sender() != null && local_addr.equals(batch.sender()))
+        if (discard_own_messages
+            && local_addr != null
+            && batch.sender() != null
+            && local_addr.equals(batch.sender()))
             return this;
 
         if (up_handler != null) {
@@ -1022,7 +1035,7 @@ public class JChannel implements Closeable {
     }
 
     /* ----------------------------------- Private Methods ------------------------------------- */
-    protected boolean _preConnect(String cluster_name) throws Exception {
+    private boolean _preConnect(String cluster_name) throws Exception {
         if (cluster_name == null)
             throw new IllegalArgumentException("cluster name cannot be null");
         if (state == State.CONNECTED) {
@@ -1043,7 +1056,7 @@ public class JChannel implements Closeable {
         return true;
     }
 
-    protected JChannel _connect(Event connect_event) throws Exception {
+    private JChannel _connect(Event connect_event) throws Exception {
         try {
             down(connect_event);
             return this;
@@ -1071,7 +1084,7 @@ public class JChannel implements Closeable {
 
         boolean initiateFlush = flushSupported() && flushInvoker != null;
         if (initiateFlush) {
-            boolean successfulFlush = false;
+            boolean successfulFlush;
             try {
                 successfulFlush = flushInvoker.call();
             } catch (Throwable e) {
@@ -1097,7 +1110,7 @@ public class JChannel implements Closeable {
         return this;
     }
 
-    protected Object invokeCallback(int type, Object arg) {
+    private Object invokeCallback(int type, Object arg) {
         switch (type) {
             case Event.VIEW_CHANGE:
                 receiver.viewAccepted((View) arg);
@@ -1154,7 +1167,7 @@ public class JChannel implements Closeable {
         return this;
     }
 
-    protected JChannel startStack(String cluster_name) throws Exception {
+    private JChannel startStack(String cluster_name) throws Exception {
         checkClosed();
 
         this.cluster_name = cluster_name;
@@ -1168,8 +1181,8 @@ public class JChannel implements Closeable {
     }
 
     /**
-     * Generates and sets local_addr. Sends down a REMOVE_ADDRESS (if existing address was present)
-     * and a SET_LOCAL_ADDRESS
+     * Generates and sets local_addr.
+     * Sends down a REMOVE_ADDRESS (if existing address was present) and a SET_LOCAL_ADDRESS
      */
     protected JChannel setAddress() {
         Address old_addr = local_addr;
@@ -1188,7 +1201,7 @@ public class JChannel implements Closeable {
         return this;
     }
 
-    protected Address generateAddress() {
+    private Address generateAddress() {
         if (address_generators == null || address_generators.isEmpty())
             return UUID.randomUUID();
         if (address_generators.size() == 1)
@@ -1218,7 +1231,7 @@ public class JChannel implements Closeable {
         return uuid != null ? uuid : UUID.randomUUID();
     }
 
-    protected JChannel checkClosed() {
+    private JChannel checkClosed() {
         if (state == State.CLOSED)
             throw new IllegalStateException("channel is closed");
         return this;
@@ -1233,7 +1246,7 @@ public class JChannel implements Closeable {
         return this;
     }
 
-    protected JChannel _close(boolean disconnect) {
+    private JChannel _close(boolean disconnect) {
         Address old_addr = local_addr;
         if (state == State.CLOSED)
             return this;
@@ -1267,7 +1280,7 @@ public class JChannel implements Closeable {
         return this;
     }
 
-    protected Address determineCoordinator() {
+    private Address determineCoordinator() {
         return view != null ? view.getCoord() : null;
     }
 
@@ -1292,7 +1305,7 @@ public class JChannel implements Closeable {
         return notifyListeners(l -> l.channelClosed(c), "channelClosed()");
     }
 
-    protected JChannel notifyListeners(Consumer<ChannelListener> func, String msg) {
+    private JChannel notifyListeners(Consumer<ChannelListener> func, String msg) {
         if (channel_listeners != null) {
             try {
                 channel_listeners.forEach(func);
