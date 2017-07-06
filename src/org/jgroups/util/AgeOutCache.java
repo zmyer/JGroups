@@ -2,30 +2,35 @@ package org.jgroups.util;
 
 import java.util.Collection;
 import java.util.Map;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
-/** Cache which removes its elements after a certain time
+/**
+ * Cache which removes its elements after a certain time
+ *
  * @author Bela Ban
  */
+// TODO: 17/7/6 by zmyer
 public class AgeOutCache<K> {
-    private final TimeScheduler           timer;
-    private long                          timeout;
-    private final ConcurrentMap<K,Future> map=new ConcurrentHashMap<>();
-    private Handler                       handler;
+    private final TimeScheduler timer;
+    private long timeout;
+    private final ConcurrentMap<K, Future> map = new ConcurrentHashMap<>();
+    private Handler handler;
 
     public interface Handler<K> {
         void expired(K key);
     }
 
-
     public AgeOutCache(TimeScheduler timer, long timeout) {
-        this.timer=timer;
-        this.timeout=timeout;
+        this.timer = timer;
+        this.timeout = timeout;
     }
 
     public AgeOutCache(TimeScheduler timer, long timeout, Handler handler) {
         this(timer, timeout);
-        this.handler=handler;
+        this.handler = handler;
     }
 
     public long getTimeout() {
@@ -33,7 +38,7 @@ public class AgeOutCache<K> {
     }
 
     public void setTimeout(long timeout) {
-        this.timeout=timeout;
+        this.timeout = timeout;
     }
 
     public Handler getHandler() {
@@ -41,31 +46,31 @@ public class AgeOutCache<K> {
     }
 
     public void setHandler(Handler handler) {
-        this.handler=handler;
+        this.handler = handler;
     }
 
+    @SuppressWarnings("unchecked")
     public void add(final K key) {
-        Future<?> future=timer.schedule(new Runnable() {
+        Future<?> future = timer.schedule(new Runnable() {
             public void run() {
-                if(handler != null) {
+                if (handler != null) {
                     try {
                         handler.expired(key);
-                    }
-                    catch(Throwable t) {
+                    } catch (Throwable ignored) {
                     }
                 }
-                Future<?> tmp=map.remove(key);
-                if(tmp != null)
+                Future<?> tmp = map.remove(key);
+                if (tmp != null)
                     tmp.cancel(true);
             }
 
             public String toString() {
                 return "AgeOutCache (timeout=" + timeout +
-                  ", handler=" + (handler != null? handler.getClass().getSimpleName() : null) + ")";
+                    ", handler=" + (handler != null ? handler.getClass().getSimpleName() : null) + ")";
             }
         }, timeout, TimeUnit.MILLISECONDS, false); // this task never blocks
-        Future<?> result=map.putIfAbsent(key, future);
-        if(result != null)
+        Future<?> result = map.putIfAbsent(key, future);
+        if (result != null)
             future.cancel(true);
     }
 
@@ -74,18 +79,18 @@ public class AgeOutCache<K> {
     }
 
     public void remove(K key) {
-        Future<?> future=map.remove(key);
-        if(future != null)
+        Future<?> future = map.remove(key);
+        if (future != null)
             future.cancel(true);
     }
 
     public void removeAll(Collection<K> keys) {
-        if(keys != null)
+        if (keys != null)
             keys.forEach(this::remove);
     }
 
     public void clear() {
-        for(Future<?> future: map.values())
+        for (Future<?> future : map.values())
             future.cancel(true);
         map.clear();
     }
@@ -95,8 +100,8 @@ public class AgeOutCache<K> {
     }
 
     public String toString() {
-        StringBuilder sb=new StringBuilder();
-        for(Map.Entry<K,Future> entry: map.entrySet()) {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<K, Future> entry : map.entrySet()) {
             sb.append(entry.getKey()).append(": ").append(entry.getValue()).append("\n");
         }
         return sb.toString();

@@ -5,15 +5,17 @@ import java.util.NoSuchElementException;
 
 /**
  * Iterator over an array of elements of type T.
+ *
  * @author Bela Ban
- * @since  3.4
+ * @since 3.4
  */
+// TODO: 17/7/6 by zmyer
 public class ArrayIterator<T> implements Iterator<T> {
-    protected int       index=0;
+    protected int index = 0;
     protected final T[] elements;
 
     public ArrayIterator(T[] elements) {
-        this.elements=elements;
+        this.elements = elements;
     }
 
     public boolean hasNext() {
@@ -21,7 +23,7 @@ public class ArrayIterator<T> implements Iterator<T> {
     }
 
     public T next() {
-        if(index >= elements.length)
+        if (index >= elements.length)
             throw new NoSuchElementException("index=" + index + ", length=" + elements.length);
         return elements[index++];
     }
