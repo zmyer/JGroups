@@ -15,7 +15,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +45,7 @@ import org.w3c.dom.Node;
  * @author Bela Ban
  * @author Richard Achmatowicz
  */
+// TODO: 17/7/6 by zmyer
 public class Configurator {
     protected static final Log log = LogFactory.getLog(Configurator.class);
     private final ProtocolStack stack;
@@ -88,7 +88,7 @@ public class Configurator {
      *   -----------------------
      * </pre>
      */
-    public static Protocol setupProtocolStack(List<ProtocolConfiguration> protocol_configs,
+    private static Protocol setupProtocolStack(List<ProtocolConfiguration> protocol_configs,
         ProtocolStack st) throws Exception {
         List<Protocol> protocols = createProtocols(protocol_configs, st);
         if (protocols == null)
@@ -124,7 +124,7 @@ public class Configurator {
         return connectProtocols(protocols);
     }
 
-    public static void setDefaultValues(List<Protocol> protocols) throws Exception {
+    static void setDefaultValues(List<Protocol> protocols) throws Exception {
         if (protocols == null)
             return;
 
@@ -174,12 +174,10 @@ public class Configurator {
 
         // create an instance of the protocol class and configure it
         prot = createLayer(stack, config);
+        assert prot != null;
         prot.init();
         return prot;
     }
-
-
-   
 
     /* ------------------------------- Private Methods ------------------------------------- */
 
@@ -191,8 +189,8 @@ public class Configurator {
      * @param protocol_list List of Protocol elements (from top to bottom)
      * @return Protocol stack
      */
-    public static Protocol connectProtocols(List<Protocol> protocol_list) throws Exception {
-        Protocol current_layer = null, next_layer = null;
+    static Protocol connectProtocols(List<Protocol> protocol_list) throws Exception {
+        Protocol current_layer = null, next_layer;
 
         for (int i = 0; i < protocol_list.size(); i++) {
             current_layer = protocol_list.get(i);
@@ -218,8 +216,7 @@ public class Configurator {
     public static List<Protocol> createProtocols(List<ProtocolConfiguration> protocol_configs,
         final ProtocolStack stack) throws Exception {
         List<Protocol> retval = new LinkedList<>();
-        for (int i = 0; i < protocol_configs.size(); i++) {
-            ProtocolConfiguration protocol_config = protocol_configs.get(i);
+        for (ProtocolConfiguration protocol_config : protocol_configs) {
             Protocol layer = createLayer(stack, protocol_config);
             if (layer == null)
                 return null;
@@ -228,13 +225,13 @@ public class Configurator {
         return retval;
     }
 
-    protected static Protocol createLayer(ProtocolStack stack,
+    private static Protocol createLayer(ProtocolStack stack,
         ProtocolConfiguration config) throws Exception {
         String protocol_name = config.getProtocolName();
         Map<String, String> properties = new HashMap<>(config.getProperties());
-        Protocol retval = null;
+        Protocol retval;
 
-        if (protocol_name == null || properties == null)
+        if (protocol_name == null)
             return null;
 
         String defaultProtocolName = ProtocolConfiguration.protocol_prefix + '.' + protocol_name;
@@ -242,13 +239,13 @@ public class Configurator {
 
         try {
             clazz = Util.loadClass(defaultProtocolName, stack != null ? stack.getClass() : null);
-        } catch (ClassNotFoundException e) {
+        } catch (ClassNotFoundException ignored) {
         }
 
         if (clazz == null) {
             try {
                 clazz = Util.loadClass(protocol_name, config.getClassLoader());
-            } catch (ClassNotFoundException e) {
+            } catch (ClassNotFoundException ignored) {
             }
             if (clazz == null)
                 throw new Exception(String.format(Util.getMessage("ProtocolLoadError"), protocol_name, defaultProtocolName));
@@ -262,7 +259,8 @@ public class Configurator {
             removeDeprecatedProperties(retval, properties);
             // before processing Field and Method based properties, take dependencies specified
             // with @Property.dependsUpon into account
-            AccessibleObject[] dependencyOrderedFieldsAndMethods = computePropertyDependencies(retval, properties);
+            AccessibleObject[] dependencyOrderedFieldsAndMethods =
+                computePropertyDependencies(retval, properties);
             for (AccessibleObject ordered : dependencyOrderedFieldsAndMethods) {
                 if (ordered instanceof Field) {
                     resolveAndAssignField(retval, (Field) ordered, properties);
@@ -298,8 +296,7 @@ public class Configurator {
      * Throws an exception if sanity check fails. Possible sanity check is uniqueness of all
      * protocol names
      */
-    public static void sanityCheck(List<Protocol> protocols) throws Exception {
-
+    private static void sanityCheck(List<Protocol> protocols) throws Exception {
         // check for unique IDs
         Set<Short> ids = new HashSet<>();
         for (Protocol protocol : protocols) {
@@ -336,7 +333,7 @@ public class Configurator {
         }
     }
 
-    protected static String printEvents(List<Integer> events) {
+    private static String printEvents(List<Integer> events) {
         StringBuilder sb = new StringBuilder("[");
         for (int evt : events)
             sb.append(Event.type2String(evt)).append(" ");
@@ -347,13 +344,14 @@ public class Configurator {
     /**
      * Removes all events provided by the protocol below protocol from events
      *
-     * @param protocol
-     * @param events
+     * @param protocol protocol
+     * @param events events
      */
-    protected static void removeProvidedUpServices(Protocol protocol, List<Integer> events) {
+    private static void removeProvidedUpServices(Protocol protocol, List<Integer> events) {
         if (protocol == null || events == null)
             return;
-        for (Protocol prot = protocol.getDownProtocol(); prot != null && !events.isEmpty(); prot = prot.getDownProtocol()) {
+        for (Protocol prot = protocol.getDownProtocol();
+            prot != null && !events.isEmpty(); prot = prot.getDownProtocol()) {
             List<Integer> provided_up_services = prot.providedUpServices();
             if (provided_up_services != null && !provided_up_services.isEmpty())
                 events.removeAll(provided_up_services);
@@ -363,10 +361,10 @@ public class Configurator {
     /**
      * Removes all events provided by the protocol above protocol from events
      *
-     * @param protocol
-     * @param events
+     * @param protocol protocol
+     * @param events events
      */
-    protected static void removeProvidedDownServices(Protocol protocol, List<Integer> events) {
+    private static void removeProvidedDownServices(Protocol protocol, List<Integer> events) {
         if (protocol == null || events == null)
             return;
         for (Protocol prot = protocol.getUpProtocol(); prot != null && !events.isEmpty(); prot = prot.getUpProtocol()) {
@@ -383,9 +381,11 @@ public class Configurator {
         Map<String, Map<String, InetAddressInfo>> inetAddressMap) throws Exception {
         Set<InetAddress> addrs = new HashSet<>();
 
-        for (Map.Entry<String, Map<String, InetAddressInfo>> inetAddressMapEntry : inetAddressMap.entrySet()) {
+        for (Map.Entry<String, Map<String, InetAddressInfo>> inetAddressMapEntry :
+            inetAddressMap.entrySet()) {
             Map<String, InetAddressInfo> protocolInetAddressMap = inetAddressMapEntry.getValue();
-            for (Map.Entry<String, InetAddressInfo> protocolInetAddressMapEntry : protocolInetAddressMap.entrySet()) {
+            for (Map.Entry<String, InetAddressInfo> protocolInetAddressMapEntry :
+                protocolInetAddressMap.entrySet()) {
                 InetAddressInfo inetAddressInfo = protocolInetAddressMapEntry.getValue();
                 // add InetAddressInfo to sets based on IP version
                 List<InetAddress> addresses = inetAddressInfo.getInetAddresses();
@@ -446,8 +446,7 @@ public class Configurator {
      * of the Fields and Methods.
      */
     public static Map<String, Map<String, InetAddressInfo>> createInetAddressMap(
-        List<ProtocolConfiguration> protocol_configs,
-        List<Protocol> protocols) throws Exception {
+        List<ProtocolConfiguration> protocol_configs, List<Protocol> protocols) throws Exception {
         // Map protocol -> Map<String, InetAddressInfo>, where the latter is protocol specific
         Map<String, Map<String, InetAddressInfo>> inetAddressMap = new HashMap<>();
 
@@ -463,56 +462,61 @@ public class Configurator {
             // check which InetAddress-related properties are ***non-null ***, and
             // create an InetAddressInfo structure for them
             // Method[] methods=protocol.getClass().getMethods();
-            Method[] methods = Util.getAllDeclaredMethodsWithAnnotations(protocol.getClass(), Property.class);
-            for (int j = 0; j < methods.length; j++) {
-                if (methods[j].isAnnotationPresent(Property.class) && isSetPropertyMethod(methods[j])) {
-                    String propertyName = PropertyHelper.getPropertyName(methods[j]);
+            Method[] methods = Util.getAllDeclaredMethodsWithAnnotations(protocol.getClass(),
+                Property.class);
+            for (Method method : methods) {
+                if (method.isAnnotationPresent(Property.class) && isSetPropertyMethod(method)) {
+                    String propertyName = PropertyHelper.getPropertyName(method);
                     String propertyValue = properties.get(propertyName);
 
                     // if there is a systemProperty attribute defined in the annotation, set the property value from the system property
-                    String tmp = grabSystemProp(methods[j].getAnnotation(Property.class));
+                    String tmp = grabSystemProp(method.getAnnotation(Property.class));
                     if (tmp != null)
                         propertyValue = tmp;
 
-                    if (propertyValue != null && InetAddressInfo.isInetAddressRelated(methods[j])) {
+                    if (propertyValue != null && InetAddressInfo.isInetAddressRelated(method)) {
                         Object converted = null;
                         try {
-                            converted = PropertyHelper.getConvertedValue(protocol, methods[j], properties, propertyValue, false);
+                            converted = PropertyHelper.getConvertedValue(protocol, method,
+                                properties, propertyValue, false);
                         } catch (Exception e) {
                             throw new Exception("String value could not be converted for method " + propertyName + " in "
                                 + protocolName + " with default value " + propertyValue + ".Exception is " + e, e);
                         }
-                        InetAddressInfo inetinfo = new InetAddressInfo(protocol, methods[j], properties, propertyValue, converted);
+                        InetAddressInfo inetinfo = new InetAddressInfo(protocol, method,
+                            properties, propertyValue, converted);
 
-                        Map<String, InetAddressInfo> m = inetAddressMap.computeIfAbsent(protocolName, k -> new HashMap<>());
+                        Map<String, InetAddressInfo> m =
+                            inetAddressMap.computeIfAbsent(protocolName, k -> new HashMap<>());
                         m.put(propertyName, inetinfo);
                     }
                 }
             }
 
             //traverse class hierarchy and find all annotated fields and add them to the list if annotated
-            for (Class<?> clazz = protocol.getClass(); clazz != null; clazz = clazz.getSuperclass()) {
+            for (Class<?> clazz = protocol.getClass(); clazz != null;
+                clazz = clazz.getSuperclass()) {
                 Field[] fields = clazz.getDeclaredFields();
-                for (int j = 0; j < fields.length; j++) {
-                    if (fields[j].isAnnotationPresent(Property.class)) {
-                        String propertyName = PropertyHelper.getPropertyName(fields[j], properties);
+                for (Field field : fields) {
+                    if (field.isAnnotationPresent(Property.class)) {
+                        String propertyName = PropertyHelper.getPropertyName(field, properties);
                         String propertyValue = properties.get(propertyName);
 
                         // if there is a systemProperty attribute defined in the annotation, set the property value from the system property
-                        String tmp = grabSystemProp(fields[j].getAnnotation(Property.class));
+                        String tmp = grabSystemProp(field.getAnnotation(Property.class));
                         if (tmp != null)
                             propertyValue = tmp;
 
-                        if ((propertyValue != null || !PropertyHelper.usesDefaultConverter(fields[j]))
-                            && InetAddressInfo.isInetAddressRelated(fields[j])) {
-                            Object converted = null;
+                        if ((propertyValue != null || !PropertyHelper.usesDefaultConverter(field))
+                            && InetAddressInfo.isInetAddressRelated(field)) {
+                            Object converted;
                             try {
-                                converted = PropertyHelper.getConvertedValue(protocol, fields[j], properties, propertyValue, false);
+                                converted = PropertyHelper.getConvertedValue(protocol, field, properties, propertyValue, false);
                             } catch (Exception e) {
                                 throw new Exception("String value could not be converted for method " + propertyName + " in "
                                     + protocolName + " with default value " + propertyValue + ".Exception is " + e, e);
                             }
-                            InetAddressInfo inetinfo = new InetAddressInfo(protocol, fields[j], properties, propertyValue, converted);
+                            InetAddressInfo inetinfo = new InetAddressInfo(protocol, field, properties, propertyValue, converted);
 
                             Map<String, InetAddressInfo> m = inetAddressMap.computeIfAbsent(protocolName, k -> new HashMap<>());
                             m.put(propertyName, inetinfo);
@@ -524,18 +528,19 @@ public class Configurator {
         return inetAddressMap;
     }
 
-    public static List<InetAddress> getInetAddresses(List<Protocol> protocols) throws Exception {
+    private static List<InetAddress> getInetAddresses(List<Protocol> protocols) throws Exception {
         List<InetAddress> retval = new LinkedList<>();
 
         // collect InetAddressInfo
         for (Protocol protocol : protocols) {
             //traverse class hierarchy and find all annotated fields and add them to the list if annotated
-            for (Class<?> clazz = protocol.getClass(); clazz != null; clazz = clazz.getSuperclass()) {
+            for (Class<?> clazz = protocol.getClass(); clazz != null;
+                clazz = clazz.getSuperclass()) {
                 Field[] fields = clazz.getDeclaredFields();
-                for (int j = 0; j < fields.length; j++) {
-                    if (fields[j].isAnnotationPresent(Property.class)) {
-                        if (InetAddressInfo.isInetAddressRelated(fields[j])) {
-                            Object value = getValueFromProtocol(protocol, fields[j]);
+                for (Field field : fields) {
+                    if (field.isAnnotationPresent(Property.class)) {
+                        if (InetAddressInfo.isInetAddressRelated(field)) {
+                            Object value = getValueFromProtocol(protocol, field);
                             if (value instanceof InetAddress)
                                 retval.add((InetAddress) value);
                             else if (value instanceof IpAddress)
@@ -575,26 +580,27 @@ public class Configurator {
             Map<String, String> properties = new HashMap<>(protocol_config.getProperties());
 
             Method[] methods = Util.getAllDeclaredMethodsWithAnnotations(protocol.getClass(), Property.class);
-            for (int j = 0; j < methods.length; j++) {
-                if (isSetPropertyMethod(methods[j])) {
-                    String propertyName = PropertyHelper.getPropertyName(methods[j]);
+            for (Method method : methods) {
+                if (isSetPropertyMethod(method)) {
+                    String propertyName = PropertyHelper.getPropertyName(method);
 
                     Object propertyValue = getValueFromProtocol(protocol, propertyName);
                     if (propertyValue == null) { // if propertyValue is null, check if there is a we can use
-                        Property annotation = methods[j].getAnnotation(Property.class);
+                        Property annotation = method.getAnnotation(Property.class);
 
                         // get the default value for the method- check for InetAddress types
-                        String defaultValue = null;
-                        if (InetAddressInfo.isInetAddressRelated(methods[j])) {
-                            defaultValue = ip_version == StackType.IPv4 ? annotation.defaultValueIPv4() : annotation.defaultValueIPv6();
-                            if (defaultValue != null && !defaultValue.isEmpty()) {
-                                Object converted = null;
+                        String defaultValue;
+                        if (InetAddressInfo.isInetAddressRelated(method)) {
+                            defaultValue = ip_version == StackType.IPv4 ?
+                                annotation.defaultValueIPv4() : annotation.defaultValueIPv6();
+                            if (!defaultValue.isEmpty()) {
+                                Object converted;
                                 try {
                                     if (defaultValue.equalsIgnoreCase(Global.NON_LOOPBACK_ADDRESS))
                                         converted = default_ip_address;
                                     else
-                                        converted = PropertyHelper.getConvertedValue(protocol, methods[j], properties, defaultValue, true);
-                                    methods[j].invoke(protocol, converted);
+                                        converted = PropertyHelper.getConvertedValue(protocol, method, properties, defaultValue, true);
+                                    method.invoke(protocol, converted);
                                 } catch (Exception e) {
                                     throw new Exception("default could not be assigned for method " + propertyName + " in "
                                         + protocolName + " with default " + defaultValue, e);
@@ -608,35 +614,33 @@ public class Configurator {
 
             //traverse class hierarchy and find all annotated fields and add them to the list if annotated
             Field[] fields = Util.getAllDeclaredFieldsWithAnnotations(protocol.getClass(), Property.class);
-            for (int j = 0; j < fields.length; j++) {
-                String propertyName = PropertyHelper.getPropertyName(fields[j], properties);
-                Object propertyValue = getValueFromProtocol(protocol, fields[j]);
+            for (Field field : fields) {
+                String propertyName = PropertyHelper.getPropertyName(field, properties);
+                Object propertyValue = getValueFromProtocol(protocol, field);
                 if (propertyValue == null) {
                     // add to collection of @Properties with no user specified value
-                    Property annotation = fields[j].getAnnotation(Property.class);
+                    Property annotation = field.getAnnotation(Property.class);
 
                     // get the default value for the field - check for InetAddress types
-                    String defaultValue = null;
-                    if (InetAddressInfo.isInetAddressRelated(fields[j])) {
+                    String defaultValue;
+                    if (InetAddressInfo.isInetAddressRelated(field)) {
                         defaultValue = ip_version == StackType.IPv4 ? annotation.defaultValueIPv4() : annotation.defaultValueIPv6();
-                        if (defaultValue != null && !defaultValue.isEmpty()) {
+                        if (!defaultValue.isEmpty()) {
                             // condition for invoking converter
-                            if (defaultValue != null || !PropertyHelper.usesDefaultConverter(fields[j])) {
-                                Object converted = null;
-                                try {
-                                    if (defaultValue.equalsIgnoreCase(Global.NON_LOOPBACK_ADDRESS))
-                                        converted = default_ip_address;
-                                    else
-                                        converted = PropertyHelper.getConvertedValue(protocol, fields[j], properties, defaultValue, true);
-                                    if (converted != null)
-                                        Util.setField(fields[j], protocol, converted);
-                                } catch (Exception e) {
-                                    throw new Exception("default could not be assigned for field " + propertyName + " in "
-                                        + protocolName + " with default value " + defaultValue, e);
-                                }
-
-                                log.debug("set property " + protocolName + "." + propertyName + " to default value " + converted);
+                            Object converted;
+                            try {
+                                if (defaultValue.equalsIgnoreCase(Global.NON_LOOPBACK_ADDRESS))
+                                    converted = default_ip_address;
+                                else
+                                    converted = PropertyHelper.getConvertedValue(protocol, field, properties, defaultValue, true);
+                                if (converted != null)
+                                    Util.setField(field, protocol, converted);
+                            } catch (Exception e) {
+                                throw new Exception("default could not be assigned for field " + propertyName + " in "
+                                    + protocolName + " with default value " + defaultValue, e);
                             }
+
+                            log.debug("set property " + protocolName + "." + propertyName + " to default value " + converted);
                         }
                     }
                 }
@@ -644,7 +648,7 @@ public class Configurator {
         }
     }
 
-    public static void setDefaultValues(List<Protocol> protocols,
+    private static void setDefaultValues(List<Protocol> protocols,
         StackType ip_version) throws Exception {
         InetAddress default_ip_address = Util.getNonLoopbackAddress();
         if (default_ip_address == null) {
@@ -657,31 +661,31 @@ public class Configurator {
 
             //traverse class hierarchy and find all annotated fields and add them to the list if annotated
             Field[] fields = Util.getAllDeclaredFieldsWithAnnotations(protocol.getClass(), Property.class);
-            for (int j = 0; j < fields.length; j++) {
+            for (Field field : fields) {
                 // get the default value for the field - check for InetAddress types
-                if (InetAddressInfo.isInetAddressRelated(fields[j])) {
-                    Object propertyValue = getValueFromProtocol(protocol, fields[j]);
+                if (InetAddressInfo.isInetAddressRelated(field)) {
+                    Object propertyValue = getValueFromProtocol(protocol, field);
                     if (propertyValue == null) {
                         // add to collection of @Properties with no user specified value
-                        Property annotation = fields[j].getAnnotation(Property.class);
+                        Property annotation = field.getAnnotation(Property.class);
 
                         String defaultValue = ip_version == StackType.IPv4 ? annotation.defaultValueIPv4() : annotation.defaultValueIPv6();
-                        if (defaultValue != null && !defaultValue.isEmpty()) {
+                        if (!defaultValue.isEmpty()) {
                             // condition for invoking converter
-                            Object converted = null;
+                            Object converted;
                             try {
                                 if (defaultValue.equalsIgnoreCase(Global.NON_LOOPBACK_ADDRESS))
                                     converted = default_ip_address;
                                 else
-                                    converted = PropertyHelper.getConvertedValue(protocol, fields[j], defaultValue, true);
+                                    converted = PropertyHelper.getConvertedValue(protocol, field, defaultValue, true);
                                 if (converted != null)
-                                    Util.setField(fields[j], protocol, converted);
+                                    Util.setField(field, protocol, converted);
                             } catch (Exception e) {
-                                throw new Exception("default could not be assigned for field " + fields[j].getName() + " in "
+                                throw new Exception("default could not be assigned for field " + field.getName() + " in "
                                     + protocolName + " with default value " + defaultValue, e);
                             }
 
-                            log.debug("set property " + protocolName + "." + fields[j].getName() + " to default value " + converted);
+                            log.debug("set property " + protocolName + "." + field.getName() + " to default value " + converted);
                         }
                     }
                 }
@@ -693,27 +697,27 @@ public class Configurator {
      * Makes sure that all fields annotated with @LocalAddress is (1) an InetAddress and (2) a valid
      * address on any local network interface
      *
-     * @param protocols
-     * @throws Exception
+     * @param protocols protocols
+     * @throws Exception exception
      */
-    public static void ensureValidBindAddresses(List<Protocol> protocols) throws Exception {
+    private static void ensureValidBindAddresses(List<Protocol> protocols) throws Exception {
         for (Protocol protocol : protocols) {
             String protocolName = protocol.getName();
 
             //traverse class hierarchy and find all annotated fields and add them to the list if annotated
             Field[] fields = Util.getAllDeclaredFieldsWithAnnotations(protocol.getClass(), LocalAddress.class);
-            for (int i = 0; i < fields.length; i++) {
-                Object val = getValueFromProtocol(protocol, fields[i]);
+            for (Field field : fields) {
+                Object val = getValueFromProtocol(protocol, field);
                 if (val == null)
                     continue;
                 if (!(val instanceof InetAddress))
-                    throw new Exception("field " + protocolName + "." + fields[i].getName() + " is not an InetAddress");
+                    throw new Exception("field " + protocolName + "." + field.getName() + " is not an InetAddress");
                 Util.checkIfValidAddress((InetAddress) val, protocolName);
             }
         }
     }
 
-    public static Object getValueFromProtocol(Protocol protocol,
+    private static Object getValueFromProtocol(Protocol protocol,
         Field field) throws IllegalAccessException {
         if (protocol == null || field == null)
             return null;
@@ -738,34 +742,33 @@ public class Configurator {
      * (ii) checks that all dependency references are present
      * (iii) creates a copy of the master list in dependency order
      */
-    static AccessibleObject[] computePropertyDependencies(Object obj,
+    private static AccessibleObject[] computePropertyDependencies(Object obj,
         Map<String, String> properties) {
 
         // List of Fields and Methods of the protocol annotated with @Property
         List<AccessibleObject> unorderedFieldsAndMethods = new LinkedList<>();
-        List<AccessibleObject> orderedFieldsAndMethods = new LinkedList<>();
+        List<AccessibleObject> orderedFieldsAndMethods;
         // Maps property name to property object
         Map<String, AccessibleObject> propertiesInventory = new HashMap<>();
 
         // get the methods for this class and add them to the list if annotated with @Property
         Method[] methods = obj.getClass().getMethods();
-        for (int i = 0; i < methods.length; i++) {
-
-            if (methods[i].isAnnotationPresent(Property.class) && isSetPropertyMethod(methods[i])) {
-                String propertyName = PropertyHelper.getPropertyName(methods[i]);
-                unorderedFieldsAndMethods.add(methods[i]);
-                propertiesInventory.put(propertyName, methods[i]);
+        for (Method method : methods) {
+            if (method.isAnnotationPresent(Property.class) && isSetPropertyMethod(method)) {
+                String propertyName = PropertyHelper.getPropertyName(method);
+                unorderedFieldsAndMethods.add(method);
+                propertiesInventory.put(propertyName, method);
             }
         }
         //traverse class hierarchy and find all annotated fields and add them to the list if annotated
         for (Class<?> clazz = obj.getClass(); clazz != null; clazz = clazz.getSuperclass()) {
             Field[] fields = clazz.getDeclaredFields();
-            for (int i = 0; i < fields.length; i++) {
-                if (fields[i].isAnnotationPresent(Property.class)) {
-                    String propertyName = PropertyHelper.getPropertyName(fields[i], properties);
-                    unorderedFieldsAndMethods.add(fields[i]);
+            for (Field field : fields) {
+                if (field.isAnnotationPresent(Property.class)) {
+                    String propertyName = PropertyHelper.getPropertyName(field, properties);
+                    unorderedFieldsAndMethods.add(field);
                     // may need to change this based on name parameter of Property
-                    propertiesInventory.put(propertyName, fields[i]);
+                    propertiesInventory.put(propertyName, field);
                 }
             }
         }
@@ -774,7 +777,8 @@ public class Configurator {
         checkDependencyReferencesPresent(unorderedFieldsAndMethods, propertiesInventory);
 
         // order the fields and methods by dependency
-        orderedFieldsAndMethods = orderFieldsAndMethodsByDependency(unorderedFieldsAndMethods, propertiesInventory);
+        orderedFieldsAndMethods = orderFieldsAndMethodsByDependency(unorderedFieldsAndMethods,
+            propertiesInventory);
 
         // convert to array of Objects
         AccessibleObject[] result = new AccessibleObject[orderedFieldsAndMethods.size()];
@@ -785,7 +789,7 @@ public class Configurator {
         return result;
     }
 
-    static List<AccessibleObject> orderFieldsAndMethodsByDependency(
+    private static List<AccessibleObject> orderFieldsAndMethodsByDependency(
         List<AccessibleObject> unorderedList,
         Map<String, AccessibleObject> propertiesMap) {
         // Stack to detect cycle in depends relation
@@ -795,8 +799,7 @@ public class Configurator {
 
         // add the elements from the unordered list to the ordered list
         // any dependencies will be checked and added first, in recursive manner
-        for (int i = 0; i < unorderedList.size(); i++) {
-            AccessibleObject obj = unorderedList.get(i);
+        for (AccessibleObject obj : unorderedList) {
             addPropertyToDependencyList(orderedList, propertiesMap, stack, obj);
         }
 
@@ -807,7 +810,7 @@ public class Configurator {
      * DFS of dependency graph formed by Property annotations and dependsUpon parameter
      * This is used to create a list of Properties in dependency order
      */
-    static void addPropertyToDependencyList(List<AccessibleObject> orderedList,
+    private static void addPropertyToDependencyList(List<AccessibleObject> orderedList,
         Map<String, AccessibleObject> props, Stack<AccessibleObject> stack, AccessibleObject obj) {
 
         if (orderedList.contains(obj))
@@ -837,14 +840,12 @@ public class Configurator {
     /*
      * Checks that for every dependency referred, there is a matching property
      */
-    static void checkDependencyReferencesPresent(List<AccessibleObject> objects,
+    private static void checkDependencyReferencesPresent(List<AccessibleObject> objects,
         Map<String, AccessibleObject> props) {
 
         // iterate overall properties marked by @Property
-        for (int i = 0; i < objects.size(); i++) {
-
+        for (AccessibleObject ao : objects) {
             // get the Property annotation
-            AccessibleObject ao = objects.get(i);
             Property annotation = ao.getAnnotation(Property.class);
             if (annotation == null) {
                 throw new IllegalArgumentException("@Property annotation is required for checking dependencies;" +
@@ -863,8 +864,8 @@ public class Configurator {
                 // check that the string representing a property name is in the list
                 boolean found = false;
                 Set<String> keyset = props.keySet();
-                for (Iterator<String> iter = keyset.iterator(); iter.hasNext(); ) {
-                    if (iter.next().equals(token)) {
+                for (String aKeyset : keyset) {
+                    if (aKeyset.equals(token)) {
                         found = true;
                         break;
                     }
@@ -875,10 +876,9 @@ public class Configurator {
                 }
             }
         }
-
     }
 
-    public static void resolveAndInvokePropertyMethods(Object obj,
+    private static void resolveAndInvokePropertyMethods(Object obj,
         Map<String, String> props) throws Exception {
         Method[] methods = obj.getClass().getMethods();
         for (Method method : methods) {
@@ -886,7 +886,7 @@ public class Configurator {
         }
     }
 
-    public static void resolveAndInvokePropertyMethod(Object obj, Method method,
+    private static void resolveAndInvokePropertyMethod(Object obj, Method method,
         Map<String, String> props) throws Exception {
         String methodName = method.getName();
         Property annotation = method.getAnnotation(Property.class);
@@ -901,7 +901,7 @@ public class Configurator {
 
             if (propertyName != null && propertyValue != null) {
                 String deprecated_msg = annotation.deprecatedMessage();
-                if (deprecated_msg != null && !deprecated_msg.isEmpty()) {
+                if (!deprecated_msg.isEmpty()) {
                     log.warn(Util.getMessage("Deprecated"), method.getDeclaringClass().getSimpleName() + "." + methodName,
                         deprecated_msg);
                 }
@@ -910,15 +910,16 @@ public class Configurator {
             if (propertyValue != null) {
                 Object converted = null;
                 try {
-                    converted = PropertyHelper.getConvertedValue(obj, method, props, propertyValue, true);
+                    converted = PropertyHelper.getConvertedValue(obj, method, props,
+                        propertyValue, true);
                     method.invoke(obj, converted);
                 } catch (Exception e) {
-                    String name = obj instanceof Protocol ? ((Protocol) obj).getName() : obj.getClass().getName();
+                    String name = obj instanceof Protocol ?
+                        ((Protocol) obj).getName() : obj.getClass().getName();
                     throw new Exception("Could not assign property " + propertyName + " in "
                         + name + ", method is " + methodName + ", converted value is " + converted, e);
                 }
             }
-
             props.remove(propertyName);
         }
     }
@@ -933,7 +934,7 @@ public class Configurator {
         }
     }
 
-    public static void resolveAndAssignField(Object obj, Field field,
+    private static void resolveAndAssignField(Object obj, Field field,
         Map<String, String> props) throws Exception {
         Property annotation = field.getAnnotation(Property.class);
         if (annotation != null) {
@@ -985,7 +986,8 @@ public class Configurator {
                     String propertyValue = props.get(propertyName);
                     if (propertyValue != null) {
                         if (log.isWarnEnabled()) {
-                            String name = obj instanceof Protocol ? ((Protocol) obj).getName() : obj.getClass().getName();
+                            String name = obj instanceof Protocol ?
+                                ((Protocol) obj).getName() : obj.getClass().getName();
                             log.warn(Util.getMessage("Deprecated"), name + "." + propertyName, "will be ignored");
                         }
                         props.remove(propertyName);
@@ -1041,7 +1043,8 @@ public class Configurator {
         boolean isParameterized; // is the associated type parametrized? (e.g. Collection<String>)
         Object baseType;         // what is the base type (e.g. Collection)
 
-        InetAddressInfo(Protocol protocol, AccessibleObject fieldOrMethod,
+        @SuppressWarnings("unchecked") InetAddressInfo(Protocol protocol,
+            AccessibleObject fieldOrMethod,
             Map<String, String> properties, String stringValue,
             Object convertedValue) {
             // check input values
@@ -1082,7 +1085,8 @@ public class Configurator {
             this.baseType = null;
             if (isField() && isParameterized) {
                 // the Field has a single type
-                ParameterizedType fpt = (ParameterizedType) ((Field) fieldOrMethod).getGenericType();
+                ParameterizedType fpt =
+                    (ParameterizedType) ((Field) fieldOrMethod).getGenericType();
                 this.baseType = fpt.getActualTypeArguments()[0];
             } else if (!isField() && isParameterized) {
                 // the Method has several parameters (and so types)
@@ -1179,7 +1183,8 @@ public class Configurator {
         }
 
         static boolean isInetAddressOrCompatibleType(Class<?> c) {
-            return c.equals(InetAddress.class) || c.equals(InetSocketAddress.class) || c.equals(IpAddress.class);
+            return c.equals(InetAddress.class) || c.equals(InetSocketAddress.class)
+                || c.equals(IpAddress.class);
         }
 
         /*
@@ -1207,7 +1212,7 @@ public class Configurator {
          * Because computedValues may be null, we need to return
          * a zero length list in some cases.
          */
-        public List<InetAddress> getInetAddresses() {
+        List<InetAddress> getInetAddresses() {
             List<InetAddress> addresses = new ArrayList<>();
             if (getConvertedValue() == null)
                 return addresses;
@@ -1221,8 +1226,8 @@ public class Configurator {
                 List<?> values = (List<?>) getConvertedValue();
                 if (values.isEmpty())
                     return addresses;
-                for (int i = 0; i < values.size(); i++) {
-                    addresses.add(getInetAddress(values.get(i)));
+                for (Object value : values) {
+                    addresses.add(getInetAddress(value));
                 }
                 return addresses;
             }
@@ -1243,16 +1248,15 @@ public class Configurator {
 
         public String toString() {
             StringBuilder sb = new StringBuilder();
-            sb.append("InetAddressInfo(")
-                .append("protocol=" + protocol.getName())
-                .append(", propertyName=" + getPropertyName())
-                .append(", string value=" + getStringValue())
-                .append(", parameterized=" + isParameterized());
+            sb.append("InetAddressInfo(").append("protocol=")
+                .append(protocol.getName()).append(", propertyName=")
+                .append(getPropertyName()).append(", string value=")
+                .append(getStringValue()).append(", parameterized=")
+                .append(isParameterized());
             if (isParameterized())
-                sb.append(", baseType=" + getBaseType());
+                sb.append(", baseType=").append(getBaseType());
             sb.append(")");
             return sb.toString();
         }
     }
-
 }

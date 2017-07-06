@@ -1,26 +1,26 @@
 package org.jgroups.stack;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import org.jgroups.Address;
 import org.jgroups.Membership;
 import org.jgroups.protocols.pbcast.GMS;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-
 /**
  * Policy which picks the new coordinator in a merge from the largest subview.
  * JIRA: https://issues.jboss.org/browse/JGRP-1976
+ *
  * @author Osamu Nagano
- * @since  3.6.7
+ * @since 3.6.7
  */
+// TODO: 17/7/6 by zmyer
 public class LargestWinningPolicy extends GMS.DefaultMembershipPolicy {
-
     /**
      * Called when a merge happened. The largest subview wins.
      */
     public List<Address> getNewMembership(final Collection<Collection<Address>> subviews) {
-        ArrayList<Collection<Address>> aSubviews=new ArrayList<>(subviews);
+        ArrayList<Collection<Address>> aSubviews = new ArrayList<>(subviews);
         int sLargest = 0;
         int iLargest = 0;
 

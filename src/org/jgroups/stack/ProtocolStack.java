@@ -64,7 +64,6 @@ public class ProtocolStack extends Protocol {
 
     private final DiagnosticsHandler.ProbeHandler props_handler =
         new DiagnosticsHandler.ProbeHandler() {
-
             public Map<String, String> handleProbe(String... keys) {
                 for (String key : keys) {
                     if (Objects.equals(key, "props")) {
@@ -93,7 +92,8 @@ public class ProtocolStack extends Protocol {
                         return map;
                     }
                     if (key.startsWith("rp") || key.startsWith("remove-protocol")) {
-                        int len = key.startsWith("rp") ? "rp".length() : "remove-protocol".length();
+                        int len = key.startsWith("rp") ?
+                            "rp".length() : "remove-protocol".length();
                         key = key.substring(len);
                         int index = key.indexOf('=');
                         if (index != -1) {
@@ -221,8 +221,8 @@ public class ProtocolStack extends Protocol {
         return v;
     }
 
-    List<Protocol> copyProtocols(
-        ProtocolStack targetStack) throws IllegalAccessException, InstantiationException {
+    List<Protocol> copyProtocols(ProtocolStack targetStack)
+        throws IllegalAccessException, InstantiationException {
         List<Protocol> list = getProtocols();
         List<Protocol> retval = new ArrayList<>(list.size());
         for (Protocol prot : list) {
@@ -231,7 +231,6 @@ public class ProtocolStack extends Protocol {
             retval.add(new_prot);
 
             for (Class<?> clazz = prot.getClass(); clazz != null; clazz = clazz.getSuperclass()) {
-
                 Field[] fields = clazz.getDeclaredFields();
                 for (Field field : fields) {
                     if (field.isAnnotationPresent(Property.class)) {
@@ -244,7 +243,8 @@ public class ProtocolStack extends Protocol {
                 Method[] methods = clazz.getDeclaredMethods();
                 for (Method method : methods) {
                     String methodName = method.getName();
-                    if (method.isAnnotationPresent(Property.class) && Configurator.isSetPropertyMethod(method)) {
+                    if (method.isAnnotationPresent(Property.class)
+                        && Configurator.isSetPropertyMethod(method)) {
                         Property annotation = method.getAnnotation(Property.class);
                         List<String> possible_names = new LinkedList<>();
                         possible_names.add(annotation.name());
@@ -270,7 +270,7 @@ public class ProtocolStack extends Protocol {
      * @return Map<String,Map<key,val>>
      */
     public Map<String, Object> dumpStats() {
-        Map<String, Object> retval = new HashMap<>(); // no need to be sorted, we need order of protocols as in the config!
+        Map<String, Object> retval = new HashMap<>();
         for (Protocol p = top_prot; p != null; p = p.getDownProtocol()) {
             String prot_name = p.getName();
             if (prot_name == null)
@@ -415,7 +415,8 @@ public class ProtocolStack extends Protocol {
             if (print_props) {
                 Map<String, String> tmp = getProps(prot);
                 for (Map.Entry<String, String> entry : tmp.entrySet()) {
-                    sb.append("    ").append(entry.getKey()).append("=").append(entry.getValue()).append("\n");
+                    sb.append("    ").append(entry.getKey())
+                        .append("=").append(entry.getValue()).append("\n");
                 }
             }
         }
@@ -451,7 +452,8 @@ public class ProtocolStack extends Protocol {
             Method[] methods = clazz.getDeclaredMethods();
             for (Method method : methods) {
                 String methodName = method.getName();
-                if (method.isAnnotationPresent(Property.class) && Configurator.isSetPropertyMethod(method)) {
+                if (method.isAnnotationPresent(Property.class)
+                    && Configurator.isSetPropertyMethod(method)) {
                     annotation = method.getAnnotation(Property.class);
                     List<String> possible_names = new LinkedList<>();
                     possible_names.add(annotation.name());

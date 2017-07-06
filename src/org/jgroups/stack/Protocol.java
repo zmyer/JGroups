@@ -194,7 +194,6 @@ public abstract class Protocol {
      * allows a protocol to define protocol-specific information and to parse it
      */
     public void parse(Node node) throws Exception {
-        ;
     }
 
     /** Returns the protocol IDs of all protocols above this one (excluding the current protocol) */

@@ -24,7 +24,7 @@ import org.jgroups.PhysicalAddress;
 
 // TODO: 17/5/25 by zmyer
 public class IpAddress implements PhysicalAddress, Constructable<IpAddress> {
-    protected InetAddress ip_addr;
+    InetAddress ip_addr;
     protected int port;
 
     // Used only by marshalling
@@ -58,7 +58,7 @@ public class IpAddress implements PhysicalAddress, Constructable<IpAddress> {
         return IpAddress::new;
     }
 
-    protected void setAddressToLocalHost() {
+    private void setAddressToLocalHost() {
         try {
             ip_addr = InetAddress.getLocalHost();  // get first NIC found (on multi-homed systems)
         } catch (Exception e) {
@@ -67,7 +67,7 @@ public class IpAddress implements PhysicalAddress, Constructable<IpAddress> {
         if (ip_addr == null) {
             try {
                 ip_addr = InetAddress.getByName(null);
-            } catch (UnknownHostException e) {
+            } catch (UnknownHostException ignored) {
             }
         }
     }

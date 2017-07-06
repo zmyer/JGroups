@@ -30,7 +30,9 @@ import org.jgroups.util.Util;
  *
  * @author Bela Ban
  */
-public class RouterStub extends ReceiverAdapter implements Comparable<RouterStub>, ConnectionListener {
+// TODO: 17/7/6 by zmyer
+public class RouterStub extends ReceiverAdapter
+    implements Comparable<RouterStub>, ConnectionListener {
     public interface StubReceiver {
         void receive(GossipData data);
     }
@@ -39,16 +41,16 @@ public class RouterStub extends ReceiverAdapter implements Comparable<RouterStub
         void members(List<PingData> mbrs);
     }
 
-    public interface CloseListener {
+    interface CloseListener {
         void closed(RouterStub stub);
     }
 
     protected BaseServer client;
     protected final IpAddress local;  // bind address
     protected final IpAddress remote; // address of remote GossipRouter
-    protected final boolean use_nio;
+    private final boolean use_nio;
     protected StubReceiver receiver; // external consumer of data, e.g. TUNNEL
-    protected CloseListener close_listener;
+    private CloseListener close_listener;
     protected static final Log log = LogFactory.getLog(RouterStub.class);
 
     // max number of ms to wait for socket establishment to GossipRouter
@@ -56,7 +58,7 @@ public class RouterStub extends ReceiverAdapter implements Comparable<RouterStub
     protected boolean tcp_nodelay = true;
 
     // map to correlate GET_MBRS requests and responses
-    protected final Map<String, List<MembersNotification>> get_members_map = new HashMap<>();
+    private final Map<String, List<MembersNotification>> get_members_map = new HashMap<>();
 
     /**
      * Creates a stub to a remote GossipRouter
@@ -69,8 +71,7 @@ public class RouterStub extends ReceiverAdapter implements Comparable<RouterStub
      * @param l The {@link org.jgroups.stack.RouterStub.CloseListener}
      */
     public RouterStub(InetAddress bind_addr, int bind_port, InetAddress router_host,
-        int router_port,
-        boolean use_nio, CloseListener l) {
+        int router_port, boolean use_nio, CloseListener l) {
         local = new IpAddress(bind_addr, bind_port);
         this.remote = new IpAddress(router_host, router_port);
         this.use_nio = use_nio;
@@ -114,7 +115,7 @@ public class RouterStub extends ReceiverAdapter implements Comparable<RouterStub
         return tcp_nodelay;
     }
 
-    public RouterStub tcpNoDelay(boolean tcp_nodelay) {
+    private RouterStub tcpNoDelay(boolean tcp_nodelay) {
         this.tcp_nodelay = tcp_nodelay;
         return this;
     }
@@ -187,7 +188,7 @@ public class RouterStub extends ReceiverAdapter implements Comparable<RouterStub
     }
 
     @GuardedBy("lock")
-    protected void _doConnect() throws Exception {
+    private void _doConnect() throws Exception {
         client.start();
     }
 
@@ -304,21 +305,22 @@ public class RouterStub extends ReceiverAdapter implements Comparable<RouterStub
     }
 
     public boolean equals(Object obj) {
-        return compareTo((RouterStub) obj) == 0;
+        return obj instanceof RouterStub && compareTo((RouterStub) obj) == 0;
     }
 
     public String toString() {
-        return String.format("RouterStub[localsocket=%s, router_host=%s]", client.localAddress(), remote);
+        return String.format("RouterStub[localsocket=%s, router_host=%s]",
+            client.localAddress(), remote);
     }
 
-    protected synchronized void writeRequest(GossipData req) throws Exception {
+    private synchronized void writeRequest(GossipData req) throws Exception {
         int size = req.serializedSize();
         ByteArrayDataOutputStream out = new ByteArrayDataOutputStream(size + 5);
         req.writeTo(out);
         client.send(remote, out.buffer(), 0, out.position());
     }
 
-    protected void removeResponse(String group, MembersNotification notif) {
+    private void removeResponse(String group, MembersNotification notif) {
         synchronized (get_members_map) {
             List<MembersNotification> set = get_members_map.get(group);
             if (set == null || set.isEmpty()) {
@@ -330,7 +332,7 @@ public class RouterStub extends ReceiverAdapter implements Comparable<RouterStub
         }
     }
 
-    protected void notifyResponse(String group, List<PingData> list) {
+    private void notifyResponse(String group, List<PingData> list) {
         if (group == null)
             return;
         if (list == null)
@@ -348,5 +350,4 @@ public class RouterStub extends ReceiverAdapter implements Comparable<RouterStub
             get_members_map.remove(group);
         }
     }
-
 }

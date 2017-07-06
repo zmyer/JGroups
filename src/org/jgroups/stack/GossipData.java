@@ -18,32 +18,33 @@ import org.jgroups.util.Util;
  *
  * @author Bela Ban Oct 4 2001
  */
+// TODO: 17/7/6 by zmyer
 public class GossipData implements SizeStreamable {
-    GossipType type;
+    private GossipType type;
     String group;         // REGISTER, GET_MBRS and GET_MBRS_RSP
     Address addr;          // REGISTER
-    Address sender;        // MESSAGE (original sender of a message (not the GossipRouter!))
-    PhysicalAddress physical_addr; // REGISTER, GET_MBRS, GET_MBRS_RSP
-    String logical_name;  // REGISTER
-    List<PingData> ping_data;     // GET_MBRS_RSP
+    private Address sender;        // MESSAGE (original sender of a message (not the GossipRouter!))
+    private PhysicalAddress physical_addr; // REGISTER, GET_MBRS, GET_MBRS_RSP
+    private String logical_name;  // REGISTER
+    private List<PingData> ping_data;     // GET_MBRS_RSP
     byte[] buffer;        // MESSAGE
     int offset;        // MESSAGE
     int length;        // MESSAGE
 
-    public GossipData() { // for streamable
+    GossipData() { // for streamable
     }
 
     public GossipData(GossipType type) {
         this.type = type;
     }
 
-    public GossipData(GossipType type, String group, Address addr) {
+    GossipData(GossipType type, String group, Address addr) {
         this(type);
         this.group = group;
         this.addr = addr;
     }
 
-    public GossipData(GossipType type, String group, Address addr, List<PingData> ping_data) {
+    private GossipData(GossipType type, String group, Address addr, List<PingData> ping_data) {
         this(type, group, addr);
         this.ping_data = ping_data;
     }
@@ -98,7 +99,7 @@ public class GossipData implements SizeStreamable {
         return logical_name;
     }
 
-    public List<PingData> getPingData() {
+    List<PingData> getPingData() {
         return ping_data;
     }
 
@@ -122,7 +123,7 @@ public class GossipData implements SizeStreamable {
         this.ping_data = mbrs;
     }
 
-    public void addPingData(PingData data) {
+    void addPingData(PingData data) {
         if (ping_data == null)
             ping_data = new ArrayList<>();
         if (data != null)
@@ -133,13 +134,13 @@ public class GossipData implements SizeStreamable {
         StringBuilder sb = new StringBuilder();
         sb.append(type).append("(").append("group=").append(group).append(", addr=").append(addr);
         if (logical_name != null)
-            sb.append(", logical_name=" + logical_name);
+            sb.append(", logical_name=").append(logical_name);
         if (ping_data != null && !ping_data.isEmpty())
             sb.append(", ping_data=").append(ping_data);
         if (physical_addr != null)
             sb.append(", physical_addr=").append(physical_addr);
         if (buffer != null)
-            sb.append(", buffer: " + length + " bytes");
+            sb.append(", buffer: ").append(length).append(" bytes");
         sb.append(")");
         return sb.toString();
     }
@@ -223,5 +224,4 @@ public class GossipData implements SizeStreamable {
             in.readFully(buffer, offset = 0, length);
         }
     }
-
 }

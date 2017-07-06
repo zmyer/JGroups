@@ -106,10 +106,12 @@ public class DiagnosticsHandler implements Runnable {
         //   diag_sock=Util.createMulticastSocket(getSocketFactory(),
         //                               Global.TP_DIAG_MCAST_SOCK, diagnostics_addr, diagnostics_port, log);
         //else
-        diag_sock = socket_factory.createMulticastSocket("jgroups.tp.diag.mcast_sock", diagnostics_port);
+        diag_sock = socket_factory.createMulticastSocket("jgroups.tp.diag.mcast_sock",
+            diagnostics_port);
         diag_sock.setTimeToLive(ttl);
 
-        List<NetworkInterface> interfaces = bind_interfaces != null ? bind_interfaces : Util.getAllAvailableInterfaces();
+        List<NetworkInterface> interfaces = bind_interfaces != null ?
+            bind_interfaces : Util.getAllAvailableInterfaces();
         bindToInterfaces(interfaces, diag_sock);
 
         if (thread == null || !thread.isAlive()) {
@@ -151,7 +153,8 @@ public class DiagnosticsHandler implements Runnable {
                     payloadStartOffset = authorizeProbeRequest(packet);
                 }
                 handleDiagnosticProbe(packet.getSocketAddress(), diag_sock,
-                    new String(packet.getData(), packet.getOffset() + payloadStartOffset, packet.getLength()));
+                    new String(packet.getData(), packet.getOffset() + payloadStartOffset,
+                        packet.getLength()));
             } catch (Throwable e) {
                 log.error(Util.getMessage("FailureHandlingDiagnosticsRequest"), e);
             }
@@ -278,7 +281,7 @@ public class DiagnosticsHandler implements Runnable {
             try {
                 if (i.isUp()) {
                     List<InterfaceAddress> inet_addrs = i.getInterfaceAddresses();
-                    if (inet_addrs != null && !inet_addrs.isEmpty()) { // fix for VM crash - suggested by JJalenak@netopia.com
+                    if (inet_addrs != null && !inet_addrs.isEmpty()) {
                         s.joinGroup(group_addr, i);
                         log.trace("joined %s on %s", group_addr, i.getName());
                     }
