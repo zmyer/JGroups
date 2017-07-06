@@ -13,6 +13,7 @@ import org.jgroups.util.Util;
  * Ordering between views is important for example in a virtual synchrony protocol where
  * all views seen by a member have to be ordered.
  */
+// TODO: 17/7/6 by zmyer
 public class ViewId implements Comparable<ViewId>, SizeStreamable, Constructable<ViewId> {
     protected Address creator;   // Address of the creator of this view
     protected long id;        // Lamport time of the view

@@ -90,7 +90,7 @@ public final class Global {
     public static final String CCHM_LOAD_FACTOR = "cchm.load_factor";
     public static final String CCHM_CONCURRENCY_LEVEL = "cchm.concurrency_level";
     public static final String MAX_LIST_PRINT_SIZE = "max.list.print_size";
-    public static final String SUPPRESS_VIEW_SIZE = "suppress.view_size";
+    static final String SUPPRESS_VIEW_SIZE = "suppress.view_size";
 
     public static final int IPV4_SIZE = 4;
     public static final int IPV6_SIZE = 16;
@@ -105,7 +105,7 @@ public final class Global {
             String tmp = System.getProperty(property);
             if (tmp != null)
                 result = Boolean.parseBoolean(tmp);
-        } catch (Throwable t) {
+        } catch (Throwable ignored) {
         }
         return result;
     }
@@ -116,7 +116,7 @@ public final class Global {
             String tmp = System.getProperty(property);
             if (tmp != null)
                 result = Long.parseLong(tmp);
-        } catch (Throwable t) {
+        } catch (Throwable ignored) {
         }
         return result;
     }
@@ -127,7 +127,7 @@ public final class Global {
             String tmp = System.getProperty(property);
             if (tmp != null)
                 result = Integer.parseInt(tmp);
-        } catch (Throwable t) {
+        } catch (Throwable ignored) {
         }
         return result;
     }

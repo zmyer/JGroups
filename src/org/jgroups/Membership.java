@@ -16,6 +16,7 @@ import org.jgroups.util.Util;
  * @author Bela Ban
  * @since 2.0
  */
+// TODO: 17/7/5 by zmyer
 public class Membership {
     /* holds all addresses */
     protected final List<Address> members = new LinkedList<>();
@@ -183,7 +184,7 @@ public class Membership {
     /**
      * Returns true if the provided member belongs to this membership
      *
-     * @param member
+     * @param member member
      * @return true if the member belongs to this membership
      */
     public boolean contains(Address member) {

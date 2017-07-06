@@ -179,8 +179,6 @@ public class Channel implements Closeable {
 
     /**
      * Determines whether the channel is in the closed state.
-     *
-     * @return
      */
     @ManagedAttribute public boolean isClosed() {
         return ch.isClosed();
@@ -189,7 +187,7 @@ public class Channel implements Closeable {
     /**
      * Returns a map of statistics of the various protocols and of the channel itself.
      *
-     * @return Map<String,Map>. A map where the keys are the protocols ("channel" pseudo key is used
+     * @return Map<String Map>. A map where the keys are the protocols ("channel" pseudo key is used
      * for the channel itself") and the values are property maps.
      */
     public Map<String, Object> dumpStats() {
@@ -303,7 +301,7 @@ public class Channel implements Closeable {
      * Returns the logical name of a given member. The lookup is from the local cache of logical
      * address / logical name mappings and no remote communication is performed.
      *
-     * @param member
+     * @param member member
      * @return The logical name for <code>member</code>
      */
     public String getName(Address member) {
@@ -315,7 +313,7 @@ public class Channel implements Closeable {
      * the channel's lifetime (until close() is called). This method should be called
      * <em>before</em> calling connect().
      *
-     * @param name
+     * @param name name
      */
     public void setName(String name) {
         ch.setName(name);
@@ -412,7 +410,7 @@ public class Channel implements Closeable {
     /**
      * When set to true, all messages sent by a member A will be discarded by A.
      *
-     * @param flag
+     * @param flag flag
      */
     public void setDiscardOwnMessages(boolean flag) {
         ch.setDiscardOwnMessages(flag);
@@ -420,8 +418,6 @@ public class Channel implements Closeable {
 
     /**
      * Returns true if this channel will discard its own messages, false otherwise
-     *
-     * @return
      */
     public boolean getDiscardOwnMessages() {
         return ch.getDiscardOwnMessages();
@@ -444,7 +440,6 @@ public class Channel implements Closeable {
      *
      * @param automatic_resume if true call {@link #stopFlush()} after the flush
      * @see #startFlush(boolean)
-     * @see Util#startFlush(Channel, List, int, long, long)
      */
     public void startFlush(List<Address> flushParticipants,
         boolean automatic_resume) throws Exception {
@@ -463,7 +458,6 @@ public class Channel implements Closeable {
      * JGroups provides a helper random sleep time backoff algorithm for flush using Util class.
      *
      * @param automatic_resume if true call {@link #stopFlush()} after the flush
-     * @see Util#startFlush(Channel, List, int, long, long)
      */
     public void startFlush(boolean automatic_resume) throws Exception {
         ch.startFlush(automatic_resume);

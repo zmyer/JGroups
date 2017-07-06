@@ -61,5 +61,4 @@ public interface MembershipListener {
      */
     default void unblock() {
     }
-
 }

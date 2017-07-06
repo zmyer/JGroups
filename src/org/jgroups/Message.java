@@ -24,8 +24,8 @@ import org.jgroups.util.Util;
  */
 // TODO: 17/7/4 by zmyer
 public class Message implements Streamable, Constructable<Message> {
-    protected Address dest_addr;
-    protected Address src_addr;
+    private Address dest_addr;
+    private Address src_addr;
 
     /** The payload */
     protected byte[] buf;
@@ -41,11 +41,11 @@ public class Message implements Streamable, Constructable<Message> {
 
     protected volatile short flags;
 
-    protected volatile byte transient_flags; // transient_flags is neither marshalled nor copied
+    private volatile byte transient_flags; // transient_flags is neither marshalled nor copied
 
-    static final byte DEST_SET = 1;
-    static final byte SRC_SET = 1 << 1;
-    static final byte BUF_SET = 1 << 2;
+    private static final byte DEST_SET = 1;
+    private static final byte SRC_SET = 1 << 1;
+    private static final byte BUF_SET = 1 << 2;
 
     // =============================== Flags ====================================
     public enum Flag {
@@ -270,7 +270,7 @@ public class Message implements Streamable, Constructable<Message> {
         }
     }
 
-    public Buffer getBuffer2() {
+    private Buffer getBuffer2() {
         if (buf == null)
             return null;
         return new Buffer(buf, offset, length);
@@ -360,7 +360,7 @@ public class Message implements Streamable, Constructable<Message> {
         }
     }
 
-    public <T extends Object> T getObject() {
+    public <T> T getObject() {
         return getObject(null);
     }
 
@@ -376,7 +376,7 @@ public class Message implements Streamable, Constructable<Message> {
      *
      * @return the object
      */
-    public <T extends Object> T getObject(ClassLoader loader) {
+    public <T> T getObject(ClassLoader loader) {
         try {
             return Util.objectFromByteBuffer(buf, offset, length, loader);
         } catch (Exception ex) {
@@ -423,8 +423,8 @@ public class Message implements Streamable, Constructable<Message> {
      * #setFlag(org.jgroups.Message.Flag...)} instead), as the internal representation of flags
      * might change anytime.
      *
-     * @param flag
-     * @return
+     * @param flag flag
+     * @return message
      */
     public Message setFlag(short flag) {
         short tmp = this.flags;
@@ -443,8 +443,6 @@ public class Message implements Streamable, Constructable<Message> {
     /**
      * Returns the internal representation of flags. Don't use this, as the internal format might
      * change at any time ! This is only used by unit test code
-     *
-     * @return
      */
     public short getFlags() {
         return flags;
@@ -509,7 +507,7 @@ public class Message implements Streamable, Constructable<Message> {
      * concurrently call this method with the same flag, only one of them will be able to set the
      * flag
      *
-     * @param flag
+     * @param flag flag
      * @return True if the flag could be set, false if not (was already set)
      */
     public synchronized boolean setTransientFlagIfAbsent(TransientFlag flag) {
@@ -553,7 +551,7 @@ public class Message implements Streamable, Constructable<Message> {
      * copy will contain only the subset offset and length point to, copying the subset into the new
      * copy.
      *
-     * @param copy_buffer
+     * @param copy_buffer copy buffer
      * @return Message with specified data
      */
     public Message copy(boolean copy_buffer) {
@@ -568,7 +566,7 @@ public class Message implements Streamable, Constructable<Message> {
      * hold the *same* references as the original, so do *not* modify the headers ! If you want to
      * change a header, copy it and call {@link Message#putHeader(short, Header)} again.
      *
-     * @param copy_buffer
+     * @param copy_buffer copy buffer
      * @param copy_headers Copy the headers
      * @return Message with specified data
      */
@@ -585,15 +583,16 @@ public class Message implements Streamable, Constructable<Message> {
             retval.setBuffer(buf, offset, length);
 
         //noinspection NonAtomicOperationOnVolatileField
-        retval.headers = copy_headers && headers != null ? Headers.copy(this.headers) : createHeaders(Util.DEFAULT_HEADERS);
+        retval.headers = copy_headers && headers != null ?
+            Headers.copy(this.headers) : createHeaders(Util.DEFAULT_HEADERS);
         return retval;
     }
 
     /**
      * Doesn't copy any headers except for those with ID >= copy_headers_above
      *
-     * @param copy_buffer
-     * @param starting_id
+     * @param copy_buffer copy buffer
+     * @param starting_id starting id
      * @return A message with headers whose ID are >= starting_id
      */
     public Message copy(boolean copy_buffer, short starting_id) {
@@ -604,10 +603,10 @@ public class Message implements Streamable, Constructable<Message> {
      * Copies a message. Copies only headers with IDs >= starting_id or IDs which are in the
      * copy_only_ids list
      *
-     * @param copy_buffer
-     * @param starting_id
-     * @param copy_only_ids
-     * @return
+     * @param copy_buffer copy buffer
+     * @param starting_id starting id
+     * @param copy_only_ids copy only ids
+     * @return message
      */
     public Message copy(boolean copy_buffer, short starting_id, short... copy_only_ids) {
         Message retval = copy(copy_buffer, false);
@@ -652,7 +651,7 @@ public class Message implements Streamable, Constructable<Message> {
         if (flags > 0)
             ret.append(", flags=").append(flagsToString(flags));
         if (transient_flags > 0)
-            ret.append(", transient_flags=" + transientFlagsToString(transient_flags));
+            ret.append(", transient_flags=").append(transientFlagsToString(transient_flags));
         ret.append(']');
         return ret.toString();
     }
@@ -667,9 +666,6 @@ public class Message implements Streamable, Constructable<Message> {
 
     /**
      * Streams all members (dest and src addresses, buffer and headers) to the output stream.
-     *
-     * @param out
-     * @throws Exception
      */
     public void writeTo(DataOutput out) throws Exception {
         byte leading = 0;
@@ -721,10 +717,10 @@ public class Message implements Streamable, Constructable<Message> {
      * Writes the message to the output stream, but excludes the dest and src addresses unless the
      * src address given as argument is different from the message's src address
      *
-     * @param src
-     * @param out
+     * @param src src
+     * @param out out
      * @param excluded_headers Don't marshal headers that are part of excluded_headers
-     * @throws Exception
+     * @throws Exception exception
      */
     public void writeToNoAddrs(Address src, DataOutput out,
         short... excluded_headers) throws Exception {
@@ -872,8 +868,6 @@ public class Message implements Streamable, Constructable<Message> {
         return retval;
     }
 
-
-
     /* ----------------------------------- Private methods ------------------------------- */
 
     public static String flagsToString(short flags) {
@@ -910,23 +904,22 @@ public class Message implements Streamable, Constructable<Message> {
         return sb.toString();
     }
 
-    protected static void writeHeader(Header hdr, DataOutput out) throws Exception {
+    private static void writeHeader(Header hdr, DataOutput out) throws Exception {
         short magic_number = hdr.getMagicId();
         out.writeShort(magic_number);
         hdr.writeTo(out);
     }
 
-    protected static Header readHeader(DataInput in) throws Exception {
+    private static Header readHeader(DataInput in) throws Exception {
         short magic_number = in.readShort();
         Header hdr = ClassConfigurator.create(magic_number);
         hdr.readFrom(in);
         return hdr;
     }
 
-    protected static Header[] createHeaders(int size) {
+    private static Header[] createHeaders(int size) {
         return size > 0 ? new Header[size] : new Header[3];
     }
 
     /* ------------------------------- End of Private methods ---------------------------- */
-
 }
